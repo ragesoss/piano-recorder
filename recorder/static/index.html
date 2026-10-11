@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Practice recorder</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<meta name="theme-color" content="#16181d">
+<style>
+:root {
+  --bg: #f6f6f4; --card: #ffffff; --text: #1b1d22; --muted: #6b6f78; --line: #e2e2de;
+  --rec: #d93a3f; --rec-text: #ffffff; --ok: #2f9e5b; --warn: #d9a400; --accent: #2d6cdf;
+  --meter-bg: #e9e9e6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16181d; --card: #1f2229; --text: #eceef2; --muted: #9aa0ab; --line: #2e323b;
+    --rec: #e5484d; --meter-bg: #2a2e36; --accent: #6b9cff;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  -webkit-tap-highlight-color: transparent;
+}
+main { max-width: 560px; margin: 0 auto; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+h1 { font-size: 18px; margin: 0; font-weight: 600; }
+a.home { display: inline-block; font-size: 14px; color: var(--muted); text-decoration: none; margin-bottom: 4px; }
+.status { font-size: 13px; color: var(--muted); text-align: right; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 4px; vertical-align: 1px; }
+.dot.on { background: var(--ok); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+.rec { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+#recBtn {
+  width: 132px; height: 132px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--rec); color: var(--rec-text); font-size: 20px; font-weight: 600;
+  box-shadow: 0 2px 10px rgba(0,0,0,.15);
+}
+#recBtn.active { border-radius: 28px; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .82; } }
+#recBtn:disabled { opacity: .45; }
+#timer { font-variant-numeric: tabular-nums; font-size: 28px; font-weight: 600; min-height: 1.2em; }
+.meter { width: 100%; height: 14px; background: var(--meter-bg); border-radius: 7px; overflow: hidden; position: relative; }
+.meter > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ok); transition: width .12s linear; }
+.meter > b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: .6; left: 0; }
+.meter-legend { display: flex; justify-content: space-between; width: 100%; font-size: 12px; color: var(--muted); }
+#clip { color: var(--rec); font-weight: 600; font-size: 14px; min-height: 1.2em; }
+.now { display: none; }
+.now.show { display: block; }
+.now-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.now-title { font-weight: 600; }
+.progress { height: 28px; display: flex; align-items: center; cursor: pointer; }
+.progress > div { flex: 1; height: 6px; background: var(--meter-bg); border-radius: 3px; position: relative; }
+.progress > div > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); border-radius: 3px; }
+.times { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+button.small {
+  border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 10px;
+  padding: 8px 12px; font-size: 15px; cursor: pointer; min-height: 40px;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.level { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+.level input { flex: 1; accent-color: var(--accent); }
+.hint { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+#error { display: none; background: color-mix(in srgb, var(--rec) 14%, var(--card)); border-color: var(--rec); }
+#error.show { display: block; }
+h2 { font-size: 15px; margin: 18px 4px 8px; color: var(--muted); font-weight: 600; }
+ul { list-style: none; margin: 0; padding: 0; }
+li.take { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-top: 1px solid var(--line); }
+li.take:first-child { border-top: 0; padding-top: 0; }
+.take-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.take-when { font-weight: 600; }
+.take-len { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.take-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.take-note { font-size: 14px; color: var(--muted); cursor: pointer; }
+.take-note:empty::before { content: "Add a note"; opacity: .7; }
+li.playing .take-when { color: var(--accent); }
+.empty { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><a class="home" id="home" href="/">‹ Music room</a>
+    <h1>Practice recorder</h1></div>
+    <div class="status"><span class="dot" id="devDot"></span><span id="devText">connecting…</span><br><span id="free"></span></div>
+  </header>
+
+  <section class="card" id="error"></section>
+
+  <section class="card rec">
+    <button id="recBtn">Record</button>
+    <div id="timer"></div>
+    <div class="meter" aria-label="input level"><i id="meterBar"></i><b id="peakMark"></b></div>
+    <div class="meter-legend"><span>−60</span><span>−40</span><span>−20</span><span>0 dBFS</span></div>
+    <div id="clip"></div>
+  </section>
+
+  <section class="card now" id="now">
+    <div class="now-head">
+      <span class="now-title" id="nowTitle"></span>
+      <button class="small" id="stopBtn">Stop</button>
+    </div>
+    <div class="progress" id="progress"><div><i id="progBar"></i></div></div>
+    <div class="times"><span id="pos">0:00</span><span id="dur">0:00</span></div>
+  </section>
+
+  <section class="card">
+    <div class="level">
+      <span>Playback level</span>
+      <input type="range" id="level" min="-30" max="0" step="1" value="0">
+      <span id="levelText">0 dB</span>
+    </div>
+    <p class="hint">To hear takes, the mixer's channel 3/4 button must be on <b>MP3/USB</b>. Records play on <b>3/4</b>.</p>
+  </section>
+
+  <h2>Takes</h2>
+  <section class="card"><ul id="takes"><li class="empty">No takes yet.</li></ul></section>
+</main>
+
+<script>
+document.getElementById("home").href = `http://${location.hostname}/`;
+const $ = (id) => document.getElementById(id);
+let status = null, takesVersion = -1, takes = [], pollTimer = null;
+
+function fmt(s) {
+  s = Math.max(0, Math.floor(s));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+function when(iso) {
+  const d = new Date(iso), now = new Date();
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) return `Today ${time}`;
+  return d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }) + ` ${time}`;
+}
+function meterPct(db) { return Math.max(0, Math.min(100, (db + 60) / 60 * 100)); }
+
+async function api(method, path, body) {
+  const r = await fetch(path, {
+    method, headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) {
+    let msg = `${r.status}`;
+    try { msg = (await r.json()).detail || msg; } catch (e) {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+function showError(msg) {
+  $("error").textContent = msg || "";
+  $("error").classList.toggle("show", !!msg);
+}
+
+async function refreshTakes() {
+  takes = await api("GET", "/api/takes");
+  renderTakes();
+}
+function renderTakes() {
+  const ul = $("takes");
+  ul.innerHTML = "";
+  if (!takes.length) { ul.innerHTML = '<li class="empty">No takes yet.</li>'; return; }
+  const playingId = status && status.playing && status.playing.take;
+  const recordingId = status && status.recording && status.recording.take;
+  for (const t of takes) {
+    if (t.id === recordingId) continue;
+    const li = document.createElement("li");
+    li.className = "take" + (t.id === playingId ? " playing" : "");
+    li.innerHTML = `
+      <div class="take-top"><span class="take-when"></span><span class="take-len"></span></div>
+      <div class="take-note" title="Edit note"></div>
+      <div class="take-actions">
+        <button class="small primary" data-act="play">▶ Speakers</button>
+        <a class="small" style="text-decoration:none;display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 12px;color:var(--text)" data-act="phone">Phone</a>
+        <button class="small" data-act="del">Delete</button>
+      </div>`;
+    li.querySelector(".take-when").textContent = when(t.started);
+    li.querySelector(".take-len").textContent = fmt(t.seconds) + (t.peak_dbfs != null && t.peak_dbfs > -1 ? " · clipped?" : "");
+    li.querySelector(".take-note").textContent = t.note || "";
+    li.querySelector('[data-act="phone"]').href = `/api/takes/${t.id}/audio`;
+    li.querySelector('[data-act="play"]').onclick = () => act(() => api("POST", `/api/takes/${t.id}/play`, { start: 0 }));
+    li.querySelector('[data-act="del"]').onclick = () => {
+      if (confirm(`Delete the take from ${when(t.started)} (${fmt(t.seconds)})?`))
+        act(() => api("DELETE", `/api/takes/${t.id}`));
+    };
+    li.querySelector(".take-note").onclick = () => {
+      const note = prompt("Note for this take:", t.note || "");
+      if (note !== null) act(() => api("PUT", `/api/takes/${t.id}/note`, { note }));
+    };
+    ul.appendChild(li);
+  }
+}
+
+async function act(fn) {
+  try { showError(""); await fn(); } catch (e) { showError(e.message); }
+  poll(true);
+}
+
+function render(s) {
+  const prev = status; status = s;
+  const devOk = s.devices.capture && s.devices.playback;
+  $("devDot").classList.toggle("on", devOk);
+  $("devText").textContent = devOk ? "Mixer connected" : "Mixer not found";
+  $("free").textContent = `${(s.free_mb / 1000).toFixed(1)} GB free`;
+  if (s.error) showError(s.error);
+
+  const rec = s.recording;
+  const btn = $("recBtn");
+  btn.textContent = rec ? "Stop" : "Record";
+  btn.classList.toggle("active", !!rec);
+  btn.disabled = !s.devices.capture && !rec;
+  $("timer").textContent = rec ? fmt(rec.seconds) : "";
+  $("meterBar").style.width = rec ? meterPct(rec.meter_dbfs) + "%" : "0";
+  $("meterBar").style.background = rec && rec.meter_dbfs > -6 ? "var(--rec)" : rec && rec.meter_dbfs > -12 ? "var(--warn)" : "var(--ok)";
+  $("peakMark").style.left = rec ? `calc(${meterPct(rec.peak_dbfs)}% - 2px)` : "0";
+  $("peakMark").style.display = rec ? "block" : "none";
+  $("clip").textContent = rec && rec.clipped ? "Clipping: turn the mic channels' gain down a little." : "";
+
+  const pl = s.playing;
+  $("now").classList.toggle("show", !!pl || s.state === "preparing");
+  if (pl) {
+    const t = takes.find((x) => x.id === pl.take);
+    $("nowTitle").textContent = (s.state === "preparing" ? "Preparing " : "Playing ") + (t ? when(t.started) : pl.take);
+    $("progBar").style.width = pl.seconds ? (100 * pl.position / pl.seconds) + "%" : "0";
+    $("pos").textContent = fmt(pl.position);
+    $("dur").textContent = fmt(pl.seconds);
+  }
+  if (document.activeElement !== $("level")) {
+    $("level").value = s.level_offset_db;
+    $("levelText").textContent = `${s.level_offset_db} dB`;
+  }
+  const playingChanged = (prev && prev.playing && prev.playing.take) !== (pl && pl.take);
+  const recChanged = !!(prev && prev.recording) !== !!rec;
+  if (s.takes_version !== takesVersion) { takesVersion = s.takes_version; refreshTakes(); }
+  else if (playingChanged || recChanged) renderTakes();
+}
+
+async function poll(once) {
+  clearTimeout(pollTimer);
+  try {
+    render(await api("GET", "/api/status"));
+  } catch (e) {
+    $("devDot").classList.remove("on");
+    $("devText").textContent = "Recorder not reachable";
+  }
+  const busy = status && status.state !== "idle";
+  pollTimer = setTimeout(poll, busy ? 250 : 1500);
+}
+
+$("recBtn").onclick = () => act(() =>
+  status && status.recording ? api("POST", "/api/record/stop") : api("POST", "/api/record/start"));
+$("stopBtn").onclick = () => act(() => api("POST", "/api/stop"));
+$("progress").onclick = (ev) => {
+  const pl = status && status.playing;
+  if (!pl || !pl.seconds) return;
+  const r = $("progress").firstElementChild.getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+  act(() => api("POST", `/api/takes/${pl.take}/play`, { start: frac * pl.seconds }));
+};
+$("level").oninput = () => { $("levelText").textContent = `${$("level").value} dB`; };
+$("level").onchange = () => act(() => api("PUT", "/api/settings", { level_offset_db: Number($("level").value) }));
+document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(true); });
+
+poll(true);
+</script>
+</body>
+</html>

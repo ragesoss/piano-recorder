@@ -1,0 +1,22 @@
+# Network for the control unit's first boot (netplan v2, read by cloud-init
+# once). The Pi 3's built-in Wi-Fi is wlan0. Ethernet is a fallback: plug in
+# a cable if Wi-Fi does not come up.
+#
+# Fill in WIFI-NAME-HERE (the network's name, its SSID) and
+# WIFI-COUNTRY-HERE (the same two letters as in user-data). The password
+# stays out of the repository: replace WIFI-PASSWORD-HERE only in the copy
+# on the card.
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: true
+      optional: true
+  wifis:
+    wlan0:
+      dhcp4: true
+      optional: true
+      regulatory-domain: WIFI-COUNTRY-HERE
+      access-points:
+        "WIFI-NAME-HERE":
+          password: "WIFI-PASSWORD-HERE"

@@ -1,0 +1,14 @@
+# Development on the desktop, with the fake device.
+
+capture = "fake"
+playback = "fake"
+takes_dir = "takes-dev"
+
+[web]
+host = "127.0.0.1"
+port = 8000
+
+[loudness]
+target_dbfs = -21.0
+limit_dbfs = -1.0
+max_gain_db = 30.0

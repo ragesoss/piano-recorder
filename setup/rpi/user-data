@@ -1,0 +1,31 @@
+#cloud-config
+# First boot of the control unit (slot 5 in docs/components.md) on
+# Raspberry Pi OS Lite (64-bit, Trixie). Copy this file, network-config and
+# an empty file named "ssh" to the card's boot partition (setup/rpi/README.md).
+# Fill in the placeholders (...-HERE) only in the card's copy: step 4 there
+# lists them.
+#
+# The first user listed here replaces the image's placeholder "pi" user, and
+# cloud-init masks the console setup wizard (userconfig.service).
+hostname: practice
+manage_etc_hosts: true
+# A tz database name, for example Europe/Berlin.
+timezone: TIME-ZONE-HERE
+locale: en_US.UTF-8
+
+users:
+  - name: USER-NAME-HERE
+    groups: users,adm,dialout,audio,netdev,video,plugdev,cdrom,games,input,gpio,spi,i2c,render,sudo
+    shell: /bin/bash
+    # No password: SSH key only, sudo without a password.
+    lock_passwd: true
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - SSH-PUBLIC-KEY-HERE
+
+ssh_pwauth: false
+
+runcmd:
+  # The Wi-Fi country: two letters, for example DE.
+  - [raspi-config, nonint, do_wifi_country, WIFI-COUNTRY-HERE]
+  - [systemctl, enable, --now, ssh]

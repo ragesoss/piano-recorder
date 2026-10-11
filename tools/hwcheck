@@ -1,0 +1,5 @@
+#!/bin/sh
+# Hardware checks for the audio devices in the config: T1-T4, T7 and T9 in
+# docs/components.md. Runs on the control unit. tools/hwcheck --help
+here=$(cd "$(dirname "$0")/.." && pwd)
+PYTHONPATH="$here" exec "$here/.venv/bin/python" -m recorder.hwcheck "$@"

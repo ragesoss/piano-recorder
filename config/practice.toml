@@ -1,0 +1,29 @@
+# The control unit's config, installed as /etc/practice-recorder.toml by
+# setup/install.sh. It picks the parts by profile name (hardware/<name>.toml);
+# see docs/components.md.
+
+capture = "bmg-04f"
+playback = "bmg-04f"
+# "~" is the home of the user the service runs as.
+takes_dir = "~/takes"
+# The control unit's address on the LAN, reserved on the router (slot 7).
+# Nothing in the code uses it yet.
+address = "practice.local"
+# Other programs on the control unit that play through the same speakers:
+# only one plays at a time (recorder/peers.py).
+peers = ["http://127.0.0.1:8001"]
+
+[web]
+host = "0.0.0.0"
+port = 8000
+
+[loudness]
+# Playback: each take is brought to this gated rms, through a peak limiter.
+# Calibrated against a record on 2026-10-10 ("Shared mixer" in
+# docs/components.md).
+target_dbfs = -21.0
+limit_dbfs = -1.0
+# The boost also raises the take's noise floor (about -72 dBFS with the
+# BMG-04F). 16 dB is what a take of normal playing needs; softer takes stay
+# softer instead of bringing their noise up with them (2026-10-10).
+max_gain_db = 16.0

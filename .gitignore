@@ -1,0 +1,23 @@
+# Python: the venv and caches are made locally (setup/install.sh, pytest).
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Takes: recordings of the player, and their notes and settings.
+# config/dev.toml writes to takes-dev/; tools/deploy also skips /takes*.
+/takes*/
+*.wav
+*.flac
+*.mp3
+*.ogg
+*.m4a
+*.aif
+*.aiff
+
+# Logs and journal dumps, if any are copied here.
+*.log
+
+# This install's details (addresses, network names, the user): see CLAUDE.md.
+# tools/deploy skips it too.
+/local/

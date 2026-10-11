@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Music room</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<meta name="theme-color" content="#16181d">
+<style>
+:root {
+  --bg: #f6f6f4; --card: #ffffff; --text: #1b1d22; --muted: #6b6f78; --line: #e2e2de;
+  --practice: #d93a3f; --ambient: #3f7f8c; --on: #2f9e5b; --warn: #c2410c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16181d; --card: #1f2229; --text: #eceef2; --muted: #9aa0ab; --line: #2e323b;
+    --practice: #e5484d; --ambient: #6fb7c4; --on: #46c37b; --warn: #f0883e;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #16181d; --card: #1f2229; --text: #eceef2; --muted: #9aa0ab; --line: #2e323b;
+  --practice: #e5484d; --ambient: #6fb7c4; --on: #46c37b; --warn: #f0883e;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  -webkit-tap-highlight-color: transparent;
+}
+main { max-width: 560px; margin: 0 auto; }
+h1 { font-size: 20px; margin: 4px 0 14px; font-weight: 600; }
+a.app {
+  display: block; text-decoration: none; color: inherit; background: var(--card);
+  border: 1px solid var(--line); border-left: 6px solid var(--c); border-radius: 14px;
+  padding: 18px 18px 16px; margin-bottom: 12px;
+}
+a.app:active { opacity: .8; }
+.name { font-size: 22px; font-weight: 600; }
+.about { color: var(--muted); font-size: 14px; }
+.state { margin-top: 10px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.on { background: var(--on); animation: pulse 1.6s ease-in-out infinite; }
+.dot.down { background: var(--warn); }
+@keyframes pulse { 50% { opacity: .4; } }
+#stopAll {
+  display: none; width: 100%; min-height: 52px; border-radius: 14px; border: 1px solid var(--line);
+  background: var(--card); color: var(--text); font-size: 17px; font-weight: 600; cursor: pointer; margin-bottom: 12px;
+}
+#stopAll.show { display: block; }
+.note { color: var(--muted); font-size: 13px; margin: 14px 4px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Music room</h1>
+  <div id="apps"></div>
+  <button id="stopAll">Stop everything</button>
+  <p class="note">Only one of these plays at a time: starting one fades the other out. A recording is never interrupted.</p>
+  <p class="note">The mixer's button: MP3/USB for these, 3/4 for records.</p>
+</main>
+<script>
+const COLORS = { practice: "var(--practice)", ambient: "var(--ambient)" };
+const $ = (id) => document.getElementById(id);
+
+function mmss(s) { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+
+// What each app is doing, in a few words; and whether it is active.
+function describe(a) {
+  const s = a.status;
+  if (!a.up) return ["not running", false, true];
+  if (a.id === "practice") {
+    if (s.state === "recording") return [`Recording ${mmss(s.recording.seconds)}`, true];
+    if (s.state === "playing" || s.state === "preparing") return ["Playing a take", true];
+    return ["Ready", false];
+  }
+  if (a.id === "ambient") {
+    const st = s.state;
+    const sc = s.explain && s.explain.scale;
+    const what = sc ? `${sc.notes.split(" ")[0]} ${sc.name}` : st.key;
+    if (s.playing) return [`Playing · ${what}`, true];
+    if (s.fading) return ["Fading out", true];
+    return ["Stopped", false];
+  }
+  return [s && s.state ? String(s.state) : "running", false];
+}
+
+function render(data) {
+  const host = location.hostname;
+  let any = false;
+  const box = $("apps");
+  for (const a of data.apps) {
+    let el = document.getElementById(`app-${a.id}`);
+    if (!el) {
+      el = document.createElement("a");
+      el.className = "app"; el.id = `app-${a.id}`;
+      el.style.setProperty("--c", COLORS[a.id] || "var(--muted)");
+      el.innerHTML = `<div class="name"></div><div class="about"></div><div class="state"><span class="dot"></span><span class="text"></span></div>`;
+      box.append(el);
+    }
+    el.href = `http://${host}:${a.port}/`;
+    el.querySelector(".name").textContent = a.name;
+    el.querySelector(".about").textContent = a.about || "";
+    const [text, on, down] = describe(a);
+    el.querySelector(".text").textContent = text;
+    el.querySelector(".dot").className = "dot" + (on ? " on" : "") + (down ? " down" : "");
+    any = any || on;
+  }
+  $("stopAll").classList.toggle("show", any);
+}
+
+async function poll() {
+  try { render(await (await fetch("/api/status")).json()); } catch (e) {}
+  setTimeout(poll, document.hidden ? 5000 : 1500);
+}
+$("stopAll").onclick = async () => {
+  $("stopAll").disabled = true;
+  try { render(await (await fetch("/api/stop-all", { method: "POST" })).json()); } catch (e) {}
+  $("stopAll").disabled = false;
+};
+poll();
+</script>
+</body>
+</html>

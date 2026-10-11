@@ -1,0 +1,19 @@
+# The home page, installed once as /etc/room-home.toml by setup/install.sh.
+# It lists the apps on the control unit and shows what each is doing.
+
+port = 80
+
+[[apps]]
+id = "practice"
+name = "Practice"
+about = "Record and play back takes"
+port = 8000
+# what "Stop everything" calls
+stop = ["/api/record/stop", "/api/stop"]
+
+[[apps]]
+id = "ambient"
+name = "Ambient"
+about = "Music for the room"
+port = 8001
+stop = ["/api/stop"]

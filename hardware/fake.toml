@@ -1,0 +1,21 @@
+# A stand-in audio device for developing without hardware: capture makes
+# room noise with an occasional note, playback discards the sound. Both run
+# in real time.
+
+name = "fake"
+description = "Fake device for development"
+backend = "fake"
+
+[capture]
+device = "fake"
+format = "S16_LE"
+rate = 48000
+channels = 2
+keep_channels = [0]
+remove_dc = true
+
+[playback]
+device = "fake"
+format = "S16_LE"
+rate = 48000
+channels = 2

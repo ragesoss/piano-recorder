@@ -1,0 +1,40 @@
+# BOMGE BMG-04F mixer: USB audio through a JieLi BR21 chip.
+# Fills slot 2 (capture) and slot 3 (playback). The facts and measurements
+# behind these values: docs/components.md, slots 2 and 3.
+
+name = "bmg-04f"
+description = "BOMGE BMG-04F mixer (JieLi BR21 USB audio)"
+backend = "alsa"
+usb_id = "e5b7:0811"
+card = "spker"
+
+[capture]
+device = "hw:CARD=spker,DEV=0"
+format = "S16_LE"
+rate = 48000
+channels = 2
+# The two channels are identical sample for sample: the mono main mix.
+keep_channels = [0]
+# About -4 LSB of DC offset.
+remove_dc = true
+# ALSA buffer. arecord's default (about 0.5 s) lost 283 ms once in a soak on
+# the Pi 3 (2026-10-10); 2 s gives SD-card stalls more room.
+buffer_ms = 2000
+
+[capture.controls]
+# 0-127 is 0 to +23.8 dB. The laptop and Pi measurements were made at 127.
+gain = { name = "Mic Capture Volume", min = 0, max = 127, set = 127 }
+switch = { name = "Mic Capture Switch", set = "on" }
+
+[playback]
+device = "hw:CARD=spker,DEV=0"
+format = "S16_LE"
+rate = 48000
+channels = 2
+# Playback latency: Stop and seek take effect after up to this long.
+buffer_ms = 250
+
+[playback.controls]
+# No dB scale. 100 to 255 measured +10.4 dB.
+volume = { name = "PCM Playback Volume", min = 0, max = 255, set = 255 }
+switch = { name = "PCM Playback Switch", set = "on" }
