@@ -309,10 +309,26 @@ on the same screen as the controls, so a take needs little preparation.
   from the practice recorder's takes to the exercise app's. On the Pi: Down
   Yonder bass and ten bass exercises (dobro-transcription
   `exercises/bass/`).
-- **Next:** the player's first exercise takes (not yet recorded on the Pi
-  through this app); a tool to bring takes into dobro-transcription with
+- **First exercise takes (2026-10-13, about 15:59-16:06):** bass
+  exercises 001-006 over the click, brought into dobro-transcription by
+  hand. The line-up took 23-27 s per take on the Pi 3 (the whole-take
+  search and two path fits for the copy without the click), and put four of
+  the six 8-12 beats late: a click track correlates with itself shifted by
+  a bar (or a beat) almost as well as unshifted, and the noise decides. The
+  clicks all arrived 160-190 ms into the takes.
+- **Lining up a click since then** (`playalong.find_click`): searched only
+  in the take's first 0.4 s, or one beat if that is shorter, so the beats
+  either side of the true one fall outside the search, over the click's
+  first 8 s. On the six takes: the right lag to within 1 ms, peaks 73-215
+  times the median (noise alone about 6); 1.5 s on the Pi 3 (35 ms on the
+  desktop). Deployed 2026-10-13, about 16:20. No copy
+  without the click: nothing on the control unit uses one, and the click
+  is out of the bass's band; one can be made on the desktop. Play-along
+  takes over a backing are lined up and cleaned as before (slowly).
+- **Next:** a tool to bring exercise takes into dobro-transcription with
   their `takes.csv` rows (`tools/pull-take` reads only the practice
-  recorder's takes; exercise takes need `/etc/exercise-recorder.toml`).
+  recorder's takes; exercise takes need `/etc/exercise-recorder.toml`),
+  which could also take the backing out on the desktop instead of the Pi.
 
 ## Open questions
 

@@ -14,6 +14,10 @@ drop pieces of the playback during a take (29 in the second bass take: "FIQ
 reported NYET"): the backing then slides in the take, and neither lining up
 nor subtraction holds past the first loss.
 
+A click (an exercise take's) is lined up differently: a click track repeats every bar,
+so a search over the whole take finds it almost as well a bar or two off (`find_click`).
+It is not taken out of the take.
+
 Numpy only (the control unit's venv has no scipy).
 """
 
@@ -28,15 +32,27 @@ from . import dsp
 # (2026-10-12) peaked at 277 and 59 at their true offsets.
 FOUND_RATIO = 30.0
 
+# A click is searched for only this far into the take, or one beat if that is shorter: the
+# engine starts the playback once the capture is running, and the click's first beat arrives
+# 160-190 ms in on the Pi with the BMG-04F (six exercise takes, 2026-10-13). A search over the
+# whole take (-2 to +10 s, as for a backing) put four of those six 8-12 beats late: a click
+# track correlates with itself shifted by a bar (or a beat) almost as well as unshifted, and
+# the noise decides. A window under one beat wide holds only one of those candidates. Noise
+# alone peaks at about 6 in it; those takes' clicks at 73-215.
+CLICK_SEARCH_S = 0.4
+# ...over the click's first seconds only: a count-in bar and a few beats are plenty, and the
+# Pi 3 took 23-27 s to line up and clean a whole take (35 ms on the desktop for this).
+CLICK_EXCERPT_S = 8.0
+
 
 @dataclass
 class Alignment:
     lag: int  # the backing's sample 0 is at this capture sample
     rate: int
     peak_ratio: float  # how far the correlation peak stands above its surroundings
-    backing_dbfs: float  # the backing as it sits in the take (rms over the backing)
-    left_dbfs: float  # what the fit still finds of it after subtraction
-    taps: int
+    backing_dbfs: float | None  # the backing as it sits in the take (rms over the backing)
+    left_dbfs: float | None  # what the fit still finds of it after subtraction
+    taps: int | None  # None for a click: not fitted or subtracted
 
     @property
     def lag_ms(self) -> float:
@@ -49,7 +65,8 @@ class Alignment:
     def as_dict(self) -> dict:
         return {"lag_samples": self.lag, "lag_ms": round(self.lag_ms, 2), "rate": self.rate,
                 "found": self.found, "peak_ratio": round(self.peak_ratio, 1),
-                "backing_dbfs": round(self.backing_dbfs, 1), "left_dbfs": round(self.left_dbfs, 1),
+                "backing_dbfs": None if self.backing_dbfs is None else round(self.backing_dbfs, 1),
+                "left_dbfs": None if self.left_dbfs is None else round(self.left_dbfs, 1),
                 "taps": self.taps}
 
 
@@ -126,6 +143,16 @@ def align_and_clean(take: np.ndarray, played: np.ndarray, rate: int, max_lag_s: 
     left = predict(played, h2, lag, len(take), pre)
     al = Alignment(lag, rate, ratio, dsp.rms_dbfs(echo[span]), dsp.rms_dbfs(left[span]), taps)
     return al, clean.astype(np.float32)
+
+
+def find_click(take: np.ndarray, click: np.ndarray, rate: int, beat_s: float) -> Alignment:
+    """Where a click track (`click_track`) starts in a take, searched from the take's first
+    sample to `CLICK_SEARCH_S` in, or one beat if that is shorter, so the click's beats either
+    side of the true one fall outside the search; over the click's first `CLICK_EXCERPT_S`."""
+    max_lag = max(1, int(min(CLICK_SEARCH_S, beat_s) * rate) - 1)
+    m = min(len(click), int(CLICK_EXCERPT_S * rate))
+    lag, ratio = find_lag(take[:m + max_lag + 1].astype(np.float64), click[:m], max_lag, 0)
+    return Alignment(lag, rate, ratio, None, None, None)
 
 
 def count_in(tempo: dict, rate: int, level_dbfs: float = -14.0) -> tuple[np.ndarray, float, list[float]]:

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from recorder import dsp
 from recorder.config import REPO, load_config
-from recorder.playalong import align_and_clean
+from recorder.playalong import align_and_clean, click_track, find_click
 from exercises.server import create_app  # play-along takes are made in the exercise app
 
 
@@ -52,6 +52,30 @@ def test_align_and_clean_finds_a_short_path_to_the_sample():
     assert al.found and al.lag == lag
     assert al.backing_dbfs - al.left_dbfs > 40
     assert dsp.rms_dbfs(clean - inst) - dsp.rms_dbfs(inst) < -35
+
+
+@pytest.mark.parametrize("bpm, pickup", [(80, 0.0), (110, 1.0), (300, 0.0)])
+def test_a_click_is_found_at_the_start_to_the_sample(bpm, pickup):
+    """A click in a take under a louder bass, as the exercise app records it: found to the
+    sample, also at 300 bpm, where the search is narrowed to under one beat."""
+    rate, lag = 48000, 8160  # 170 ms: the Pi's takes, 2026-10-13, were 160-190 ms
+    click, _ = click_track({"bpm": bpm, "pickup_beats": pickup, "beats_per_bar": 4}, rate, 32.0)
+    n = lag + len(click) + rate
+    t = np.arange(n) / rate
+    tau = np.mod(t, 60 / bpm)  # a bass note on every beat, 5 ms attacks
+    take = 0.1 * np.sin(2 * np.pi * 55 * t) * (1 - np.exp(-tau / 0.005)) * np.exp(-tau * 4)
+    take += 1e-4 * np.random.default_rng(bpm).normal(size=n)
+    # the click returned by the mixer: -62 to -68 dBFS rms (the Pi's takes: -49 to -64)
+    take[lag:lag + len(click)] += 0.05 * click
+    al = find_click(take, click, rate, 60 / bpm)
+    assert al.found and al.lag == lag
+    assert al.as_dict()["taps"] is None  # not fitted, not taken out
+
+
+def test_no_click_in_the_take_is_reported_not_found():
+    click, _ = click_track({"bpm": 80, "pickup_beats": 0.0, "beats_per_bar": 4}, 48000, 16.0)
+    al = find_click(np.random.default_rng(4).normal(0, 0.1, len(click)), click, 48000, 0.75)
+    assert not al.found
 
 
 def test_no_backing_in_the_take_is_reported_not_found():

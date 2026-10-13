@@ -354,7 +354,8 @@ class Engine:
         return self.takes.meta(take_id)
 
     def _line_up(self, rec: _Recording, level_offset_db: float | None = None) -> None:
-        """Find the backing in a play-along take, to the sample, and save the take without it."""
+        """Find the backing in a play-along take, to the sample, and save the take without it
+        (a click: only find it)."""
         meta = {"guide": rec.guide, "backing": rec.backing_id, "backing_title": rec.backing_title,
                 "backing_gain_db": round(rec.backing_gain_db, 1),
                 "count_in_s": round(rec.count_in_s, 4), "tempo": rec.tempo,
@@ -366,7 +367,10 @@ class Engine:
             take, rate = self.takes.load(rec.take_id)
             take = take if take.ndim == 1 else take.mean(axis=1)
             if len(played) and len(take):
-                al, clean = playalong.align_and_clean(take, played, rate)
+                if rec.guide == "click":  # found near the start; it stays in the take
+                    al, clean = playalong.find_click(take, played, rate, 60.0 / float(rec.tempo["bpm"])), None
+                else:
+                    al, clean = playalong.align_and_clean(take, played, rate)
                 meta["playalong"] = al.as_dict()
                 meta["playalong"]["loopback"] = self.cfg.capture.loopback
                 # where the backing file's own sample 0 is in the take (after any count-in)
@@ -378,7 +382,7 @@ class Engine:
                     # takes.csv calls beat0_s
                     b0 = al.lag + int(round(rec.beat0_s * rate))
                     meta["beat0_s"] = round(b0 / rate, 4) if al.found else None
-                if al.found:
+                if al.found and clean is not None:
                     self.takes.write_clean(rec.take_id, clean, rate)
                 else:
                     self.takes.clean_path(rec.take_id).unlink(missing_ok=True)

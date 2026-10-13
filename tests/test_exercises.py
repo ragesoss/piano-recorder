@@ -67,6 +67,7 @@ def test_an_exercise_take_over_its_click_knows_where_its_first_note_is(client):
     # the fake device hears its own playback 9 ms late; the click starts after the first capture block
     assert pa["found"] and abs(t["beat0_s"] - (pa["lag_ms"] / 1000 + beat0)) < 1e-3
     assert 0.009 <= t["beat0_s"] - beat0 < 0.5
+    assert not t["clean"]  # the click stays in the take
     assert [x["id"] for x in client.get("/api/takes", params={"exercise": "bass-001-walks"}).json()] == [take]
     assert client.get("/api/takes", params={"exercise": "bass-002-roots"}).json() == []
     again = client.post(f"/api/takes/{take}/lineup").json()
