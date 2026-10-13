@@ -302,10 +302,17 @@ on the same screen as the controls, so a take needs little preparation.
 - **Tried on the desktop** (fake device): exercise 005 at 72 bpm, the
   count-in counted down, then "Bar 1 · 3"; the take lined up with its
   click (peak ratio 87), beat 0 at 3.644 s.
-- **Next:** deploy (the Pi's `/etc` configs were installed once: the peers
-  and the home page's list need the new app added by hand); the player's
-  first exercise takes; a tool to bring takes into dobro-transcription
-  with their `takes.csv` rows.
+- **Deployed 2026-10-13.** The Pi's `/etc/practice-recorder.toml`,
+  `/etc/ambient-room.toml` (peers) and `/etc/room-home.toml` (the tile)
+  were edited by hand to add it (`.bak` copies kept). The eight bass takes
+  of 2026-10-12/13 (four play-alongs, three gain checks, the noodles) moved
+  from the practice recorder's takes to the exercise app's. On the Pi: Down
+  Yonder bass and ten bass exercises (dobro-transcription
+  `exercises/bass/`).
+- **Next:** the player's first exercise takes (not yet recorded on the Pi
+  through this app); a tool to bring takes into dobro-transcription with
+  their `takes.csv` rows (`tools/pull-take` reads only the practice
+  recorder's takes; exercise takes need `/etc/exercise-recorder.toml`).
 
 ## Open questions
 
