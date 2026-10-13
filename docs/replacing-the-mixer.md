@@ -88,6 +88,47 @@ the BMG-04F, not at the speakers:
   - Source: [alsa-scarlett-gui, small 3rd Gen
     models](https://github.com/geoffreybennett/alsa-scarlett-gui/blob/master/docs/iface-small.md).
 
+## Learned from the first play-along takes (2026-10-12)
+
+The bass with the Nadine pickup, played along with a dobro backing (PLAN.md
+step 5), added three requirements:
+
+6. **Inputs for instruments besides the two condensers.** The Nadine took a
+   condenser's channel: unplug, swap, re-gain, and back again for the
+   piano. The condensers should stay plugged in, with at least one more
+   input (better two) for instruments: the Nadine, a bass DI, a dobro
+   pickup. The Nadine needs phantom power (the player, 2026-10-12), so it
+   takes a mic preamp, not an instrument input. Counting the record
+   player's pair: at least 3 mic preamps with phantom (4 for a second
+   instrument), plus 2 line inputs.
+7. **Each input recorded as its own channel.** The BMG-04F records one mono
+   mix: the backing (electrically, about -41 dBFS, louder than the bass),
+   the mics and the bass all in one track, and the backing could not be
+   subtracted well. With separate channels, the bass's track holds only
+   the bass and the backing stays out of every take.
+8. **Gain per input from software,** so a "bass" and a "piano" setting can
+   be saved and called up from the phone instead of turning knobs. Also
+   high-speed USB 2.0: the BMG-04F (full speed) lost playback data in
+   duplex on the Pi 3 (slot 5, 2026-10-12).
+
+What this does to the candidates below: the 4i4 4th Gen has two preamps
+(inputs 1-2) and two line inputs (3-4, the record player), so a third
+instrument would again need a condenser's channel. The boxes with more
+preamps move up: the 18i8 (2nd and 3rd Gen, listed below as "bigger than
+needed") and the 4th Gen 16i16 and 18i16. Checked 2026-10-12 (web search):
+
+| model | mic preamps | phantom | gain | Linux | price (US, Oct 2026) |
+|---|---|---|---|---|---|
+| Scarlett 18i8 3rd Gen | 4 (inputs 1-4; 1-2 also instrument; 5-8 line) | in pairs, 1-2 and 3-4 | knobs | `scarlett2` (mainline, mature); standalone mode | Focusrite refurbished $360-416 |
+| Scarlett 18i16 4th Gen | 4 by Focusrite's comparison table (one retailer's title says 2: *to verify*) | switchable; per channel not confirmed | software, auto-gain | the FCP driver (Linux 6.14+; the Pi runs 6.18), plus `fcp-support` and a firmware update | about $500 new, $350-435 used |
+| Scarlett 16i16 4th Gen | 2 | | | | out: too few preamps |
+
+- Phantom in pairs is no obstacle: the condensers and the Nadine all need it.
+- With a channel per source, knobs are set once per source and stay, so the
+  18i8's analog gain also ends the re-gaining; software gain (18i16) is a
+  convenience on top, with a newer driver to trust on the Pi.
+- The 6i6 2nd Gen ("the bargain" below) has two preamps: out for this.
+
 ## Alternative: Focusrite Scarlett 4i4 (4th Gen), everything in one box
 
 - **Inputs and outputs:**
@@ -226,3 +267,10 @@ controller) takes slot 5.
 - Standalone mode: [Focusrite: Using your Scarlett 4i4](https://userguides.focusrite.com/hc/en-gb/articles/18676395354258-Using-your-Scarlett-4i4).
 - Prices: [Equipboard](https://equipboard.com/items/focusrite-scarlett-4i4-4th-gen-usb-audio-interface),
   [Alamo Music](https://alamomusic.com/products/focusrite-scarlett-4i4-usb-audio-interface-4th-generation).
+- Input counts and prices, 2026-10-12: Markertek's 18i8 3rd Gen spec sheet
+  (markertek.com/product/AMS-SCAR-18I8-3G), Focusrite's 18i16 page
+  (us.focusrite.com/products/scarlett-18i16), gear4music's 16i16 4th Gen
+  listing, the alsa-scarlett-gui README (github.com/geoffreybennett/alsa-scarlett-gui;
+  the FCP driver for the large 4th Gen units), equipboard.com's 18i16 price
+  tracker.
+
