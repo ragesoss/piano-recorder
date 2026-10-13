@@ -579,8 +579,12 @@ either part is swapped.
     T9 does not change.
   - **The home page** (`home/server.py`, port 80): http://practice.local/
     (the phone uses the reserved address) shows what each program is
-    doing and links to both. "Stop everything" stops a recording, a take
+    doing and links to each. "Stop everything" stops a recording, a take
     and the synth.
+  - **A third program** (2026-10-13): the exercise app (`exercises/`,
+    port 8002; PLAN.md step 6). It records like the practice recorder and
+    takes turns the same way: it asks 8000 and 8001 to let go, and they
+    list it among their peers.
 
 ## Tests
 

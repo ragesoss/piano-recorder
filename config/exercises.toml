@@ -1,0 +1,24 @@
+# The exercise app's config, installed as /etc/exercise-recorder.toml by
+# setup/install.sh. The same devices as the practice recorder; its own port,
+# takes and exercises (tools/push-exercise puts them in exercises_dir).
+
+capture = "bmg-04f"
+playback = "bmg-04f"
+# "~" is the home of the user the service runs as.
+takes_dir = "~/exercise-takes"
+exercises_dir = "~/exercises"
+# Backing tracks for play-along takes (tools/push-backing puts them here).
+backing_dir = "~/backing"
+# Other programs on the control unit that play through the same speakers:
+# only one plays at a time (recorder/peers.py).
+peers = ["http://127.0.0.1:8000", "http://127.0.0.1:8001"]
+
+[web]
+host = "0.0.0.0"
+port = 8002
+
+[loudness]
+# As the practice recorder's (config/practice.toml).
+target_dbfs = -21.0
+limit_dbfs = -1.0
+max_gain_db = 16.0

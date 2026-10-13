@@ -27,6 +27,12 @@ class Take:
     backing: str | None = None  # a play-along take: the backing's title
     playalong: dict | None = None  # where the backing sits in it (recorder/playalong.py)
     clean: bool = False  # a copy without the backing exists
+    # a take made in the exercise app: which exercise, at what tempo, and where its beat 0 (the
+    # music's first note) is in the take, once lined up with the click
+    exercise: str | None = None
+    exercise_title: str | None = None
+    tempo_bpm: float | None = None
+    beat0_s: float | None = None
 
 
 class TakeNotFound(Exception):
@@ -82,6 +88,10 @@ class Takes:
             backing=meta.get("backing_title") or meta.get("backing"),
             playalong=meta.get("playalong"),
             clean=self.clean_path(take_id).exists(),
+            exercise=meta.get("exercise"),
+            exercise_title=meta.get("exercise_title"),
+            tempo_bpm=(meta.get("tempo") or {}).get("bpm"),
+            beat0_s=meta.get("beat0_s"),
         )
 
     def list(self) -> list[Take]:

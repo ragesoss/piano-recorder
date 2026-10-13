@@ -13,7 +13,7 @@ takes_dir = "~/takes"
 address = "practice.local"
 # Other programs on the control unit that play through the same speakers:
 # only one plays at a time (recorder/peers.py).
-peers = ["http://127.0.0.1:8001"]
+peers = ["http://127.0.0.1:8001", "http://127.0.0.1:8002"]
 
 [web]
 host = "0.0.0.0"

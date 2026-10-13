@@ -46,6 +46,10 @@ class _Recording:
     backing_pos: float = 0.0
     count_in_s: float = 0.0  # the clicks before the backing (the backing starts this far into what is played)
     tempo: dict | None = None
+    guide: str = "backing"  # what plays: "backing" (a file) or "click" (generated from a tempo)
+    beat0_s: float | None = None  # a click: where beat 0 (the music's first note) is in what is played
+    click: dict | None = None  # a click: how it was made (playalong.click_track), to rebuild it
+    meta: dict = field(default_factory=dict)  # more for the take's sidecar (an exercise app's)
     backing_done: threading.Event = field(default_factory=threading.Event)
     played: list = field(default_factory=list)  # the blocks as written, for the alignment
 
@@ -62,8 +66,9 @@ class _Playing:
 
 
 class Engine:
-    def __init__(self, cfg: Config, takes: Takes, backings: Backings | None = None):
+    def __init__(self, cfg: Config, takes: Takes, backings: Backings | None = None, name: str = "the practice recorder"):
         self.cfg = cfg
+        self.name = name  # how a peer is told who is busy
         self.takes = takes
         self.backings = backings or Backings(cfg.backing_dir)
         self.lock = threading.Lock()
@@ -94,12 +99,15 @@ class Engine:
                     "meter_dbfs": round(max(rec.recent, default=-240.0), 1),
                     "peak_dbfs": round(rec.peak_dbfs, 1),
                     "clipped": rec.clipped,
-                    "backing": rec.backing_id and {
+                    "backing": rec.backing is not None and {
+                        "kind": rec.guide,
                         "id": rec.backing_id,
                         "title": rec.backing_title,
-                        "position": round(rec.backing_pos, 1),
+                        "position": round(rec.backing_pos, 2),
                         "seconds": round(len(rec.backing) / rec.backing_rate, 1),
                         "count_in_s": round(rec.count_in_s, 2),
+                        "beat0_s": rec.beat0_s,
+                        "tempo": rec.tempo,
                     },
                 },
                 "analyzing": self.analyzing,
@@ -123,7 +131,7 @@ class Engine:
 
     # Recording
 
-    def start_recording(self, backing_id: str | None = None, count_in: bool = True) -> str:
+    def start_recording(self, backing_id: str | None = None, count_in: bool = True, meta: dict | None = None) -> str:
         """Record; with a backing, play it over the speakers meanwhile (a play-along take), after a
         count-in when the backing's tempo is known and `count_in` is on."""
         with self.lock:
@@ -141,15 +149,41 @@ class Engine:
             title, y, rate, gain_db = prepared
             y, lead = playalong.with_count_in(y, rate, tempo)
             prepared = (title, y, rate, gain_db)
+        rec = _Recording(take_id="", rate=self.cfg.capture.capture.rate, meta=dict(meta or {}))
+        if prepared is not None:
+            rec.backing_id = backing_id
+            rec.backing_title, rec.backing, rec.backing_rate, rec.backing_gain_db = prepared
+            rec.count_in_s, rec.tempo = lead, (tempo if lead else None)
+        return self._start(rec)
+
+    def start_click(self, tempo: dict, beats: float, count_in: bool = True, through: bool = True,
+                    title: str = "Click", meta: dict | None = None) -> str:
+        """Record over a click in `tempo` ({"bpm", "pickup_beats", "beats_per_bar"}): a bar's
+        count-in (with `count_in`), then every beat through `beats` beats from the first note
+        (with `through`). The take's sidecar gets `meta` and, once lined up, where beat 0 is."""
+        with self.lock:
+            if self.rec:
+                raise Busy("already recording")
+            if self.takes.free_mb() < MIN_FREE_MB:
+                raise LowSpace(f"less than {MIN_FREE_MB} MB free")
+            audio.require(self.cfg.capture)
+            audio.require(self.cfg.playback)
+        rate = self.cfg.playback.playback.rate
+        click = {"beats": float(beats), "count_in_bars": 1 if count_in else 0, "through": bool(through)}
+        y, beat0 = playalong.click_track(tempo, rate, **click)
+        rec = _Recording(take_id="", rate=self.cfg.capture.capture.rate, backing_title=title, backing=y,
+                         backing_rate=rate, tempo=dict(tempo), guide="click", beat0_s=beat0, click=click,
+                         count_in_s=beat0, meta=dict(meta or {}))
+        return self._start(rec)
+
+    def _start(self, rec: _Recording) -> str:
         self._claim()  # a peer's music would end up in the take
         self.stop_playback()
         with self.lock:
+            if self.rec:
+                raise Busy("already recording")
             self.error = None
-            rec = _Recording(take_id=self.takes.new_id(), rate=self.cfg.capture.capture.rate)
-            if prepared is not None:
-                rec.backing_id = backing_id
-                rec.backing_title, rec.backing, rec.backing_rate, rec.backing_gain_db = prepared
-                rec.count_in_s, rec.tempo = lead, (tempo if lead else None)
+            rec.take_id = self.takes.new_id()
             rec.thread = threading.Thread(target=self._record, args=(rec,), daemon=True)
             self.rec = rec
             rec.thread.start()
@@ -201,7 +235,7 @@ class Engine:
     def yield_speakers(self) -> None:
         """A peer wants the speakers: stop playing. A recording is kept."""
         if self.rec:
-            raise Busy("the practice recorder is recording")
+            raise Busy(f"{self.name} is recording")
         self.stop_playback()
 
     def stop_recording(self) -> str | None:
@@ -274,6 +308,8 @@ class Engine:
                 self.takes.delete(rec.take_id)
             else:
                 self.takes.finish(rec.take_id, rec.peak_dbfs)
+                if rec.meta:
+                    self.takes.update_meta(rec.take_id, rec.meta)
             with self.lock:
                 self.rec = None
                 if rec.backing is not None and not empty:
@@ -287,6 +323,19 @@ class Engine:
         The backing as played is rebuilt from the take's sidecar: the same file, prepared the same
         way, at the level offset of the time."""
         meta = self.takes.meta(take_id)
+        if meta.get("guide") == "click" and meta.get("click") and meta.get("tempo"):
+            with self.lock:
+                if self.rec and self.rec.take_id == take_id:
+                    raise Busy("that take is being recorded")
+                self.analyzing = take_id
+            rate = self.cfg.playback.playback.rate
+            y, beat0 = playalong.click_track(meta["tempo"], rate, **meta["click"])
+            rec = _Recording(take_id=take_id, rate=rate, backing_title=meta.get("backing_title", "Click"), backing=y,
+                             backing_rate=rate, tempo=meta["tempo"], guide="click", beat0_s=beat0,
+                             click=meta["click"], count_in_s=beat0)
+            rec.played = [y * np.float32(10 ** (float(meta.get("level_offset_db", 0.0)) / 20))]
+            self._line_up(rec, level_offset_db=float(meta.get("level_offset_db", 0.0)))
+            return self.takes.meta(take_id)
         if not meta.get("backing"):
             raise ValueError("not a play-along take")
         with self.lock:
@@ -306,10 +355,12 @@ class Engine:
 
     def _line_up(self, rec: _Recording, level_offset_db: float | None = None) -> None:
         """Find the backing in a play-along take, to the sample, and save the take without it."""
-        meta = {"backing": rec.backing_id, "backing_title": rec.backing_title,
+        meta = {"guide": rec.guide, "backing": rec.backing_id, "backing_title": rec.backing_title,
                 "backing_gain_db": round(rec.backing_gain_db, 1),
                 "count_in_s": round(rec.count_in_s, 4), "tempo": rec.tempo,
                 "level_offset_db": self.level_offset_db if level_offset_db is None else level_offset_db}
+        if rec.guide == "click":
+            meta["click"] = rec.click
         try:
             played = np.concatenate(rec.played) if rec.played else np.zeros(0, dtype=np.float32)
             take, rate = self.takes.load(rec.take_id)
@@ -322,6 +373,11 @@ class Engine:
                 start = al.lag + int(round(rec.count_in_s * rate))
                 meta["playalong"]["backing_starts_samples"] = start
                 meta["playalong"]["backing_starts_ms"] = round(1000.0 * start / rate, 2)
+                if rec.guide == "click":
+                    # where the music's beat 0 (its first note) is in the take: what an exercise's
+                    # takes.csv calls beat0_s
+                    b0 = al.lag + int(round(rec.beat0_s * rate))
+                    meta["beat0_s"] = round(b0 / rate, 4) if al.found else None
                 if al.found:
                     self.takes.write_clean(rec.take_id, clean, rate)
                 else:

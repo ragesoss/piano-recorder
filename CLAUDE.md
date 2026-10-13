@@ -2,6 +2,9 @@
 
 A practice recorder: mics into a mixer, a small computer on the mixer's USB,
 and a phone web page to record and play takes over the room's speakers.
+The same control unit runs the exercise app (`exercises/`: exercise takes
+for `~/play/dobro-transcription`, PLAN.md step 6) and the home page
+(`home/`); the practice recorder itself is for the piano and its player.
 Start with `PLAN.md` (the design and the steps), then
 `docs/components.md` (the parts, their interfaces, tests and swap steps).
 

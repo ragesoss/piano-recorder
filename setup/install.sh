@@ -20,6 +20,15 @@ fi
 takes=$(PYTHONPATH="$app" "$app/.venv/bin/python" -c 'from recorder.config import load_config; print(load_config().takes_dir)')
 mkdir -p "$takes"
 
+# The exercise app (exercises/): its own config, takes and exercises.
+if [ ! -f /etc/exercise-recorder.toml ]; then
+    sudo install -m 644 "$app/config/exercises.toml" /etc/exercise-recorder.toml
+    echo "installed /etc/exercise-recorder.toml"
+fi
+for d in takes_dir exercises_dir; do
+    mkdir -p "$(PYTHONPATH="$app" "$app/.venv/bin/python" -c "from recorder.config import load_config; print(load_config('/etc/exercise-recorder.toml').$d)")"
+done
+
 # The services: (re)installed and restarted on every run. room-home is the
 # home page on port 80, linking this and the other apps (home/server.py).
 if [ ! -f /etc/room-home.toml ]; then
@@ -31,12 +40,12 @@ fi
 user=$(id -un)
 unit_tmp=$(mktemp)
 trap 'rm -f "$unit_tmp"' EXIT
-for unit in practice-recorder room-home; do
+for unit in practice-recorder exercise-recorder room-home; do
     sed -e "s|@USER@|$user|g" -e "s|@APP@|$app|g" "$app/setup/$unit.service" >"$unit_tmp"
     sudo install -m 644 "$unit_tmp" /etc/systemd/system/$unit.service
 done
 sudo systemctl daemon-reload
-for unit in practice-recorder room-home; do
+for unit in practice-recorder exercise-recorder room-home; do
     sudo systemctl enable -q $unit
     sudo systemctl restart $unit
 done
@@ -52,3 +61,7 @@ for i in $(seq 1 20); do
     sleep 1
 done
 echo "control unit ready: $app, takes in $takes, service $state"
+
+# Configs installed before are kept as they were: say what they lack.
+grep -q '127.0.0.1:8002' /etc/practice-recorder.toml || echo "note: /etc/practice-recorder.toml has no exercise app (127.0.0.1:8002) among its peers"
+grep -q 'port = 8002' /etc/room-home.toml || echo "note: /etc/room-home.toml does not list the exercise app (port 8002)"

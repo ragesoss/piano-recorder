@@ -79,10 +79,6 @@ li.take:first-child { border-top: 0; padding-top: 0; }
 .take-note:empty::before { content: "Add a note"; opacity: .7; }
 li.playing .take-when { color: var(--accent); }
 .empty { color: var(--muted); font-size: 14px; }
-.along { display: flex; flex-direction: column; gap: 10px; }
-.along-row { display: flex; gap: 8px; align-items: center; }
-.along select { flex: 1; min-width: 0; min-height: 40px; font: inherit; font-size: 15px; color: var(--text);
-  background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
 #backingNow { font-size: 14px; color: var(--muted); text-align: center; min-height: 1.2em; }
 .take-along { font-size: 13px; color: var(--muted); }
 </style>
@@ -104,15 +100,6 @@ li.playing .take-when { color: var(--accent); }
     <div class="meter-legend"><span>−60</span><span>−40</span><span>−20</span><span>0 dBFS</span></div>
     <div id="clip"></div>
     <div id="backingNow"></div>
-  </section>
-
-  <section class="card along" id="along">
-    <div class="along-row">
-      <select id="backingSel" aria-label="Backing track"></select>
-      <button class="small primary" id="alongBtn">Record along</button>
-    </div>
-    <label class="hint" id="countInRow"><input type="checkbox" id="countIn" checked> Count in (clicks in the track's tempo before it starts)</label>
-    <p class="hint" id="alongHint">Plays the track over the speakers and records you with it. The take is lined up with the track and saved a second time without it.</p>
   </section>
 
   <section class="card now" id="now">
@@ -140,7 +127,7 @@ li.playing .take-when { color: var(--accent); }
 <script>
 document.getElementById("home").href = `http://${location.hostname}/`;
 const $ = (id) => document.getElementById(id);
-let status = null, takesVersion = -1, takes = [], pollTimer = null, backings = [];
+let status = null, takesVersion = -1, takes = [], pollTimer = null;
 
 function fmt(s) {
   s = Math.max(0, Math.floor(s));
@@ -224,30 +211,6 @@ function renderTakes() {
   }
 }
 
-async function refreshBackings() {
-  try { backings = await api("GET", "/api/backings"); } catch (e) { return; }
-  const sel = $("backingSel"), keep = sel.value;
-  sel.innerHTML = "";
-  for (const b of backings) {
-    const o = document.createElement("option");
-    o.value = b.id; o.textContent = `${b.title} (${fmt(b.seconds)})`;
-    sel.appendChild(o);
-  }
-  if (!backings.length) {
-    const o = document.createElement("option"); o.textContent = "No backing tracks yet"; sel.appendChild(o);
-  }
-  if (backings.some((b) => b.id === keep)) sel.value = keep;
-  $("alongBtn").disabled = !backings.length;
-  countInState();
-}
-function countInState() {
-  const b = backings.find((x) => x.id === $("backingSel").value);
-  const ok = !!(b && b.tempo);
-  $("countIn").disabled = !ok;
-  $("countInRow").style.opacity = ok ? 1 : 0.5;
-  $("countInRow").title = ok ? `${b.tempo.bpm} bpm` : "This track's tempo is not known";
-}
-
 async function act(fn) {
   try { showError(""); await fn(); } catch (e) { showError(e.message); }
   poll(true);
@@ -276,7 +239,6 @@ function render(s) {
   $("backingNow").textContent = bk ? (bk.position < bk.count_in_s ? `Count-in… ${bk.title}`
     : `${bk.title}: ${fmt(bk.position - bk.count_in_s)} of ${fmt(bk.seconds - bk.count_in_s)}`)
     : s.state === "analyzing" ? "Lining the take up with its track…" : "";
-  $("alongBtn").disabled = !!rec || !backings.length || !(s.devices.capture && s.devices.playback);
 
   const pl = s.playing;
   $("now").classList.toggle("show", !!pl || s.state === "preparing");
@@ -312,11 +274,6 @@ async function poll(once) {
 $("recBtn").onclick = () => act(() =>
   status && status.recording ? api("POST", "/api/record/stop") : api("POST", "/api/record/start"));
 $("stopBtn").onclick = () => act(() => api("POST", "/api/stop"));
-$("alongBtn").onclick = () => act(() => api("POST", "/api/playalong/start",
-  { backing: $("backingSel").value, count_in: $("countIn").checked && !$("countIn").disabled }));
-$("backingSel").onchange = countInState;
-try { $("countIn").checked = localStorage.getItem("countIn") !== "0"; } catch (e) {}
-$("countIn").onchange = () => { try { localStorage.setItem("countIn", $("countIn").checked ? "1" : "0"); } catch (e) {} };
 $("progress").onclick = (ev) => {
   const pl = status && status.playing;
   if (!pl || !pl.seconds) return;
@@ -326,9 +283,8 @@ $("progress").onclick = (ev) => {
 };
 $("level").oninput = () => { $("levelText").textContent = `${$("level").value} dB`; };
 $("level").onchange = () => act(() => api("PUT", "/api/settings", { level_offset_db: Number($("level").value) }));
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { poll(true); refreshBackings(); } });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(true); });
 
-refreshBackings();
 poll(true);
 </script>
 </body>

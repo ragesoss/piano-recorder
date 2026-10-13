@@ -196,7 +196,7 @@ Upgrades follow the same rule: one slot at a time, by the swap steps in
   `docs/replacing-the-mixer.md`. Building on the BMG-04F continues until
   then. The swap is a new profile plus the tests.
 
-### 5. Play-along takes (started 2026-10-12)
+### 5. Play-along takes (started 2026-10-12; moved to the exercise app, step 6)
 
 The player's request: record new instruments along with recordings from
 `~/play/dobro-transcription`, for transcribing every instrument of a band
@@ -265,6 +265,47 @@ on the phone, presses Record along, and plays with it over the speakers.
   survey, 2026-10-13; to check on the device). Without that routing the
   offset has to come from the air path (the speakers into the mics) or
   from a latency measured once per device.
+
+### 6. The exercise app (started 2026-10-13)
+
+The player's request: record exercise takes for `~/play/dobro-transcription`
+from a separate app, not the practice recorder, which is for the piano and
+its player only. Tablet-first (an iPad, held landscape), with the exercise
+on the same screen as the controls, so a take needs little preparation.
+
+- **A third program on the control unit:** `exercises/`, port 8002,
+  `setup/exercise-recorder.service`, its own config
+  (`/etc/exercise-recorder.toml` from `config/exercises.toml`), takes
+  (`~/exercise-takes`) and exercises (`~/exercises`). It uses the
+  recorder's engine, devices, loudness and line-up (`recorder/`), and takes
+  turns with the others for the speakers (`peers`: 8000 and 8001; the
+  practice recorder and the ambient synth list 8002).
+- **Exercises:** `tools/push-exercise SCORE.musicxml` renders the score's
+  pages with MuseScore on the desktop (landscape, larger staves, trimmed:
+  `tools/exercise-page.mss`), reads its tempo, meter, pickup and length
+  (repeats played out), and copies the pages, the score and
+  `exercise.json` to the control unit.
+- **The page:** the score on the left; on the right the exercise, its
+  tempo (4 bpm steps, kept per exercise), Count-in and Click switches, a
+  backing track instead of the click, Record, the count-in counted down and
+  then the bar and beat, the meter, and the exercise's takes.
+- **A take over the click** (`Engine.start_click`,
+  `playalong.click_track`): a bar's count-in before the bar the music
+  starts in, the pickup bar's beats, then every beat to the end. The click
+  is found in the take like a backing (the mixer returns it), and the take
+  records where the score's beat 0 is: `beat0_s` for the exercise's
+  `takes.csv` in dobro-transcription. Without Click, only the count-in
+  plays.
+- **Play-along takes moved here** from the practice recorder (2026-10-13:
+  its page has no Play along card, its API no `/api/playalong/start`);
+  takes made there before still line up and play without their backing.
+- **Tried on the desktop** (fake device): exercise 005 at 72 bpm, the
+  count-in counted down, then "Bar 1 · 3"; the take lined up with its
+  click (peak ratio 87), beat 0 at 3.644 s.
+- **Next:** deploy (the Pi's `/etc` configs were installed once: the peers
+  and the home page's list need the new app added by hand); the player's
+  first exercise takes; a tool to bring takes into dobro-transcription
+  with their `takes.csv` rows.
 
 ## Open questions
 

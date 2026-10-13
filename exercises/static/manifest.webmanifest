@@ -1,0 +1,10 @@
+{
+  "name": "Exercises",
+  "short_name": "Exercises",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#16181d",
+  "theme_color": "#16181d",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -78,6 +78,8 @@ class Config:
     # Other programs that play through the same speakers: their base URLs.
     # See recorder/peers.py.
     peers: list[str] = field(default_factory=list)
+    # The exercise app's exercises (exercises/store.py); None for the practice recorder.
+    exercises_dir: Path | None = None
 
 
 def _stream(raw: dict, where: str) -> Stream:
@@ -168,4 +170,5 @@ def load_config(path: Path | None = None) -> Config:
         ),
         path=path,
         peers=[str(u) for u in raw.get("peers", [])],
+        exercises_dir=place(raw["exercises_dir"]) if "exercises_dir" in raw else None,
     )

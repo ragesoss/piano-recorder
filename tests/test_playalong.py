@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from recorder import dsp
 from recorder.config import REPO, load_config
 from recorder.playalong import align_and_clean
-from recorder.server import create_app
+from exercises.server import create_app  # play-along takes are made in the exercise app
 
 
 def write_wav(path, x, rate=48000):
@@ -29,8 +29,8 @@ def backing_signal(seconds, rate=48000, seed=1):
 
 @pytest.fixture
 def client(tmp_path):
-    cfg = replace(load_config(REPO / "config" / "dev.toml"), takes_dir=tmp_path / "takes",
-                  backing_dir=tmp_path / "backing")
+    cfg = replace(load_config(REPO / "config" / "exercises-dev.toml"), takes_dir=tmp_path / "takes",
+                  backing_dir=tmp_path / "backing", exercises_dir=tmp_path / "exercises")
     cfg.backing_dir.mkdir()
     write_wav(cfg.backing_dir / "test-tune.wav", backing_signal(3.0))
     (cfg.backing_dir / "test-tune.json").write_text(json.dumps({"title": "Test tune", "source": "nowhere"}))
@@ -62,8 +62,8 @@ def test_no_backing_in_the_take_is_reported_not_found():
 
 def test_playalong_take_is_lined_up_and_cleaned(client):
     assert [b["id"] for b in client.get("/api/backings").json()] == ["counted", "test-tune"]
-    assert client.post("/api/playalong/start", json={"backing": "nope"}).status_code == 404
-    take = client.post("/api/playalong/start", json={"backing": "test-tune"}).json()["take"]
+    assert client.post("/api/record/start", json={"backing": "nope"}).status_code == 404
+    take = client.post("/api/record/start", json={"backing": "test-tune"}).json()["take"]
     time.sleep(0.5)
     s = client.get("/api/status").json()
     assert s["state"] == "recording" and s["recording"]["backing"]["title"] == "Test tune"
@@ -83,7 +83,7 @@ def test_playalong_take_is_lined_up_and_cleaned(client):
 
 
 def test_stopping_a_playalong_take_early_stops_the_backing(client):
-    client.post("/api/playalong/start", json={"backing": "test-tune"})
+    client.post("/api/record/start", json={"backing": "test-tune"})
     time.sleep(1.2)
     client.post("/api/record/stop")
     end = time.monotonic() + 10
@@ -94,7 +94,7 @@ def test_stopping_a_playalong_take_early_stops_the_backing(client):
 
 
 def test_a_take_can_be_lined_up_again(client):
-    take = client.post("/api/playalong/start", json={"backing": "test-tune"}).json()["take"]
+    take = client.post("/api/record/start", json={"backing": "test-tune"}).json()["take"]
     end = time.monotonic() + 15
     while time.monotonic() < end and client.get("/api/status").json()["state"] != "idle":
         time.sleep(0.1)
@@ -111,7 +111,7 @@ def test_count_in_clicks_for_down_yonder():
 
 
 def test_playalong_with_a_count_in_says_where_the_backing_starts(client):
-    take = client.post("/api/playalong/start", json={"backing": "counted"}).json()["take"]
+    take = client.post("/api/record/start", json={"backing": "counted"}).json()["take"]
     time.sleep(0.6)
     bk = client.get("/api/status").json()["recording"]["backing"]
     assert bk["count_in_s"] > 2.9 and bk["position"] < bk["count_in_s"]

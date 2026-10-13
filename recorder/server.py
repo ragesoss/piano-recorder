@@ -32,11 +32,6 @@ class SettingsIn(BaseModel):
     level_offset_db: float
 
 
-class PlayAlongIn(BaseModel):
-    backing: str
-    count_in: bool = True
-
-
 def create_app(cfg: Config) -> FastAPI:
     takes = Takes(cfg.takes_dir)
     backings = Backings(cfg.backing_dir)
@@ -78,15 +73,6 @@ def create_app(cfg: Config) -> FastAPI:
     def record_start():
         return {"take": guard(engine.start_recording)}
 
-    @app.get("/api/backings")
-    def list_backings():
-        return [b.__dict__ for b in backings.list()]
-
-    @app.post("/api/playalong/start")
-    def playalong_start(body: PlayAlongIn):
-        """Record while a backing plays over the speakers."""
-        return {"take": guard(engine.start_recording, body.backing, body.count_in)}
-
     @app.post("/api/record/stop")
     def record_stop():
         return {"take": engine.stop_recording()}
@@ -127,6 +113,8 @@ def create_app(cfg: Config) -> FastAPI:
         path = guard(takes.path, take_id)
         return FileResponse(path, media_type="audio/wav", filename=path.name)
 
+    # Play-along takes are made in the exercise app (exercises/) since 2026-10-13; the ones
+    # made here before still line up and play without their backing.
     @app.post("/api/takes/{take_id}/lineup")
     def line_up_again(take_id: str):
         """Line a play-along take up with its backing again."""

@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Exercises</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#16181d">
+<style>
+:root {
+  --bg: #f1f1ee; --card: #ffffff; --text: #1b1d22; --muted: #6b6f78; --line: #e2e2de;
+  --rec: #d93a3f; --rec-text: #ffffff; --ok: #2f9e5b; --warn: #d9a400; --accent: #2d6cdf;
+  --meter-bg: #e9e9e6; --paper: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16181d; --card: #1f2229; --text: #eceef2; --muted: #9aa0ab; --line: #2e323b;
+    --rec: #e5484d; --meter-bg: #2a2e36; --accent: #6b9cff; --paper: #f4f2ec;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent; overflow: hidden;
+}
+.app { display: grid; grid-template-columns: 1fr 360px; height: 100vh; height: 100dvh; }
+/* the score */
+.score {
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: max(10px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+.score img { display: block; width: 100%; height: auto; background: var(--paper); border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.12); margin-bottom: 12px; }
+.score .none { color: var(--muted); padding: 40px 20px; text-align: center; }
+/* the controls */
+.side {
+  border-left: 1px solid var(--line); background: var(--card); overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) 14px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+h1 { font-size: 18px; margin: 0; font-weight: 600; }
+a.home { display: inline-block; font-size: 14px; color: var(--muted); text-decoration: none; }
+.status { font-size: 13px; color: var(--muted); text-align: right; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 4px; vertical-align: 1px; }
+.dot.on { background: var(--ok); }
+select { width: 100%; min-height: 44px; font: inherit; color: var(--text); background: var(--card);
+  border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+.meta { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.row { display: flex; align-items: center; gap: 8px; }
+.tempo { justify-content: space-between; }
+.tempo .bpm { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 4.2em; text-align: center; }
+.tempo .bpm small { font-size: 13px; font-weight: 400; color: var(--muted); }
+button.small {
+  border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 10px;
+  padding: 8px 12px; font-size: 15px; cursor: pointer; min-height: 44px; min-width: 44px;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .45; }
+.toggles { display: flex; gap: 16px; font-size: 15px; }
+.toggles label { display: flex; align-items: center; gap: 6px; min-height: 36px; }
+.toggles input { width: 20px; height: 20px; accent-color: var(--accent); }
+.rec { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 6px 0; }
+#recBtn {
+  width: 118px; height: 118px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--rec); color: var(--rec-text); font-size: 20px; font-weight: 600;
+  box-shadow: 0 2px 10px rgba(0,0,0,.15);
+}
+#recBtn.active { border-radius: 26px; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .82; } }
+#recBtn:disabled { opacity: .45; }
+#where { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; min-height: 1.3em; text-align: center; }
+#where.count { color: var(--rec); font-size: 34px; }
+#timer { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 1.2em; }
+.meter { width: 100%; height: 12px; background: var(--meter-bg); border-radius: 6px; overflow: hidden; position: relative; }
+.meter > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ok); transition: width .12s linear; }
+.meter > b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: .6; left: 0; }
+#clip { color: var(--rec); font-weight: 600; font-size: 14px; min-height: 1.2em; text-align: center; }
+.now { display: none; border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.now.show { display: block; }
+.now-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.progress { height: 28px; display: flex; align-items: center; cursor: pointer; }
+.progress > div { flex: 1; height: 6px; background: var(--meter-bg); border-radius: 3px; position: relative; }
+.progress > div > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); border-radius: 3px; }
+.times { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+#error { display: none; border: 1px solid var(--rec); border-radius: 12px; padding: 10px; font-size: 14px;
+  background: color-mix(in srgb, var(--rec) 12%, var(--card)); }
+#error.show { display: block; }
+h2 { font-size: 14px; margin: 4px 0 0; color: var(--muted); font-weight: 600; }
+ul { list-style: none; margin: 0; padding: 0; }
+li.take { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
+li.take:first-child { border-top: 0; padding-top: 2px; }
+.take-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.take-when { font-weight: 600; font-size: 15px; }
+.take-len { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.take-info { font-size: 12px; color: var(--muted); }
+.take-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.take-actions .small { min-height: 38px; padding: 6px 10px; font-size: 14px; }
+a.small { text-decoration: none; display: inline-flex; align-items: center; border: 1px solid var(--line);
+  border-radius: 10px; color: var(--text); }
+.take-note { font-size: 13px; color: var(--muted); cursor: pointer; }
+.take-note:empty::before { content: "Add a note"; opacity: .7; }
+li.playing .take-when { color: var(--accent); }
+.empty { color: var(--muted); font-size: 14px; }
+.level { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.level input { flex: 1; accent-color: var(--accent); }
+@media (max-width: 860px) {  /* a phone, or the iPad held upright: controls under the score */
+  body { overflow: auto; }
+  .app { display: block; height: auto; }
+  .side { border-left: 0; border-top: 1px solid var(--line); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <main class="score" id="score"><div class="none">Choose an exercise.</div></main>
+
+  <aside class="side">
+    <header>
+      <div><a class="home" id="home" href="/">‹ Music room</a><h1>Exercises</h1></div>
+      <div class="status"><span class="dot" id="devDot"></span><span id="devText">connecting…</span><br><span id="free"></span></div>
+    </header>
+
+    <div id="error"></div>
+
+    <div>
+      <select id="exSel" aria-label="Exercise"></select>
+      <div class="meta" id="exMeta"></div>
+    </div>
+
+    <div class="row tempo" id="tempoRow">
+      <button class="small" id="slower" aria-label="Slower">−</button>
+      <span class="bpm" id="bpm">–</span>
+      <button class="small" id="faster" aria-label="Faster">+</button>
+      <button class="small" id="tempoReset" title="The score's tempo">↺</button>
+    </div>
+
+    <div class="toggles">
+      <label><input type="checkbox" id="countIn" checked> Count-in</label>
+      <label><input type="checkbox" id="click" checked> Click</label>
+    </div>
+
+    <select id="guideSel" aria-label="What plays"></select>
+
+    <div class="rec">
+      <button id="recBtn">Record</button>
+      <div id="where"></div>
+      <div id="timer"></div>
+      <div class="meter" aria-label="input level"><i id="meterBar"></i><b id="peakMark"></b></div>
+      <div id="clip"></div>
+    </div>
+
+    <div class="now" id="now">
+      <div class="now-head"><span id="nowTitle"></span><button class="small" id="stopBtn">Stop</button></div>
+      <div class="progress" id="progress"><div><i id="progBar"></i></div></div>
+      <div class="times"><span id="pos">0:00</span><span id="dur">0:00</span></div>
+    </div>
+
+    <h2 id="takesHead">Takes</h2>
+    <ul id="takes"><li class="empty">No takes yet.</li></ul>
+
+    <div class="level">
+      <span>Speakers</span>
+      <input type="range" id="level" min="-30" max="0" step="1" value="0">
+      <span id="levelText">0 dB</span>
+    </div>
+  </aside>
+</div>
+
+<script>
+document.getElementById("home").href = `http://${location.hostname}/`;
+const $ = (id) => document.getElementById(id);
+let status = null, takesVersion = -1, takes = [], pollTimer = null, exercises = [], backings = [];
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+
+function fmt(s) {
+  s = Math.max(0, Math.floor(s));
+  const m = Math.floor(s / 60), sec = String(s % 60).padStart(2, "0");
+  return `${m}:${sec}`;
+}
+function when(iso) {
+  const d = new Date(iso), now = new Date();
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) return `Today ${time}`;
+  return d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }) + ` ${time}`;
+}
+function meterPct(db) { return Math.max(0, Math.min(100, (db + 60) / 60 * 100)); }
+async function api(method, path, body) {
+  const r = await fetch(path, {
+    method, headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) {
+    let msg = `${r.status}`;
+    try { msg = (await r.json()).detail || msg; } catch (e) {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+function showError(msg) { $("error").textContent = msg || ""; $("error").classList.toggle("show", !!msg); }
+async function act(fn) { try { showError(""); await fn(); } catch (e) { showError(e.message); } poll(true); }
+
+// --- the exercise and its score
+function current() { return exercises.find((e) => e.id === $("exSel").value) || null; }
+function backing() { return backings.find((b) => b.id === $("guideSel").value) || null; }
+function tempoFor(ex) { return ex ? Number(store.get(`tempo:${ex.id}`, ex.tempo.bpm)) : null; }
+
+async function refreshExercises() {
+  try { [exercises, backings] = await Promise.all([api("GET", "/api/exercises"), api("GET", "/api/backings")]); }
+  catch (e) { return; }
+  const sel = $("exSel"), keep = sel.value || store.get("exercise", "");
+  sel.innerHTML = "";
+  for (const e of exercises) {
+    const o = document.createElement("option"); o.value = e.id; o.textContent = e.title; sel.appendChild(o);
+  }
+  const free = document.createElement("option"); free.value = ""; free.textContent = "No exercise (a free take)";
+  sel.appendChild(free);
+  sel.value = exercises.some((e) => e.id === keep) ? keep : (exercises[0] ? exercises[0].id : "");
+  const g = $("guideSel"), gkeep = g.value || store.get("guide", "click");
+  g.innerHTML = "";
+  const c = document.createElement("option"); c.value = "click"; c.textContent = "Click from the speakers"; g.appendChild(c);
+  for (const b of backings) {
+    const o = document.createElement("option"); o.value = b.id; o.textContent = `Along with: ${b.title}`; g.appendChild(o);
+  }
+  g.value = [...g.options].some((o) => o.value === gkeep) ? gkeep : "click";
+  showExercise();
+}
+
+function showExercise() {
+  const ex = current();
+  store.set("exercise", ex ? ex.id : "");
+  const score = $("score");
+  score.innerHTML = "";
+  if (!ex) {
+    score.innerHTML = '<div class="none">A free take: no score, no click (or along with a backing track).</div>';
+    $("exMeta").textContent = "";
+  } else {
+    ex.pages.forEach((_, i) => {
+      const img = document.createElement("img");
+      img.src = `/api/exercises/${ex.id}/pages/${i + 1}`;
+      img.alt = `${ex.title}, page ${i + 1}`;
+      score.appendChild(img);
+    });
+    if (!ex.pages.length) score.innerHTML = '<div class="none">This exercise has no pages.</div>';
+    const p = ex.tempo.pickup_beats;
+    $("exMeta").textContent = [ex.instrument, `${ex.bars} bars`, `${ex.tempo.beats_per_bar}/4`,
+      p ? `${p}-beat pickup` : "", `score ♩ = ${Math.round(ex.tempo.bpm)}`].filter(Boolean).join(" · ");
+    score.scrollTop = 0;
+  }
+  showGuide();
+  takesVersion = -1; poll(true);
+}
+
+function showGuide() {
+  const ex = current(), bk = backing();
+  store.set("guide", $("guideSel").value);
+  const clickable = !!ex && !bk;
+  $("tempoRow").style.opacity = clickable ? 1 : 0.4;
+  for (const id of ["slower", "faster", "tempoReset"]) $(id).disabled = !clickable;
+  $("click").disabled = !clickable;
+  $("countIn").disabled = !(clickable || (bk && bk.tempo));
+  $("bpm").innerHTML = clickable ? `${Math.round(tempoFor(ex))} <small>bpm</small>`
+    : bk ? (bk.tempo ? `${Math.round(bk.tempo.bpm)} <small>bpm</small>` : "–") : "–";
+}
+function nudge(d) {
+  const ex = current(); if (!ex) return;
+  const bpm = Math.max(30, Math.min(260, Math.round(tempoFor(ex)) + d));
+  store.set(`tempo:${ex.id}`, bpm); showGuide();
+}
+
+// --- where the player is, while recording over the click
+function where(rec) {
+  const bk = rec && rec.backing;
+  if (!bk || !bk.tempo || bk.beat0_s == null) return bk && bk.kind === "backing"
+    ? (bk.position < bk.count_in_s ? ["Count-in…", true] : [`${fmt(bk.position - bk.count_in_s)} of ${fmt(bk.seconds - bk.count_in_s)}`, false])
+    : ["", false];
+  const spb = 60 / bk.tempo.bpm, bpb = bk.tempo.beats_per_bar || 4, pickup = bk.tempo.pickup_beats || 0;
+  const beat = (bk.position - bk.beat0_s) / spb;  // from the first note
+  const fromBar1 = beat - pickup;  // from bar 1's downbeat
+  const startsAt = pickup > 0 ? -bpb * Math.ceil(pickup / bpb - 1e-9) : 0;  // the bar the music starts in
+  if (fromBar1 < startsAt - 0.02) {  // the count-in bar: count the beats down
+    const left = Math.ceil(startsAt - fromBar1 - 0.02);
+    return [`${left}`, true];
+  }
+  if (beat < -0.02) return [`${Math.floor(fromBar1 - startsAt) + 1}`, true];  // the pickup bar, before the note
+  const bar = Math.floor(fromBar1 / bpb + 1e-6) + 1, inBar = Math.floor(fromBar1 - (bar - 1) * bpb + 1e-6) + 1;
+  return [bar >= 1 ? `Bar ${bar} · ${inBar}` : `Pickup · ${Math.floor(fromBar1 - startsAt) + 1}`, false];
+}
+
+// --- takes
+async function refreshTakes() {
+  const ex = current();
+  const all = await api("GET", "/api/takes" + (ex ? `?exercise=${encodeURIComponent(ex.id)}` : ""));
+  takes = ex ? all : all.filter((t) => !t.exercise);
+  $("takesHead").textContent = ex ? `Takes of this exercise` : "Free takes";
+  renderTakes();
+}
+function renderTakes() {
+  const ul = $("takes");
+  ul.innerHTML = "";
+  const playingId = status && status.playing && status.playing.take;
+  const recordingId = status && status.recording && status.recording.take;
+  const shown = takes.filter((t) => t.id !== recordingId);
+  if (!shown.length) { ul.innerHTML = '<li class="empty">No takes yet.</li>'; return; }
+  for (const t of shown) {
+    const li = document.createElement("li");
+    li.className = "take" + (t.id === playingId ? " playing" : "");
+    li.innerHTML = `
+      <div class="take-top"><span class="take-when"></span><span class="take-len"></span></div>
+      <div class="take-info"></div>
+      <div class="take-note" title="Edit note"></div>
+      <div class="take-actions">
+        <button class="small primary" data-act="play">▶ Speakers</button>
+        <a class="small" data-act="here" style="padding:6px 10px;font-size:14px">On this iPad</a>
+        <button class="small" data-act="del">Delete</button>
+      </div>`;
+    li.querySelector(".take-when").textContent = when(t.started);
+    li.querySelector(".take-len").textContent = fmt(t.seconds) + (t.peak_dbfs != null && t.peak_dbfs > -1 ? " · clipped?" : "");
+    const pa = t.playalong, bits = [];
+    if (t.tempo_bpm) bits.push(`♩ = ${Math.round(t.tempo_bpm)}`);
+    if (t.backing) bits.push(`with ${t.backing}`);
+    if (pa) bits.push(pa.found ? "lined up" : "the click was not found in the take");
+    else if (t.exercise || t.backing) bits.push("lining up…");
+    li.querySelector(".take-info").textContent = bits.join(" · ");
+    li.querySelector(".take-note").textContent = t.note || "";
+    li.querySelector('[data-act="here"]').href = `/api/takes/${t.id}/audio`;
+    li.querySelector('[data-act="play"]').onclick = () => act(() => api("POST", `/api/takes/${t.id}/play`, { start: 0 }));
+    li.querySelector('[data-act="del"]').onclick = () => {
+      if (confirm(`Delete the take from ${when(t.started)} (${fmt(t.seconds)})?`)) act(() => api("DELETE", `/api/takes/${t.id}`));
+    };
+    li.querySelector(".take-note").onclick = () => {
+      const note = prompt("Note for this take:", t.note || "");
+      if (note !== null) act(() => api("PUT", `/api/takes/${t.id}/note`, { note }));
+    };
+    ul.appendChild(li);
+  }
+}
+
+// --- status
+function render(s) {
+  const prev = status; status = s;
+  const devOk = s.devices.capture && s.devices.playback;
+  $("devDot").classList.toggle("on", devOk);
+  $("devText").textContent = devOk ? "Mixer connected" : "Mixer not found";
+  $("free").textContent = `${(s.free_mb / 1000).toFixed(1)} GB free`;
+  if (s.error) showError(s.error);
+  const rec = s.recording;
+  const btn = $("recBtn");
+  btn.textContent = rec ? "Stop" : "Record";
+  btn.classList.toggle("active", !!rec);
+  btn.disabled = !s.devices.capture && !rec;
+  for (const id of ["exSel", "guideSel"]) $(id).disabled = !!rec;
+  const [w, counting] = rec ? where(rec) : [s.state === "analyzing" ? "Lining up…" : "", false];
+  $("where").textContent = w;
+  $("where").classList.toggle("count", counting);
+  $("timer").textContent = rec ? fmt(rec.seconds) : "";
+  $("meterBar").style.width = rec ? meterPct(rec.meter_dbfs) + "%" : "0";
+  $("meterBar").style.background = rec && rec.meter_dbfs > -6 ? "var(--rec)" : rec && rec.meter_dbfs > -12 ? "var(--warn)" : "var(--ok)";
+  $("peakMark").style.left = rec ? `calc(${meterPct(rec.peak_dbfs)}% - 2px)` : "0";
+  $("peakMark").style.display = rec ? "block" : "none";
+  $("clip").textContent = rec && rec.clipped ? "Clipping: turn the channel's gain down a little." : "";
+  const pl = s.playing;
+  $("now").classList.toggle("show", !!pl || s.state === "preparing");
+  if (pl) {
+    const t = takes.find((x) => x.id === pl.take);
+    $("nowTitle").textContent = (s.state === "preparing" ? "Preparing " : "Playing ") + (t ? when(t.started) : pl.take);
+    $("progBar").style.width = pl.seconds ? (100 * pl.position / pl.seconds) + "%" : "0";
+    $("pos").textContent = fmt(pl.position);
+    $("dur").textContent = fmt(pl.seconds);
+  }
+  if (document.activeElement !== $("level")) {
+    $("level").value = s.level_offset_db;
+    $("levelText").textContent = `${s.level_offset_db} dB`;
+  }
+  const playingChanged = (prev && prev.playing && prev.playing.take) !== (pl && pl.take);
+  const recChanged = !!(prev && prev.recording) !== !!rec;
+  if (s.takes_version !== takesVersion) { takesVersion = s.takes_version; refreshTakes(); }
+  else if (playingChanged || recChanged) renderTakes();
+}
+async function poll(once) {
+  clearTimeout(pollTimer);
+  try { render(await api("GET", "/api/status")); }
+  catch (e) { $("devDot").classList.remove("on"); $("devText").textContent = "Not reachable"; }
+  const busy = status && status.state !== "idle";
+  pollTimer = setTimeout(poll, busy ? 120 : 1500);
+}
+
+function start() {
+  const ex = current(), bk = backing();
+  const body = { exercise: ex ? ex.id : null, count_in: $("countIn").checked && !$("countIn").disabled };
+  if (bk) body.backing = bk.id;
+  else if (ex) { body.click = $("click").checked; body.tempo_bpm = tempoFor(ex); }
+  else { body.click = false; body.count_in = false; }
+  return api("POST", "/api/record/start", body);
+}
+
+$("recBtn").onclick = () => act(() => status && status.recording ? api("POST", "/api/record/stop") : start());
+$("stopBtn").onclick = () => act(() => api("POST", "/api/stop"));
+$("exSel").onchange = showExercise;
+$("guideSel").onchange = showGuide;
+$("slower").onclick = () => nudge(-4);
+$("faster").onclick = () => nudge(4);
+$("tempoReset").onclick = () => { const ex = current(); if (ex) { store.set(`tempo:${ex.id}`, ex.tempo.bpm); showGuide(); } };
+for (const id of ["countIn", "click"]) {
+  $(id).checked = store.get(id, "1") !== "0";
+  $(id).onchange = () => store.set(id, $(id).checked ? "1" : "0");
+}
+$("progress").onclick = (ev) => {
+  const pl = status && status.playing;
+  if (!pl || !pl.seconds) return;
+  const r = $("progress").firstElementChild.getBoundingClientRect();
+  act(() => api("POST", `/api/takes/${pl.take}/play`, { start: Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)) * pl.seconds }));
+};
+$("level").oninput = () => { $("levelText").textContent = `${$("level").value} dB`; };
+$("level").onchange = () => act(() => api("PUT", "/api/settings", { level_offset_db: Number($("level").value) }));
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { poll(true); refreshExercises(); } });
+
+refreshExercises();
+poll(true);
+</script>
+</body>
+</html>

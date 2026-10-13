@@ -181,3 +181,33 @@ def with_count_in(backing: np.ndarray, rate: int, tempo: dict) -> tuple[np.ndarr
     out[:m] += clicks[:m]
     return out, lead
 
+
+def click_track(tempo: dict, rate: int, beats: float, count_in_bars: int = 1, through: bool = True,
+                level_dbfs: float = -12.0) -> tuple[np.ndarray, float]:
+    """A click to play an exercise to: `count_in_bars` full bars before the bar the music starts
+    in (its pickup bar, or bar 1), the pickup bar's beats before the first note, then (with
+    `through`) every beat through `beats` beats from the first note; downbeats accented
+    (2000 Hz against 1500 Hz, 4 dB louder). `tempo`: {"bpm", "pickup_beats", "beats_per_bar"}.
+    Returns the clicks (float32) and where beat 0, the music's first note, falls in them (s)."""
+    spb = 60.0 / float(tempo["bpm"])
+    bpb = int(tempo.get("beats_per_bar", 4))
+    pickup = float(tempo.get("pickup_beats", 0.0))
+    # beats counted from bar 1's downbeat; the music's first note is at -pickup
+    first_bar_start = -bpb * np.ceil(pickup / bpb - 1e-9) if pickup > 0 else 0.0
+    k0 = int(round(first_bar_start)) - count_in_bars * bpb
+    k1 = int(np.floor(beats - pickup + 1e-9)) if through else int(np.ceil(-pickup - 1e-9)) - 1
+    ks = [k for k in range(k0, k1 + 1) if through or k < -pickup - 0.1]
+    lead = 0.2 - k0 * spb if ks else 0.2  # bar 1's downbeat, from the start
+    n = int(round((lead + (max(ks) + 1) * spb if ks else lead) * rate)) + int(0.3 * rate)
+    out = np.zeros(n, dtype=np.float32)
+    dur = int(0.03 * rate)
+    tt = np.arange(dur) / rate
+    for k in ks:
+        acc = k % bpb == 0
+        freq, lv = (2000.0, level_dbfs) if acc else (1500.0, level_dbfs - 4.0)
+        click = (10 ** (lv / 20) * np.sin(2 * np.pi * freq * tt) * np.exp(-tt / 0.006)).astype(np.float32)
+        i = int(round((lead + k * spb) * rate))
+        m = min(dur, n - i)
+        if i >= 0 and m > 0:
+            out[i:i + m] += click[:m]
+    return out, lead - pickup * spb

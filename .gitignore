@@ -9,6 +9,9 @@ __pycache__/
 /takes*/
 # Backing tracks (config/dev.toml: backing-dev/).
 /backing*/
+# The exercise app's on the desktop (config/exercises-dev.toml).
+/exercise-takes*/
+/exercises-dev/
 *.wav
 *.flac
 *.mp3
