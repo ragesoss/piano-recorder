@@ -7,6 +7,9 @@ description = "BOMGE BMG-04F mixer (JieLi BR21 USB audio)"
 backend = "alsa"
 usb_id = "e5b7:0811"
 card = "spker"
+# USB playback enters channel 3/4, so it is in the main mix the capture records
+# (T7, 2026-10-10: a tone at PCM Playback Volume 255 came back at -31.4 dBFS).
+loopback = true
 
 [capture]
 device = "hw:CARD=spker,DEV=0"

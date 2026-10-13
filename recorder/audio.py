@@ -82,18 +82,72 @@ def set_volume(profile: Profile, fraction: float) -> None:
     set_control(profile, c, round(c.min + fraction * (c.max - c.min)))
 
 
+# The fake device's loopback
+
+class _FakeLoop:
+    """What the fake device has played, so its capture can hear it again
+    (a fake profile with loopback = true): mono samples from a start time."""
+
+    def __init__(self):
+        self.t0: float | None = None
+        self.chunks: list[np.ndarray] = []
+        self.played = np.zeros(0, dtype=np.float32)
+        self.owner: object | None = None
+        self.lock = threading.Lock()  # the playback thread adds while the capture thread hears
+
+    def start(self, t0: float) -> object:
+        """A new playback: earlier ones (a thread still finishing) no longer count. Returns its token."""
+        with self.lock:
+            self.t0, self.chunks, self.played = t0, [], np.zeros(0, dtype=np.float32)
+            self.owner = object()
+            return self.owner
+
+    def add(self, x: np.ndarray, owner: object | None = None) -> None:
+        x = (x if x.ndim == 1 else x.mean(axis=1)).astype(np.float32)
+        with self.lock:
+            if owner is None or owner is self.owner:  # not a playback that has been superseded
+                self.chunks.append(x)
+
+    def heard(self, t_first: float, frames: int, rate: int) -> np.ndarray:
+        """The played sound at times t_first + i/rate (zero where nothing played)."""
+        out = np.zeros(frames, dtype=np.float32)
+        with self.lock:
+            if self.t0 is None:
+                return out
+            if self.chunks:
+                self.played = np.concatenate([self.played] + self.chunks)
+                self.chunks = []
+            played, t0 = self.played, self.t0
+        k0 = int(round((t_first - t0) * rate))
+        lo, hi = max(k0, 0), min(k0 + frames, len(played))
+        if hi > lo:
+            out[lo - k0:hi - k0] = played[lo:hi]
+        return out
+
+
+_FAKE_LOOPS: dict[str, _FakeLoop] = {}
+
+
+def _fake_loop(profile: Profile) -> _FakeLoop | None:
+    if profile.backend != "fake" or not profile.loopback:
+        return None
+    return _FAKE_LOOPS.setdefault(profile.name, _FakeLoop())
+
+
 # Capture
 
 class _FakeSource:
     """Room noise at about -72 dBFS, with a decaying 220 Hz note every 4 s,
-    paced in real time."""
+    paced in real time; with loopback, the fake playback comes back too."""
 
-    def __init__(self, stream: Stream, dtype: np.dtype):
+    def __init__(self, stream: Stream, dtype: np.dtype, loop: _FakeLoop | None = None,
+                 loop_db: float = -31.0, loop_delay_s: float = 0.009):
         self.stream = stream
         self.dtype = dtype
         self.rng = np.random.default_rng(0)
         self.t0 = time.monotonic()
         self.n = 0
+        self.loop, self.loop_gain, self.loop_delay = loop, 10 ** (loop_db / 20), loop_delay_s
 
     def read(self, frames: int) -> bytes:
         rate, ch = self.stream.rate, self.stream.channels
@@ -103,6 +157,8 @@ class _FakeSource:
         since = np.mod(t, 4.0)
         note = 0.2 * np.exp(-since * 1.5) * np.sin(2 * np.pi * 220 * t)
         x = note + self.rng.normal(0, 10 ** (-72 / 20), frames)
+        if self.loop is not None:
+            x = x + self.loop_gain * self.loop.heard(self.t0 + self.n / rate - self.loop_delay, frames, rate)
         self.n += frames
         mono = dsp.from_float(x.astype(np.float32), self.dtype)
         return np.repeat(mono[:, None], ch, axis=1).tobytes()
@@ -145,7 +201,9 @@ class Capture:
 
     def start(self) -> None:
         if self.profile.backend == "fake":
-            self._fake = _FakeSource(self.stream, self.dtype)
+            f = self.profile.fake
+            self._fake = _FakeSource(self.stream, self.dtype, _fake_loop(self.profile),
+                                     float(f.get("loopback_db", -31.0)), float(f.get("loopback_delay_ms", 9.0)) / 1000)
             return
         require(self.profile)
         apply_controls(self.profile, self.stream)
@@ -213,6 +271,7 @@ class Playback:
         self.stderr_lines: list[str] = []
         self._fake_t0: float | None = None
         self._fake_n = 0
+        self._loop: _FakeLoop | None = None
 
     @property
     def rate(self) -> int:
@@ -228,6 +287,9 @@ class Playback:
     def start(self) -> None:
         if self.profile.backend == "fake":
             self._fake_t0 = time.monotonic()
+            self._loop = _fake_loop(self.profile)
+            if self._loop is not None:
+                self._loop_owner = self._loop.start(self._fake_t0)
             return
         require(self.profile)
         apply_controls(self.profile, self.stream)
@@ -248,6 +310,8 @@ class Playback:
         if x.ndim == 1:
             x = np.repeat(x[:, None], self.stream.channels, axis=1)
         if self._fake_t0 is not None:
+            if self._loop is not None:
+                self._loop.add(x, self._loop_owner)
             self._fake_n += len(x)
             due = self._fake_t0 + self._fake_n / self.stream.rate
             time.sleep(max(0.0, due - time.monotonic()))

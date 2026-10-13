@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from . import audio
+from .backing import BackingNotFound, Backings
 from .config import Config, load_config
 from .engine import Busy, Engine, LowSpace
 from .takes import TakeNotFound, Takes
@@ -31,9 +32,15 @@ class SettingsIn(BaseModel):
     level_offset_db: float
 
 
+class PlayAlongIn(BaseModel):
+    backing: str
+    count_in: bool = True
+
+
 def create_app(cfg: Config) -> FastAPI:
     takes = Takes(cfg.takes_dir)
-    engine = Engine(cfg, takes)
+    backings = Backings(cfg.backing_dir)
+    engine = Engine(cfg, takes, backings)
     app = FastAPI(title="Practice recorder", docs_url=None, redoc_url=None)
     app.state.engine = engine
 
@@ -42,6 +49,8 @@ def create_app(cfg: Config) -> FastAPI:
             return fn(*args)
         except TakeNotFound:
             raise HTTPException(404, "no such take")
+        except BackingNotFound:
+            raise HTTPException(404, "no such backing track")
         except Busy as e:
             raise HTTPException(409, str(e))
         except LowSpace as e:
@@ -68,6 +77,15 @@ def create_app(cfg: Config) -> FastAPI:
     @app.post("/api/record/start")
     def record_start():
         return {"take": guard(engine.start_recording)}
+
+    @app.get("/api/backings")
+    def list_backings():
+        return [b.__dict__ for b in backings.list()]
+
+    @app.post("/api/playalong/start")
+    def playalong_start(body: PlayAlongIn):
+        """Record while a backing plays over the speakers."""
+        return {"take": guard(engine.start_recording, body.backing, body.count_in)}
 
     @app.post("/api/record/stop")
     def record_stop():
@@ -107,6 +125,23 @@ def create_app(cfg: Config) -> FastAPI:
     @app.get("/api/takes/{take_id}/audio")
     def take_audio(take_id: str):
         path = guard(takes.path, take_id)
+        return FileResponse(path, media_type="audio/wav", filename=path.name)
+
+    @app.post("/api/takes/{take_id}/lineup")
+    def line_up_again(take_id: str):
+        """Line a play-along take up with its backing again."""
+        try:
+            return guard(engine.line_up_again, take_id)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    @app.get("/api/takes/{take_id}/clean")
+    def take_clean(take_id: str):
+        """A play-along take with its backing subtracted."""
+        guard(takes.path, take_id)
+        path = takes.clean_path(take_id)
+        if not path.exists():
+            raise HTTPException(404, "this take has no copy without its backing")
         return FileResponse(path, media_type="audio/wav", filename=path.name)
 
     @app.put("/api/settings")

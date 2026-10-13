@@ -2,6 +2,8 @@
 
 capture = "fake"
 playback = "fake"
+# Backing tracks for play-along takes (tools/push-backing puts them here).
+backing_dir = "backing-dev"
 takes_dir = "takes-dev"
 
 [web]

@@ -49,6 +49,12 @@ class Profile:
     capture: Stream | None
     playback: Stream | None
     path: Path
+    # The device's own playback comes back in its capture (T7). Play-along takes then
+    # carry the backing electrically, which lines them up to the sample and can be
+    # subtracted (recorder/playalong.py).
+    loopback: bool = False
+    # Settings of the fake backend (backend = "fake" only): its loopback level and delay.
+    fake: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -63,6 +69,7 @@ class Config:
     capture: Profile
     playback: Profile
     takes_dir: Path
+    backing_dir: Path  # backing tracks for play-along takes (recorder/backing.py)
     web_host: str
     web_port: int
     address: str | None
@@ -115,6 +122,8 @@ def load_profile(name: str, hardware_dir: Path = HARDWARE_DIR) -> Profile:
         capture=_stream(raw["capture"], f"{path} [capture]") if "capture" in raw else None,
         playback=_stream(raw["playback"], f"{path} [playback]") if "playback" in raw else None,
         path=path,
+        loopback=bool(raw.get("loopback", False)),
+        fake=dict(raw.get("fake", {})),
     )
 
 
@@ -136,15 +145,19 @@ def load_config(path: Path | None = None) -> Config:
         raise ConfigError(f"profile {capture.name!r} has no [capture]")
     if playback.playback is None:
         raise ConfigError(f"profile {playback.name!r} has no [playback]")
-    takes_dir = Path(raw["takes_dir"]).expanduser()
-    if not takes_dir.is_absolute():
-        takes_dir = REPO / takes_dir
+    def place(value: str) -> Path:
+        d = Path(value).expanduser()
+        return d if d.is_absolute() else REPO / d
+
+    takes_dir = place(raw["takes_dir"])
+    backing_dir = place(raw.get("backing_dir", "~/backing"))
     web = raw.get("web", {})
     loud = raw.get("loudness", {})
     return Config(
         capture=capture,
         playback=playback,
         takes_dir=takes_dir,
+        backing_dir=backing_dir,
         web_host=web.get("host", "0.0.0.0"),
         web_port=int(web.get("port", 8000)),
         address=raw.get("address"),

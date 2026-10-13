@@ -79,3 +79,15 @@ def test_level_offset_is_clamped_and_kept(client, tmp_path):
     assert client.put("/api/settings", json={"level_offset_db": 12}).json()["level_offset_db"] == 0.0
     assert client.put("/api/settings", json={"level_offset_db": -8}).json()["level_offset_db"] == -8.0
     assert client.get("/api/status").json()["level_offset_db"] == -8.0
+
+
+def test_a_recording_that_gets_no_audio_leaves_no_take(client, monkeypatch):
+    # the device busy (another program holds it): arecord exits at once, saying so
+    from recorder import audio
+    monkeypatch.setattr(audio.Capture, "read", lambda self: None)
+    monkeypatch.setattr(audio.Capture, "start", lambda self: self.stderr_lines.append(
+        "arecord: main:850: audio open error: Device or resource busy"))
+    client.post("/api/record/start")
+    s = wait_for(client, "idle")
+    assert "Device or resource busy" in s["error"]
+    assert client.get("/api/takes").json() == []

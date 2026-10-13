@@ -1,0 +1,14 @@
+#!/bin/sh
+# Copy a take from the control unit: its WAV, its sidecar and, for a play-along
+# take, the copy without the backing.
+#   tools/pull-take TAKE_ID DEST_DIR [HOST]     HOST: an ssh host (default: practice)
+set -eu
+take=$1
+dest=$2
+host=${3:-practice}
+takes=$(ssh "$host" "cd practice-recorder && .venv/bin/python -c 'from recorder.config import load_config; print(load_config().takes_dir)'")
+mkdir -p "$dest"
+scp -q "$host:$takes/$take.wav" "$dest/"
+scp -q "$host:$takes/$take.json" "$dest/" 2>/dev/null || true
+scp -q "$host:$takes/$take.clean.wav" "$dest/" 2>/dev/null || true
+ls -l "$dest" | grep "$take"

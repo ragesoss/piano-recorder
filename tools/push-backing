@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""Put a recording on the control unit as a backing track for play-along takes.
+
+    tools/push-backing AUDIO --id down-yonder-1 --title "Down Yonder (dobro)" [--note TEXT] [--host practice]
+        [--bpm 120 --first-note 0.5 --pickup 1.5]   (for a count-in)
+
+The audio is converted to the playback rate (48 kHz, mono, 16-bit WAV, with
+ffmpeg) and copied, with a JSON sidecar saying where it came from, into the
+backing_dir of the control unit's config. Run from the desktop.
+"""
+
+import argparse
+import hashlib
+import json
+import re
+import subprocess
+import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
+
+ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")  # as recorder/backing.py
+
+
+def source_name(path: Path) -> str:
+    """The file's path inside its git repository (repo name first), else its absolute path."""
+    try:
+        top = subprocess.run(["git", "-C", str(path.parent), "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+        return str(Path(Path(top).name) / path.resolve().relative_to(top))
+    except (subprocess.CalledProcessError, ValueError):
+        return str(path.resolve())
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("audio", type=Path)
+    ap.add_argument("--id", required=True, help="lower-case letters, digits and hyphens")
+    ap.add_argument("--title", required=True)
+    ap.add_argument("--note", default="")
+    ap.add_argument("--host", default="practice", help="the control unit's ssh host")
+    ap.add_argument("--rate", type=int, default=48000)
+    ap.add_argument("--bpm", type=float, help="the track's tempo, for a count-in")
+    ap.add_argument("--first-note", type=float, help="seconds into the file of its first note")
+    ap.add_argument("--pickup", type=float, default=0.0, help="beats before the first downbeat")
+    ap.add_argument("--beats-per-bar", type=int, default=4)
+    a = ap.parse_args()
+    if not ID_RE.match(a.id):
+        sys.exit(f"bad id {a.id!r}: lower-case letters, digits and hyphens")
+    if not a.audio.exists():
+        sys.exit(f"no such file: {a.audio}")
+    remote_dir = subprocess.run(
+        ["ssh", a.host, "cd practice-recorder && .venv/bin/python -c "
+         "'from recorder.config import load_config; print(load_config().backing_dir)'"],
+        capture_output=True, text=True, check=True).stdout.strip()
+    with tempfile.TemporaryDirectory() as tmp:
+        wav, side = Path(tmp) / f"{a.id}.wav", Path(tmp) / f"{a.id}.json"
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(a.audio),
+                        "-ac", "1", "-ar", str(a.rate), "-c:a", "pcm_s16le", str(wav)], check=True)
+        side.write_text(json.dumps({
+            "title": a.title, "note": a.note, "source": source_name(a.audio),
+            "source_sha256": hashlib.sha256(a.audio.read_bytes()).hexdigest(),
+            "added": datetime.now().isoformat(timespec="seconds"),
+            "tempo": ({"bpm": a.bpm, "first_note_s": a.first_note, "pickup_beats": a.pickup,
+                       "beats_per_bar": a.beats_per_bar} if a.bpm and a.first_note is not None else None),
+        }, indent=1))
+        subprocess.run(["ssh", a.host, f"mkdir -p {remote_dir}"], check=True)
+        subprocess.run(["scp", "-q", str(wav), str(side), f"{a.host}:{remote_dir}/"], check=True)
+    print(f"{a.id}: on {a.host} in {remote_dir}")
+
+
+if __name__ == "__main__":
+    main()

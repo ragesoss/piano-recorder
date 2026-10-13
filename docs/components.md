@@ -62,6 +62,30 @@ yet.
     playing must still peak under -6 dBFS.
 - **Also at hand:** an Ear Trumpet Labs Nadine (upright-bass mic). It
   works through the mixer, about 10 dB quieter than an SDC.
+  - It needs phantom power (the player, 2026-10-12). Mounted on the bass's
+    afterlength, on channel 2 at GAIN maximum (2026-10-13): peaks -25 to
+    -31 dBFS, the loudest 50 ms -39 to -43, floor -82. See PLAN.md step 5.
+- **Wanted, when a good used one turns up locally (not a priority):** a
+  room mic, for what a listener hears (the instruments and the room
+  together), beside the close mics and pickups. It needs its own input:
+  input 2 of an 18i8 (`replacing-the-mixer.md`); on the BMG-04F there is
+  none to spare.
+  - **What to look for:** a large-diaphragm condenser, ideally switchable
+    patterns (omni for the room; cardioid to turn its back on the air
+    conditioner). Self-noise 15 dB(A) or less. XLR with phantom power: no
+    USB mics, no ribbons (low output, fragile).
+  - **Models often seen used** (rough used prices, US, 2026; check local
+    listings): Audio-Technica AT4040 (cardioid) $175-250, AT4050
+    (multi-pattern) $350-450; AKG C214 (cardioid) $225-300; Rode NT2-A
+    (multi-pattern) $200-275; AKG C414 XLS/XLII (multi-pattern) $500-750;
+    Neumann TLM 102 $450-600, TLM 103 $700-900.
+  - **Checking a used one:** hear it before paying (no crackle, no hiss,
+    steady output when the body is tapped gently); no dents in the grille
+    (a drop can damage the capsule); try the pattern, pad and low-cut
+    switches; for C414s and Neumanns, check the serial number with the
+    maker (fakes exist). A shock mount or case with it is a good sign.
+  - **When added:** no software change; T5 and T8, then a line in the swap
+    log.
 - **Swap:**
   - another XLR mic: no software change; run T5 and T8.
   - a USB mic: that is a new capture interface, not a mic (slot 2).
@@ -80,8 +104,8 @@ yet.
   reads "MP3/USB" and "3/4". See "Shared mixer" under Interactions.
 - **The panel** (2026-10-10):
   - **Inputs:**
-    - ch1 and ch2: XLR/combo inputs, one +48V button with an LED (lit:
-      phantom on);
+    - ch1 and ch2: XLR/combo inputs, each with its own +48V button and LED
+      (lit: phantom on) (the player, 2026-10-12);
     - ch3/4: RCA L/R (the record player) and 1/4" L/R.
   - **Channel strips:**
     - ch1 and ch2: GAIN, HIGH, LOW, EFF (send to the built-in DSP), PEAK
@@ -180,6 +204,9 @@ yet.
     get_throttled` on the Pi stays `0x0` with the mixer attached.
   - The sellers' listings also claim Bluetooth input and MP3 playback from a
     flash drive. They disagree on the outputs. Check the panel itself.
+  - Bluetooth input works (the player, 2026-10-11). It has to be switched
+    on and off with MODE, and it drops when the phone goes out of range.
+    So the player does not use it for music in the room.
 - **Profile values** (what the capture profile will hold): USB id, card id
   `spker`, format S16_LE, rate 48000, channels 2, channel layout
   "mono, duplicated" (keep channel 0), DC removal on, capture gain control
@@ -339,6 +366,12 @@ yet.
     - So the first failure came from the test load plus arecord's
       default 0.5 s buffer.
     - The Pi 3 stays in slot 5. Re-run T9 with the next capture interface.
+  - **Play-along takes, 2026-10-12: data lost in duplex.** Recording while
+    playing a backing (PLAN.md step 5), one take of two lost 29 pieces of
+    its playback stream ("Transfer to device 4 endpoint 0x3 failed - FIQ
+    reported NYET"), heard as crackles; it began while the service was
+    still analyzing the take before. throttled 0x0. Capture alone, minutes
+    later: no errors.
 - **Alternate:** ECS LIVA, Celeron N2807 (Bay Trail-M, 2 cores), 2 GB,
   eMMC, fanless. Debian (amd64), installed fresh.
 - Older entries in `~/.ssh/config` for the Pi and the LIVA are from an
@@ -475,8 +508,11 @@ either part is swapped.
       player.
 - **Loopback** (slots 2, 3). Playback comes back into the capture: T7
   found it on 2026-10-10, through channel 3/4 into the main mix. Playing
-  along with a take, or a click, ends up in the new take. It only matters
-  for those later features.
+  along with a take, or a click, ends up in the new take.
+  - Play-along takes use it (2026-10-12, PLAN.md step 5): the backing in
+    the take lines the take up to the sample and is subtracted. The
+    profile says so (`loopback = true`). A device without loopback needs
+    another way to line takes up.
 - **Shared clock** (slots 2, 3). Capture and playback on one device share
   a clock. Split across two devices (option B), they drift slightly apart.
   That matters only for features that line a new take up with an old one.

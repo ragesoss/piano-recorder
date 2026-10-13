@@ -7,6 +7,8 @@ __pycache__/
 # Takes: recordings of the player, and their notes and settings.
 # config/dev.toml writes to takes-dev/; tools/deploy also skips /takes*.
 /takes*/
+# Backing tracks (config/dev.toml: backing-dev/).
+/backing*/
 *.wav
 *.flac
 *.mp3

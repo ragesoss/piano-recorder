@@ -9,11 +9,13 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from . import audio, dsp, peers
+from . import audio, dsp, peers, playalong
+from .backing import Backings
 from .config import Config
 from .takes import Takes
 
 MIN_FREE_MB = 200
+TAIL_S = 2.0  # a play-along take keeps recording this long after the backing ends
 OFFSET_RANGE_DB = (-30.0, 0.0)
 
 
@@ -35,6 +37,17 @@ class _Recording:
     recent: collections.deque = field(default_factory=lambda: collections.deque(maxlen=3))
     clipped: bool = False
     thread: threading.Thread | None = None
+    # a play-along take: the backing, prepared for the speakers, and how far it has played
+    backing_id: str | None = None
+    backing_title: str = ""
+    backing: np.ndarray | None = None
+    backing_rate: int = 48000
+    backing_gain_db: float = 0.0
+    backing_pos: float = 0.0
+    count_in_s: float = 0.0  # the clicks before the backing (the backing starts this far into what is played)
+    tempo: dict | None = None
+    backing_done: threading.Event = field(default_factory=threading.Event)
+    played: list = field(default_factory=list)  # the blocks as written, for the alignment
 
 
 @dataclass
@@ -49,11 +62,13 @@ class _Playing:
 
 
 class Engine:
-    def __init__(self, cfg: Config, takes: Takes):
+    def __init__(self, cfg: Config, takes: Takes, backings: Backings | None = None):
         self.cfg = cfg
         self.takes = takes
+        self.backings = backings or Backings(cfg.backing_dir)
         self.lock = threading.Lock()
         self.rec: _Recording | None = None
+        self.analyzing: str | None = None  # a play-along take being lined up with its backing
         self.play_: _Playing | None = None
         self.error: str | None = None
         self.takes_version = 0
@@ -69,7 +84,8 @@ class Engine:
     def status(self) -> dict:
         with self.lock:
             rec, pl = self.rec, self.play_
-            state = "recording" if rec else ("preparing" if pl and pl.preparing else ("playing" if pl else "idle"))
+            state = ("recording" if rec else "preparing" if pl and pl.preparing else "playing" if pl
+                     else "analyzing" if self.analyzing else "idle")
             return {
                 "state": state,
                 "recording": rec and {
@@ -78,7 +94,15 @@ class Engine:
                     "meter_dbfs": round(max(rec.recent, default=-240.0), 1),
                     "peak_dbfs": round(rec.peak_dbfs, 1),
                     "clipped": rec.clipped,
+                    "backing": rec.backing_id and {
+                        "id": rec.backing_id,
+                        "title": rec.backing_title,
+                        "position": round(rec.backing_pos, 1),
+                        "seconds": round(len(rec.backing) / rec.backing_rate, 1),
+                        "count_in_s": round(rec.count_in_s, 2),
+                    },
                 },
+                "analyzing": self.analyzing,
                 "playing": pl and {
                     "take": pl.take_id,
                     "position": round(pl.position, 2),
@@ -99,22 +123,74 @@ class Engine:
 
     # Recording
 
-    def start_recording(self) -> str:
+    def start_recording(self, backing_id: str | None = None, count_in: bool = True) -> str:
+        """Record; with a backing, play it over the speakers meanwhile (a play-along take), after a
+        count-in when the backing's tempo is known and `count_in` is on."""
         with self.lock:
             if self.rec:
                 raise Busy("already recording")
             if self.takes.free_mb() < MIN_FREE_MB:
                 raise LowSpace(f"less than {MIN_FREE_MB} MB free")
             audio.require(self.cfg.capture)
+            if backing_id is not None:
+                audio.require(self.cfg.playback)
+        prepared = self._prepare_backing(backing_id) if backing_id is not None else None  # raises BackingNotFound
+        tempo = self.backings.get(backing_id).tempo if backing_id is not None else None
+        lead = 0.0
+        if prepared is not None and count_in and tempo:
+            title, y, rate, gain_db = prepared
+            y, lead = playalong.with_count_in(y, rate, tempo)
+            prepared = (title, y, rate, gain_db)
         self._claim()  # a peer's music would end up in the take
         self.stop_playback()
         with self.lock:
             self.error = None
             rec = _Recording(take_id=self.takes.new_id(), rate=self.cfg.capture.capture.rate)
+            if prepared is not None:
+                rec.backing_id = backing_id
+                rec.backing_title, rec.backing, rec.backing_rate, rec.backing_gain_db = prepared
+                rec.count_in_s, rec.tempo = lead, (tempo if lead else None)
             rec.thread = threading.Thread(target=self._record, args=(rec,), daemon=True)
             self.rec = rec
             rec.thread.start()
             return rec.take_id
+
+    def _prepare_backing(self, backing_id: str) -> tuple[str, np.ndarray, int, float]:
+        """A backing at the playback rate and the takes' loudness (as takes play)."""
+        title = self.backings.get(backing_id).title
+        x, rate = self.backings.load(backing_id)
+        want = self.cfg.playback.playback.rate
+        if rate != want:
+            x = np.interp(np.arange(int(len(x) * want / rate)) / want, np.arange(len(x)) / rate, x).astype(np.float32)
+            rate = want
+        loud = self.cfg.loudness
+        y, gain_db = dsp.prepare_for_playback(x, rate, loud.target_dbfs, loud.limit_dbfs, loud.max_gain_db)
+        return title, y.astype(np.float32), rate, gain_db
+
+    def _play_backing(self, rec: _Recording) -> None:
+        """Feed the backing to the speakers during a play-along take, keeping what was written."""
+        pb = audio.Playback(self.cfg.playback)
+        y, rate = rec.backing, rec.backing_rate
+        try:
+            pb.start()
+            pos, block = 0, rate // 10
+            while pos < len(y) and not rec.stop.is_set():
+                chunk = y[pos:pos + block] * np.float32(10 ** (self.level_offset_db / 20))
+                if not pb.write(chunk):
+                    self.error = "the backing stopped: the playback device went away"
+                    break
+                rec.played.append(chunk)
+                pos += len(chunk)
+                with self.lock:
+                    rec.backing_pos = pos / rate
+        except Exception as e:
+            self.error = f"the backing failed: {e}"
+        finally:
+            if rec.stop.is_set():
+                pb.abort()
+            else:
+                pb.close()
+            rec.backing_done.set()
 
     def _claim(self) -> None:
         try:
@@ -148,17 +224,31 @@ class Engine:
             return
         fs = dsp.full_scale(cap.dtype)
         last_space_check = time.monotonic()
+        feeder, end_frame = None, None
         try:
             with wave.open(str(path), "wb") as w:
                 w.setnchannels(cap.channels)
                 w.setsampwidth(cap.dtype.itemsize)
                 w.setframerate(cap.rate)
                 while not rec.stop.is_set():
+                    if feeder is not None and rec.backing_done.is_set():
+                        if end_frame is None:
+                            end_frame = rec.frames + int(TAIL_S * cap.rate)
+                        elif rec.frames >= end_frame:
+                            break
                     block = cap.read()
                     if block is None:
-                        self.error = "the recording stopped: the capture device stopped sending audio"
+                        said = next((l for l in reversed(cap.stderr_lines) if l.strip()), "")
+                        self.error = ((f"could not record: {said}" if said else "could not record: the capture device sent nothing")
+                                      if rec.frames == 0 else
+                                      "the recording stopped: the capture device stopped sending audio")
                         break
                     w.writeframes(block.tobytes())
+                    if rec.backing is not None and feeder is None:
+                        # the backing starts once the capture is surely running, so the take
+                        # holds all of it (arecord can take longer to start than aplay)
+                        feeder = threading.Thread(target=self._play_backing, args=(rec,), daemon=True)
+                        feeder.start()
                     peak = int(np.max(np.abs(block.astype(np.int32))))
                     level = dsp.db(peak / fs)
                     with self.lock:
@@ -172,13 +262,76 @@ class Engine:
                             self.error = f"the recording stopped: less than {MIN_FREE_MB} MB free"
                             break
         finally:
+            rec.stop.set()  # also ends the backing, if it is still playing
+            if feeder is not None:
+                feeder.join(timeout=5)
             cap.stop()
             xr = cap.xruns()
             if xr and not self.error:
                 self.error = f"{len(xr)} dropouts (xruns) during the recording"
-            self.takes.finish(rec.take_id, rec.peak_dbfs)
+            empty = rec.frames == 0  # it never started (the device busy or gone): no take
+            if empty:
+                self.takes.delete(rec.take_id)
+            else:
+                self.takes.finish(rec.take_id, rec.peak_dbfs)
             with self.lock:
                 self.rec = None
+                if rec.backing is not None and not empty:
+                    self.analyzing = rec.take_id
+                self.takes_version += 1
+        if rec.backing is not None and not empty:
+            self._line_up(rec)
+
+    def line_up_again(self, take_id: str) -> dict:
+        """Line a play-along take up with its backing again (after a change to how it is done).
+        The backing as played is rebuilt from the take's sidecar: the same file, prepared the same
+        way, at the level offset of the time."""
+        meta = self.takes.meta(take_id)
+        if not meta.get("backing"):
+            raise ValueError("not a play-along take")
+        with self.lock:
+            if self.rec and self.rec.take_id == take_id:
+                raise Busy("that take is being recorded")
+            self.analyzing = take_id
+        title, y, rate, gain_db = self._prepare_backing(meta["backing"])  # raises BackingNotFound
+        lead, tempo = 0.0, meta.get("tempo")
+        if float(meta.get("count_in_s", 0.0)) > 0 and tempo:
+            y, lead = playalong.with_count_in(y, rate, tempo)
+        rec = _Recording(take_id=take_id, rate=rate, backing_id=meta["backing"], backing_title=title,
+                         backing=y, backing_rate=rate, backing_gain_db=gain_db, count_in_s=lead,
+                         tempo=tempo if lead else None)
+        rec.played = [y * np.float32(10 ** (float(meta.get("level_offset_db", 0.0)) / 20))]
+        self._line_up(rec, level_offset_db=float(meta.get("level_offset_db", 0.0)))
+        return self.takes.meta(take_id)
+
+    def _line_up(self, rec: _Recording, level_offset_db: float | None = None) -> None:
+        """Find the backing in a play-along take, to the sample, and save the take without it."""
+        meta = {"backing": rec.backing_id, "backing_title": rec.backing_title,
+                "backing_gain_db": round(rec.backing_gain_db, 1),
+                "count_in_s": round(rec.count_in_s, 4), "tempo": rec.tempo,
+                "level_offset_db": self.level_offset_db if level_offset_db is None else level_offset_db}
+        try:
+            played = np.concatenate(rec.played) if rec.played else np.zeros(0, dtype=np.float32)
+            take, rate = self.takes.load(rec.take_id)
+            take = take if take.ndim == 1 else take.mean(axis=1)
+            if len(played) and len(take):
+                al, clean = playalong.align_and_clean(take, played, rate)
+                meta["playalong"] = al.as_dict()
+                meta["playalong"]["loopback"] = self.cfg.capture.loopback
+                # where the backing file's own sample 0 is in the take (after any count-in)
+                start = al.lag + int(round(rec.count_in_s * rate))
+                meta["playalong"]["backing_starts_samples"] = start
+                meta["playalong"]["backing_starts_ms"] = round(1000.0 * start / rate, 2)
+                if al.found:
+                    self.takes.write_clean(rec.take_id, clean, rate)
+                else:
+                    self.takes.clean_path(rec.take_id).unlink(missing_ok=True)
+        except Exception as e:
+            self.error = f"could not line the take up with its backing: {e}"
+        finally:
+            self.takes.update_meta(rec.take_id, meta)
+            with self.lock:
+                self.analyzing = None
                 self.takes_version += 1
 
     # Playback

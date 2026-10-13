@@ -24,6 +24,9 @@ class Take:
     seconds: float
     note: str
     peak_dbfs: float | None
+    backing: str | None = None  # a play-along take: the backing's title
+    playalong: dict | None = None  # where the backing sits in it (recorder/playalong.py)
+    clean: bool = False  # a copy without the backing exists
 
 
 class TakeNotFound(Exception):
@@ -76,6 +79,9 @@ class Takes:
             seconds=round(seconds, 2),
             note=meta.get("note", ""),
             peak_dbfs=meta.get("peak_dbfs"),
+            backing=meta.get("backing_title") or meta.get("backing"),
+            playalong=meta.get("playalong"),
+            clean=self.clean_path(take_id).exists(),
         )
 
     def list(self) -> list[Take]:
@@ -94,9 +100,33 @@ class Takes:
         meta["peak_dbfs"] = round(peak_dbfs, 1)
         self._write_meta(take_id, meta)
 
+    def meta(self, take_id: str) -> dict:
+        self.path(take_id)
+        return self._meta(take_id)
+
+    def update_meta(self, take_id: str, values: dict) -> None:
+        meta = self._meta(take_id)
+        meta.update(values)
+        self._write_meta(take_id, meta)
+
+    def clean_path(self, take_id: str) -> Path:
+        """A play-along take with its backing subtracted (it is not a take of its own)."""
+        return self.dir / f"{take_id}.clean.wav"
+
+    def write_clean(self, take_id: str, x: np.ndarray, rate: int) -> None:
+        self.path(take_id)
+        tmp = self.dir / f"{take_id}.clean.wav.tmp"
+        with wave.open(str(tmp), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(rate)
+            w.writeframes(dsp.from_float(x, np.dtype("<i2")).tobytes())
+        tmp.replace(self.clean_path(take_id))
+
     def delete(self, take_id: str) -> None:
         self.path(take_id).unlink()
         (self.dir / f"{take_id}.json").unlink(missing_ok=True)
+        self.clean_path(take_id).unlink(missing_ok=True)
 
     def load(self, take_id: str) -> tuple[np.ndarray, int]:
         """A take as float32, (frames,) for mono or (frames, channels)."""

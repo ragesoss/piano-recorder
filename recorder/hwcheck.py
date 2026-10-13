@@ -191,20 +191,22 @@ def _kernel_log() -> list[str]:
 KERNEL_LOSS = re.compile(r"data may have been lost|usb .*(reset|disconnect)|xhci.*error", re.I)
 
 
-def t9_soak(cp: Profile, pp: Profile, minutes: float) -> Result:
-    """Capture for `minutes`; play silence during the middle third."""
+def t9_soak(cp: Profile, pp: Profile, minutes: float, duplex: bool = False) -> Result:
+    """Capture for `minutes`; play silence during the middle third, or with `duplex` the
+    whole time (as a play-along take does)."""
     import threading
     seconds = minutes * 60
+    lead, span = (0.0, seconds) if duplex else (seconds / 3, seconds / 3)
     th_before = _throttled()
     log_before = len(_kernel_log())
     stop = threading.Event()
 
     def play_silence():
-        if stop.wait(seconds / 3):
+        if lead and stop.wait(lead):
             return
         with audio.Playback(pp) as pb:
             block = np.zeros(pb.rate // 10, dtype=np.float32)
-            end = time.monotonic() + seconds / 3
+            end = time.monotonic() + span
             while time.monotonic() < end and not stop.is_set():
                 if not pb.write(block):
                     break
@@ -229,7 +231,7 @@ def t9_soak(cp: Profile, pp: Profile, minutes: float) -> Result:
     lost = wall - audio_s
     # arecord's start-up and one buffer in flight are not losses.
     ok = not xr and not kernel and lost < cp.capture.buffer_ms / 1000 + 1.0 and th_after in (None, "0x0")
-    detail = (f"{cp.name}, {minutes:g} min: {audio_s:.1f} s of audio in {wall:.1f} s "
+    detail = (f"{cp.name}, {minutes:g} min{' duplex' if duplex else ''}: {audio_s:.1f} s of audio in {wall:.1f} s "
               f"({lost:+.2f} s), {len(xr)} xruns, {len(kernel)} kernel USB errors, "
               f"throttled {th_before} -> {th_after}")
     for line in xr[:5] + kernel[:5]:
@@ -244,6 +246,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--sound", action="store_true",
                     help="also T7: plays a 1 kHz tone at -20 dBFS for 2 s (audible if playback reaches the speakers)")
     ap.add_argument("--soak", type=float, metavar="MINUTES", help="also T9 for this many minutes")
+    ap.add_argument("--duplex", action="store_true", help="T9 plays silence the whole time (play-along takes)")
     ap.add_argument("--only", help="comma-separated test ids, e.g. T1,T2")
     args = ap.parse_args(argv)
 
@@ -273,7 +276,7 @@ def main(argv: list[str] | None = None) -> int:
             print(_line(results[-1]), flush=True)
         if args.soak and want("T9"):
             print(f"T9 soak: {args.soak:g} min, started {time.strftime('%H:%M:%S')}", flush=True)
-            results.append(t9_soak(cp, pp, args.soak))
+            results.append(t9_soak(cp, pp, args.soak, duplex=args.duplex))
             print(_line(results[-1]), flush=True)
 
     failed = [r for r in results if r.ok is False]

@@ -5,6 +5,8 @@
 capture = "bmg-04f"
 playback = "bmg-04f"
 # "~" is the home of the user the service runs as.
+# Backing tracks for play-along takes (tools/push-backing puts them here).
+backing_dir = "~/backing"
 takes_dir = "~/takes"
 # The control unit's address on the LAN, reserved on the router (slot 7).
 # Nothing in the code uses it yet.

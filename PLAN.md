@@ -196,6 +196,76 @@ Upgrades follow the same rule: one slot at a time, by the swap steps in
   `docs/replacing-the-mixer.md`. Building on the BMG-04F continues until
   then. The swap is a new profile plus the tests.
 
+### 5. Play-along takes (started 2026-10-12)
+
+The player's request: record new instruments along with recordings from
+`~/play/dobro-transcription`, for transcribing every instrument of a band
+at once. Claude puts a recording on the control unit; the player picks it
+on the phone, presses Record along, and plays with it over the speakers.
+
+- **First use:** a bass, with the Nadine pickup on its afterlength in
+  place of one condenser (channel 1 or 2), the other condenser off (each
+  channel has its own +48V button). A contact pickup hears the strings,
+  not the speakers, so the speakers can play the backing.
+- **Backing tracks:** `tools/push-backing` converts a recording to 48 kHz
+  mono and copies it, with a sidecar saying where it came from, into the
+  config's `backing_dir` (`~/backing`).
+- **Recording:** the capture starts, then the backing plays at the takes'
+  loudness; the take ends 2 s after the backing, or at Stop.
+- **Lining up:** the BMG-04F records its own playback (T7), so the backing
+  is in every play-along take electrically. After the take, the service
+  finds it by cross-correlation, to the sample, fits a 64-tap filter to
+  its path, and saves the take again without it (`<take>.clean.wav`). The
+  sidecar keeps where the backing starts (`lag_samples`) and how much of it
+  is left. Through the air the path is long and changing, and only its
+  first milliseconds come out; with a contact pickup that is little.
+  - On the desktop (fake device, its loopback at -31 dB and 9 ms): the
+    backing is found to the sample and taken out by more than 25 dB, and
+    on synthetic data to the noise floor.
+- **Getting takes:** `tools/pull-take TAKE_ID DEST_DIR` copies the take, its
+  sidecar and the copy without the backing.
+- **First takes on the control unit (2026-10-12, evening):** two takes of
+  bass with the Nadine along with Down Yonder take 1 (Beard, click 120),
+  then a bass-only take to check the level.
+  - **Lined up:** +51.9 ms and -73.2 ms (the second backing began before
+    the capture's first sample: the backing now starts once the first
+    capture block has arrived, and the search covers -2 s to +10 s).
+  - **The backing in the takes:** about -41 dBFS before the bass came in,
+    partly through the air (the speakers into the bass body). A filter
+    fitted to its path takes out little of it (5-7 dB even fitted to the
+    seconds before the bass): play-along takes keep much of the backing.
+  - **Crackles: the Pi 3's USB in duplex.** The second take lost 29 pieces
+    of its playback ("Transfer to device 4 endpoint 0x3 failed - FIQ
+    reported NYET. Data may have been lost"), 38 clicks in the take; the
+    first take was clean of USB errors, 3 clicks near its end. The bass-only
+    take (no playback): no clicks. The second take started while the
+    service was still lining up the first: load, as in the first T9
+    failure (slot 5).
+  - **Level:** the Nadine at evening loudness, full attacks, peaked at
+    -38.1 dBFS (loudest 50 ms -48, floor -81). Its channel's GAIN needs
+    about +28 dB. Not calibrated yet.
+  - The duplex soak (T9 `--duplex`) was started from the desktop during
+    the player's session: it held the capture device and the player's
+    Record failed. Device tests run only when the player says so.
+- **Nadine level (2026-10-13 morning):** on channel 2, its GAIN at maximum:
+  peaks -25 to -31 dBFS, the loudest 50 ms -39 to -43, the floor -82
+  (mixer noise; the 16-bit floor is near -98), so about 39 dB from notes to
+  floor and no clipping. Clean enough for transcription. Channel 2's LEVEL
+  knob would raise the meter and playback, not the ratio; left as is (the
+  player: enough knobs for now). Playback boosts at most 16 dB, so these
+  takes play back quieter than others.
+- **Next:** the line-up after a take in a separate, low-priority process,
+  never during a recording; then play-along takes again, short. If they
+  still lose data, the LIVA (slot 5's alternate: an Intel USB controller)
+  or the Scarlett (high-speed USB, no split transactions).
+- **With a new interface:** the Scarlett 18i8 3rd Gen's routing matrix can
+  send any source, its playback included, to any capture channel
+  (scarlett2 driver; alsa-scarlett-gui), so the backing can come back
+  electrically on a channel of its own instead of in the mix (from a
+  survey, 2026-10-13; to check on the device). Without that routing the
+  offset has to come from the air path (the speakers into the mics) or
+  from a latency measured once per device.
+
 ## Open questions
 
 - ~~Which instrument?~~ The piano (2026-10-10). The speakers are across

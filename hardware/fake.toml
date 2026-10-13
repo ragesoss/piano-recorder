@@ -1,10 +1,17 @@
 # A stand-in audio device for developing without hardware: capture makes
-# room noise with an occasional note, playback discards the sound. Both run
-# in real time.
+# room noise with an occasional note, and hears the playback again like the
+# BMG-04F (loopback). Both run in real time.
 
 name = "fake"
 description = "Fake device for development"
 backend = "fake"
+loopback = true
+
+[fake]
+# The playback comes back in the capture this much quieter and this much later
+# (the BMG-04F: -31 dBFS for a full-scale tone, T7).
+loopback_db = -31.0
+loopback_delay_ms = 9.0
 
 [capture]
 device = "fake"
