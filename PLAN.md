@@ -325,6 +325,20 @@ on the same screen as the controls, so a take needs little preparation.
   without the click: nothing on the control unit uses one, and the click
   is out of the bass's band; one can be made on the desktop. Play-along
   takes over a backing are lined up and cleaned as before (slowly).
+- **Choosing an exercise, and what it still wants** (2026-10-14, the
+  player's request): the dropdown became a card (instrument and number,
+  title, status, and why a new take is wanted) that opens a picker: a tab
+  per instrument (with a count of what needs a take or a review), filters
+  (all, needs a take, to review, good), and a row per exercise with its
+  status badge, tempo, bars and last take. The status comes from
+  dobro-transcription (`exercises/status.py --json | tools/push-status`:
+  `status.json` in exercises_dir, read on every listing); the app adds
+  what only it knows, the takes made here that the project does not have
+  yet ("to review": newer than the newest take id the project lists). A
+  "Played on" choice under the card (the instruments the project keeps
+  notes on, of the exercise's kind, or another), remembered per kind and
+  written to each take's sidecar (`instrument_id`, `instrument_name`).
+  Deployed 2026-10-14 with 60 exercises: bass, dobro, guitar, banjo.
 - **Next:** a tool to bring exercise takes into dobro-transcription with
   their `takes.csv` rows (`tools/pull-take` reads only the practice
   recorder's takes; exercise takes need `/etc/exercise-recorder.toml`),

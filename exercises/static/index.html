@@ -12,12 +12,12 @@
 :root {
   --bg: #f1f1ee; --card: #ffffff; --text: #1b1d22; --muted: #6b6f78; --line: #e2e2de;
   --rec: #d93a3f; --rec-text: #ffffff; --ok: #2f9e5b; --warn: #d9a400; --accent: #2d6cdf;
-  --meter-bg: #e9e9e6; --paper: #ffffff;
+  --meter-bg: #e9e9e6; --paper: #ffffff; --warn-text: #8a6700;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #16181d; --card: #1f2229; --text: #eceef2; --muted: #9aa0ab; --line: #2e323b;
-    --rec: #e5484d; --meter-bg: #2a2e36; --accent: #6b9cff; --paper: #f4f2ec;
+    --rec: #e5484d; --meter-bg: #2a2e36; --accent: #6b9cff; --paper: #f4f2ec; --warn-text: #e2b93b;
   }
 }
 * { box-sizing: border-box; }
@@ -108,6 +108,46 @@ li.playing .take-when { color: var(--accent); }
 .empty { color: var(--muted); font-size: 14px; }
 .level { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .level input { flex: 1; accent-color: var(--accent); }
+/* the exercise: what is chosen, and the picker */
+button.current { width: 100%; text-align: left; border: 1px solid var(--line); background: var(--card); color: var(--text);
+  border-radius: 12px; padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; min-height: 60px; font: inherit; }
+button.current:disabled { opacity: .55; }
+.cur-line { display: flex; align-items: baseline; gap: 8px; }
+.cur-num { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.cur-title { font-weight: 600; font-size: 17px; flex: 1; }
+.chev { color: var(--muted); font-size: 22px; line-height: 1; }
+.cur-status { font-size: 13px; color: var(--muted); }
+.cur-status.good { color: var(--ok); } .cur-status.wanted { color: var(--warn-text); } .cur-status.review { color: var(--accent); }
+.picker { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 10; }
+.picker[hidden] { display: none; }
+.picker-box { background: var(--card); width: min(920px, 96vw); height: min(92dvh, 960px); border-radius: 16px; display: flex;
+  flex-direction: column; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+.picker-head { display: flex; align-items: center; gap: 8px; padding: 12px 12px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tabs { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
+.tab, .chip { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 999px; font: inherit; cursor: pointer; }
+.tab { padding: 8px 16px; font-weight: 600; min-height: 44px; }
+.tab.on { background: var(--text); color: var(--card); border-color: var(--text); }
+.tab .count { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 10px; background: var(--warn); color: #1b1d22;
+  font-size: 12px; font-weight: 700; margin-left: 4px; text-align: center; }
+.filters { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.chip { padding: 6px 12px; font-size: 14px; min-height: 38px; }
+.chip.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.ex-list { overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
+.ex-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); cursor: pointer; min-height: 62px; }
+.ex-row.selected { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.badge { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 15px; flex: none; box-sizing: border-box; }
+.badge.good { background: var(--ok); color: #fff; }
+.badge.wanted { background: var(--warn); color: #1b1d22; }
+.badge.review { background: var(--accent); color: #fff; }
+.badge.needed { border: 2px solid var(--muted); color: var(--muted); }
+.ex-num { font-variant-numeric: tabular-nums; color: var(--muted); width: 2.2em; flex: none; }
+.ex-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.ex-title { font-weight: 600; font-size: 16px; }
+.ex-sub { font-size: 13px; color: var(--muted); }
+.instr { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); margin-top: 8px; }
+.instr select { flex: 1; min-height: 40px; }
+li.group { padding: 12px 16px 4px; font-size: 13px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); }
 @media (max-width: 860px) {  /* a phone, or the iPad held upright: controls under the score */
   body { overflow: auto; }
   .app { display: block; height: auto; }
@@ -128,8 +168,12 @@ li.playing .take-when { color: var(--accent); }
     <div id="error"></div>
 
     <div>
-      <select id="exSel" aria-label="Exercise"></select>
+      <button class="current" id="exPick" aria-haspopup="dialog">
+        <span class="cur-line"><span class="cur-num" id="curNum"></span><span class="cur-title" id="curTitle">Choose an exercise</span><span class="chev">›</span></span>
+        <span class="cur-status" id="curStatus"></span>
+      </button>
       <div class="meta" id="exMeta"></div>
+      <label class="instr"><span>Played on</span><select id="instrSel" aria-label="The instrument played"></select></label>
     </div>
 
     <div class="row tempo" id="tempoRow">
@@ -171,10 +215,24 @@ li.playing .take-when { color: var(--accent); }
   </aside>
 </div>
 
+<div class="picker" id="picker" hidden>
+  <div class="picker-box" role="dialog" aria-label="Choose an exercise">
+    <div class="picker-head">
+      <div class="tabs" id="tabs"></div>
+      <button class="small" id="freeTake">Free take</button>
+      <button class="small primary" id="pickClose">Done</button>
+    </div>
+    <div class="filters" id="filters"></div>
+    <ul class="ex-list" id="exList"></ul>
+  </div>
+</div>
+
 <script>
 document.getElementById("home").href = `http://${location.hostname}/`;
 const $ = (id) => document.getElementById(id);
 let status = null, takesVersion = -1, takes = [], pollTimer = null, exercises = [], backings = [];
+let selectedId = null;  // the exercise chosen ("" for a free take)
+let instrumentsKnown = [];  // the instruments the project keeps notes on (status.json)
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
@@ -208,21 +266,38 @@ function showError(msg) { $("error").textContent = msg || ""; $("error").classLi
 async function act(fn) { try { showError(""); await fn(); } catch (e) { showError(e.message); } poll(true); }
 
 // --- the exercise and its score
-function current() { return exercises.find((e) => e.id === $("exSel").value) || null; }
+function current() { return exercises.find((e) => e.id === selectedId) || null; }
 function backing() { return backings.find((b) => b.id === $("guideSel").value) || null; }
 function tempoFor(ex) { return ex ? Number(store.get(`tempo:${ex.id}`, ex.tempo.bpm)) : null; }
 
-async function refreshExercises() {
-  try { [exercises, backings] = await Promise.all([api("GET", "/api/exercises"), api("GET", "/api/backings")]); }
-  catch (e) { return; }
-  const sel = $("exSel"), keep = sel.value || store.get("exercise", "");
-  sel.innerHTML = "";
-  for (const e of exercises) {
-    const o = document.createElement("option"); o.value = e.id; o.textContent = e.title; sel.appendChild(o);
-  }
-  const free = document.createElement("option"); free.value = ""; free.textContent = "No exercise (a free take)";
-  sel.appendChild(free);
-  sel.value = exercises.some((e) => e.id === keep) ? keep : (exercises[0] ? exercises[0].id : "");
+// what the project has of each exercise (status.json, from dobro-transcription), and what is here
+const ORDER = ["bass", "dobro", "guitar", "banjo"];
+const NAMES = { bass: "Bass", dobro: "Dobro", guitar: "Guitar", banjo: "Banjo" };
+function instName(i) { return NAMES[i] || (i ? i[0].toUpperCase() + i.slice(1) : "Other"); }
+function exNum(e) { const m = /^[a-z]+-(\d{3})-/.exec(e.id); return m ? m[1] : ""; }
+function shortTitle(e) { const m = /Exercise \d+:\s*(.*)$/.exec(e.title); return m ? m[1] : e.title; }
+function state(e) {
+  if (e.to_review > 0) return { key: "review", icon: "●", label: e.to_review === 1 ? "New take to review" : `${e.to_review} new takes to review` };
+  if (e.status === "wanted") return { key: "wanted", icon: "!", label: "Wants a new take" };
+  if (e.status === "good") return { key: "good", icon: "✓", label: "Good" };
+  return { key: "needed", icon: "", label: "Needs a take" };
+}
+function todo(e) { const k = state(e).key; return k === "needed" || k === "wanted"; }
+function byNumber(a, b) { return (exNum(a) || "999").localeCompare(exNum(b) || "999") || a.title.localeCompare(b.title); }
+function firstExercise() {  // with none remembered: the first of the first instrument (bass before the rest)
+  const inst = instruments()[0], exs = exercises.filter((e) => (e.instrument || "") === inst).sort(byNumber);
+  return exs[0] ? exs[0].id : "";
+}
+function instruments() {
+  const rank = (i) => (ORDER.indexOf(i) < 0 ? 99 : ORDER.indexOf(i));
+  return [...new Set(exercises.map((e) => e.instrument || ""))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+}
+
+async function refreshExercises(first) {
+  try {
+    [exercises, backings, instrumentsKnown] = await Promise.all(
+      [api("GET", "/api/exercises"), api("GET", "/api/backings"), api("GET", "/api/instruments")]);
+  } catch (e) { return; }
   const g = $("guideSel"), gkeep = g.value || store.get("guide", "click");
   g.innerHTML = "";
   const c = document.createElement("option"); c.value = "click"; c.textContent = "Click from the speakers"; g.appendChild(c);
@@ -230,7 +305,44 @@ async function refreshExercises() {
     const o = document.createElement("option"); o.value = b.id; o.textContent = `Along with: ${b.title}`; g.appendChild(o);
   }
   g.value = [...g.options].some((o) => o.value === gkeep) ? gkeep : "click";
-  showExercise();
+  if (first || selectedId === null || (selectedId && !exercises.some((e) => e.id === selectedId))) {
+    const keep = first ? store.get("exercise", null) : null;
+    selectedId = keep === "" ? "" : exercises.some((e) => e.id === keep) ? keep : firstExercise();
+    showExercise();
+  } else showCurrent();
+  if (!$("picker").hidden) renderPicker();
+}
+
+// which instrument the take is on: the known ones of the exercise's kind, or another
+function instrKind() { const ex = current(); return ex ? (ex.instrument || "") : ""; }
+function renderInstruments() {
+  const sel = $("instrSel"), kind = instrKind();
+  const list = kind ? instrumentsKnown.filter((i) => i.kind === kind) : instrumentsKnown;
+  sel.innerHTML = "";
+  for (const i of list) {
+    const o = document.createElement("option");
+    o.value = i.id; o.textContent = kind ? i.short : `${instName(i.kind)}: ${i.short}`; o.title = `${i.name}: ${i.details}`;
+    sel.appendChild(o);
+  }
+  const other = document.createElement("option");
+  other.value = `other:${kind}`; other.textContent = kind ? `Another ${kind} (not listed)` : "Not listed";
+  sel.appendChild(other);
+  const keep = store.get(`instr:${kind}`, list[0] ? list[0].id : other.value);
+  sel.value = [...sel.options].some((o) => o.value === keep) ? keep : sel.options[0].value;
+}
+
+function showCurrent() {
+  const ex = current(), st = ex ? state(ex) : null;
+  renderInstruments();
+  $("curNum").textContent = ex ? [instName(ex.instrument), exNum(ex)].filter(Boolean).join(" ") : "";
+  $("curTitle").textContent = ex ? shortTitle(ex) : "Free take";
+  $("curStatus").className = "cur-status" + (st ? " " + st.key : "");
+  $("curStatus").textContent = !ex ? "No score, no click (or along with a backing track)"
+    : (st.icon ? st.icon + " " : "") + st.label + (ex.status === "wanted" && ex.status_note ? ` — ${ex.status_note}` : "");
+  if (!ex) { $("exMeta").textContent = ""; return; }
+  const p = ex.tempo.pickup_beats;
+  $("exMeta").textContent = [`${ex.bars} bars`, `${ex.tempo.beats_per_bar}/4`, p ? `${p}-beat pickup` : "",
+    `score ♩ = ${Math.round(ex.tempo.bpm)}`, ex.takes ? `${ex.takes} take${ex.takes > 1 ? "s" : ""} here` : ""].filter(Boolean).join(" · ");
 }
 
 function showExercise() {
@@ -240,7 +352,6 @@ function showExercise() {
   score.innerHTML = "";
   if (!ex) {
     score.innerHTML = '<div class="none">A free take: no score, no click (or along with a backing track).</div>';
-    $("exMeta").textContent = "";
   } else {
     ex.pages.forEach((_, i) => {
       const img = document.createElement("img");
@@ -249,13 +360,74 @@ function showExercise() {
       score.appendChild(img);
     });
     if (!ex.pages.length) score.innerHTML = '<div class="none">This exercise has no pages.</div>';
-    const p = ex.tempo.pickup_beats;
-    $("exMeta").textContent = [ex.instrument, `${ex.bars} bars`, `${ex.tempo.beats_per_bar}/4`,
-      p ? `${p}-beat pickup` : "", `score ♩ = ${Math.round(ex.tempo.bpm)}`].filter(Boolean).join(" · ");
     score.scrollTop = 0;
   }
+  showCurrent();
   showGuide();
   takesVersion = -1; poll(true);
+}
+
+// --- the picker: by instrument, each exercise with what it still wants
+let pickTab = store.get("pickTab", null), pickFilter = store.get("pickFilter", "all");
+function openPicker() {
+  const ex = current(), insts = instruments();
+  if (ex) pickTab = ex.instrument || "";
+  if (!insts.includes(pickTab)) pickTab = insts[0] || "";
+  $("picker").hidden = false;
+  renderPicker();
+  const sel = $("exList").querySelector(".selected");
+  if (sel) sel.scrollIntoView({ block: "center" });
+}
+function closePicker() { $("picker").hidden = true; }
+function choose(id) { selectedId = id; closePicker(); showExercise(); }
+function renderPicker() {
+  const tabs = $("tabs"); tabs.innerHTML = "";
+  for (const inst of instruments()) {
+    const n = exercises.filter((e) => (e.instrument || "") === inst && (todo(e) || state(e).key === "review")).length;
+    const b = document.createElement("button");
+    b.className = "tab" + (inst === pickTab ? " on" : "");
+    b.textContent = instName(inst);
+    if (n) { const c = document.createElement("span"); c.className = "count"; c.textContent = n; c.title = "Need a take or a review"; b.appendChild(c); }
+    b.onclick = () => { pickTab = inst; store.set("pickTab", inst); renderPicker(); $("exList").scrollTop = 0; };
+    tabs.appendChild(b);
+  }
+  const exs = exercises.filter((e) => (e.instrument || "") === pickTab)
+    .sort(byNumber);
+  const groups = { all: exs, todo: exs.filter(todo), review: exs.filter((e) => state(e).key === "review"),
+    good: exs.filter((e) => state(e).key === "good") };
+  const labels = { all: "All", todo: "Needs a take", review: "To review", good: "Good" };
+  const f = $("filters"); f.innerHTML = "";
+  for (const k of Object.keys(labels)) {
+    const b = document.createElement("button");
+    b.className = "chip" + (k === pickFilter ? " on" : "");
+    b.textContent = `${labels[k]} · ${groups[k].length}`;
+    b.onclick = () => { pickFilter = k; store.set("pickFilter", k); renderPicker(); };
+    f.appendChild(b);
+  }
+  const ul = $("exList"); ul.innerHTML = "";
+  const shown = groups[pickFilter] || exs;
+  if (!shown.length) { ul.innerHTML = '<li class="empty" style="padding:16px">Nothing here.</li>'; return; }
+  let tunesHead = false;
+  for (const e of shown) {
+    if (!exNum(e) && !tunesHead) {
+      tunesHead = true;
+      const h = document.createElement("li"); h.className = "group"; h.textContent = "Tunes"; ul.appendChild(h);
+    }
+    const st = state(e), li = document.createElement("li");
+    li.className = "ex-row" + (e.id === selectedId ? " selected" : "");
+    li.innerHTML = '<span class="badge"></span><span class="ex-num"></span><span class="ex-main"><span class="ex-title"></span>'
+      + '<span class="ex-sub"></span></span><span class="chev">›</span>';
+    li.querySelector(".badge").className = "badge " + st.key;
+    li.querySelector(".badge").textContent = st.icon;
+    li.querySelector(".ex-num").textContent = exNum(e);
+    li.querySelector(".ex-title").textContent = shortTitle(e);
+    const bits = [st.label + (e.status === "wanted" && e.status_note ? `: ${e.status_note}` : ""),
+      `♩ ${Math.round(e.tempo.bpm)}`, `${e.bars} bars`];
+    if (e.last_take) bits.push(`last take ${when(e.last_take)}`);
+    li.querySelector(".ex-sub").textContent = bits.join(" · ");
+    li.onclick = () => choose(e.id);
+    ul.appendChild(li);
+  }
 }
 
 function showGuide() {
@@ -324,8 +496,9 @@ function renderTakes() {
     li.querySelector(".take-when").textContent = when(t.started);
     li.querySelector(".take-len").textContent = fmt(t.seconds) + (t.peak_dbfs != null && t.peak_dbfs > -1 ? " · clipped?" : "");
     const pa = t.playalong, bits = [];
+    if (t.instrument_name) bits.push(t.instrument_name);
     if (t.tempo_bpm) bits.push(`♩ = ${Math.round(t.tempo_bpm)}`);
-    if (t.backing) bits.push(`with ${t.backing}`);
+    if (t.backing && t.backing !== t.exercise_title) bits.push(`with ${t.backing}`);
     if (pa) bits.push(pa.found ? "lined up" : "the click was not found in the take");
     else if (t.exercise || t.backing) bits.push("lining up…");
     li.querySelector(".take-info").textContent = bits.join(" · ");
@@ -356,7 +529,7 @@ function render(s) {
   btn.textContent = rec ? "Stop" : "Record";
   btn.classList.toggle("active", !!rec);
   btn.disabled = !s.devices.capture && !rec;
-  for (const id of ["exSel", "guideSel"]) $(id).disabled = !!rec;
+  for (const id of ["exPick", "guideSel", "instrSel"]) $(id).disabled = !!rec;
   const [w, counting] = rec ? where(rec) : [s.state === "analyzing" ? "Lining up…" : "", false];
   $("where").textContent = w;
   $("where").classList.toggle("count", counting);
@@ -381,7 +554,7 @@ function render(s) {
   }
   const playingChanged = (prev && prev.playing && prev.playing.take) !== (pl && pl.take);
   const recChanged = !!(prev && prev.recording) !== !!rec;
-  if (s.takes_version !== takesVersion) { takesVersion = s.takes_version; refreshTakes(); }
+  if (s.takes_version !== takesVersion) { takesVersion = s.takes_version; refreshTakes(); refreshExercises(false); }
   else if (playingChanged || recChanged) renderTakes();
 }
 async function poll(once) {
@@ -394,7 +567,8 @@ async function poll(once) {
 
 function start() {
   const ex = current(), bk = backing();
-  const body = { exercise: ex ? ex.id : null, count_in: $("countIn").checked && !$("countIn").disabled };
+  const body = { exercise: ex ? ex.id : null, count_in: $("countIn").checked && !$("countIn").disabled,
+    instrument_id: $("instrSel").value || null };
   if (bk) body.backing = bk.id;
   else if (ex) { body.click = $("click").checked; body.tempo_bpm = tempoFor(ex); }
   else { body.click = false; body.count_in = false; }
@@ -403,7 +577,12 @@ function start() {
 
 $("recBtn").onclick = () => act(() => status && status.recording ? api("POST", "/api/record/stop") : start());
 $("stopBtn").onclick = () => act(() => api("POST", "/api/stop"));
-$("exSel").onchange = showExercise;
+$("exPick").onclick = openPicker;
+$("instrSel").onchange = () => store.set(`instr:${instrKind()}`, $("instrSel").value);
+$("pickClose").onclick = closePicker;
+$("freeTake").onclick = () => choose("");
+$("picker").onclick = (ev) => { if (ev.target === $("picker")) closePicker(); };
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !$("picker").hidden) closePicker(); });
 $("guideSel").onchange = showGuide;
 $("slower").onclick = () => nudge(-4);
 $("faster").onclick = () => nudge(4);
@@ -420,9 +599,9 @@ $("progress").onclick = (ev) => {
 };
 $("level").oninput = () => { $("levelText").textContent = `${$("level").value} dB`; };
 $("level").onchange = () => act(() => api("PUT", "/api/settings", { level_offset_db: Number($("level").value) }));
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { poll(true); refreshExercises(); } });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { poll(true); refreshExercises(false); } });
 
-refreshExercises();
+refreshExercises(true);
 poll(true);
 </script>
 </body>

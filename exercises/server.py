@@ -35,6 +35,7 @@ class StartIn(BaseModel):
     click: bool = True  # a click on every beat through the exercise
     count_in: bool = True  # a bar of clicks before it
     backing: str | None = None  # a backing track instead of the click
+    instrument_id: str | None = None  # which known instrument (GET /api/instruments), or "other:<kind>"
 
 
 class NoteIn(BaseModel):
@@ -93,7 +94,23 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.get("/api/exercises")
     def list_exercises():
-        return [e.__dict__ for e in exercises.list()]
+        """The exercises, each with its takes here: how many, the last one, and how many the
+        project does not have yet (newer than the newest it has: to review)."""
+        mine: dict[str, list] = {}
+        for t in takes.list():
+            if t.exercise:
+                mine.setdefault(t.exercise, []).append(t)
+        out = []
+        for e in exercises.list():
+            here = mine.get(e.id, [])
+            newest = max(e.project_takes, default="")
+            out.append({**e.__dict__, "takes": len(here), "last_take": max((t.started for t in here), default=None),
+                        "to_review": sum(1 for t in here if t.id > newest and t.id not in e.project_takes)})
+        return out
+
+    @app.get("/api/instruments")
+    def list_instruments():
+        return exercises.instruments()
 
     @app.get("/api/exercises/{exercise_id}/pages/{n}")
     def exercise_page(exercise_id: str, n: int):
@@ -113,6 +130,16 @@ def create_app(cfg: Config) -> FastAPI:
         if body.exercise:
             ex = guard(exercises.get, body.exercise)
             meta = {"exercise": ex.id, "exercise_title": ex.title, "instrument": ex.instrument}
+        if body.instrument_id:
+            known = {i["id"]: i for i in exercises.instruments()}
+            if body.instrument_id in known:
+                meta |= {"instrument_id": body.instrument_id, "instrument_name": known[body.instrument_id]["name"],
+                         "instrument": meta.get("instrument") or known[body.instrument_id]["kind"]}
+            elif body.instrument_id.startswith("other:") and len(body.instrument_id) <= 40:
+                kind = body.instrument_id[6:] or "instrument"
+                meta |= {"instrument_id": body.instrument_id, "instrument_name": f"another {kind} (not listed)"}
+            else:
+                raise HTTPException(400, "unknown instrument")
         if body.backing:
             return {"take": guard(engine.start_recording, body.backing, body.count_in, meta=meta)}
         if ex is not None and (body.click or body.count_in):

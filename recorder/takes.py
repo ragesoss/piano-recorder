@@ -33,6 +33,9 @@ class Take:
     exercise_title: str | None = None
     tempo_bpm: float | None = None
     beat0_s: float | None = None
+    # which instrument it was played on, of those the project knows (or "another ...")
+    instrument_id: str | None = None
+    instrument_name: str | None = None
 
 
 class TakeNotFound(Exception):
@@ -92,6 +95,8 @@ class Takes:
             exercise_title=meta.get("exercise_title"),
             tempo_bpm=(meta.get("tempo") or {}).get("bpm"),
             beat0_s=meta.get("beat0_s"),
+            instrument_id=meta.get("instrument_id"),
+            instrument_name=meta.get("instrument_name"),
         )
 
     def list(self) -> list[Take]:

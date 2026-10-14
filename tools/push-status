@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""Put the project's status of each exercise on the control unit, for the exercise app:
+which have a good take, which want a new one (and why), which have none yet.
+
+    python3 ~/play/dobro-transcription/exercises/status.py --json | tools/push-status
+    tools/push-status STATUS.json [--host practice | --to exercises-dev]
+
+The file goes to the exercise app's exercises_dir as status.json (replaced in one step);
+the app reads it on every listing, so nothing restarts.
+"""
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+REMOTE_CONFIG = "/etc/exercise-recorder.toml"
+STATUSES = {"good", "wanted", "needed"}
+
+
+def check(raw: dict) -> int:
+    exs = raw.get("exercises")
+    if not isinstance(exs, dict):
+        sys.exit("not a status file: no \"exercises\" mapping")
+    for ex_id, v in exs.items():
+        if not isinstance(v, dict) or v.get("status") not in STATUSES:
+            sys.exit(f"{ex_id}: status must be one of {sorted(STATUSES)}")
+    return len(exs)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("file", nargs="?", type=Path, help="default: read standard input")
+    ap.add_argument("--host", default="practice", help="the control unit's ssh host")
+    ap.add_argument("--to", type=Path, help="put it in this local exercises folder instead (development)")
+    a = ap.parse_args()
+    text = a.file.read_text() if a.file else sys.stdin.read()
+    raw = json.loads(text)
+    n = check(raw)
+    if a.to:
+        a.to.mkdir(parents=True, exist_ok=True)
+        tmp = a.to / "status.json.new"
+        tmp.write_text(json.dumps(raw, indent=1))
+        tmp.replace(a.to / "status.json")
+        print(f"status of {n} exercises: in {a.to}")
+        return
+    remote_dir = subprocess.run(
+        ["ssh", a.host, "cd practice-recorder && .venv/bin/python -c "
+         f"'from recorder.config import load_config; print(load_config(\"{REMOTE_CONFIG}\").exercises_dir)'"],
+        capture_output=True, text=True)
+    if remote_dir.returncode or not remote_dir.stdout.strip():
+        sys.exit(f"the exercise app is not set up on {a.host} ({REMOTE_CONFIG}): {remote_dir.stderr.strip()[-300:]}")
+    remote_dir = remote_dir.stdout.strip()
+    with tempfile.TemporaryDirectory() as tmp:
+        f = Path(tmp) / "status.json.new"
+        f.write_text(json.dumps(raw, indent=1))
+        subprocess.run(["scp", "-q", str(f), f"{a.host}:{remote_dir}/status.json.new"], check=True)
+        subprocess.run(["ssh", a.host, f"mv {remote_dir}/status.json.new {remote_dir}/status.json"], check=True)
+    print(f"status of {n} exercises: on {a.host} in {remote_dir}")
+
+
+if __name__ == "__main__":
+    main()

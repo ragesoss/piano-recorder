@@ -105,3 +105,34 @@ def test_the_piano_recorder_no_longer_makes_play_along_takes(tmp_path):
     with TestClient(create_piano_app(cfg)) as c:
         assert c.post("/api/playalong/start", json={"backing": "x"}).status_code in (404, 405)
         assert c.get("/api/backings").status_code in (404, 405)
+
+
+
+def test_the_listing_says_what_the_project_has_and_what_is_new_here(client, tmp_path):
+    exdir = tmp_path / "exercises"
+    status = {"generated": "2026-10-14T10:00:00-07:00", "exercises": {
+        "bass-001-walks": {"status": "good", "note": "", "app_takes": ["2000-01-01_000000"]},
+        "bass-002-roots": {"status": "wanted", "note": "cleaner, please", "app_takes": []}},
+        "instruments": [{"id": "cleveland", "kind": "bass", "short": "Cleveland", "name": "New Standard Cleveland",
+                         "details": "Perpetual Stark"}]}
+    (exdir / "status.json").write_text(json.dumps(status))
+    exs = {e["id"]: e for e in client.get("/api/exercises").json()}
+    assert exs["bass-001-walks"]["status"] == "good" and exs["bass-001-walks"]["to_review"] == 0
+    assert exs["bass-002-roots"]["status"] == "wanted" and exs["bass-002-roots"]["status_note"] == "cleaner, please"
+    assert client.get("/api/instruments").json()[0]["short"] == "Cleveland"
+    assert client.post("/api/record/start", json={"exercise": "bass-002-roots", "instrument_id": "nope"}).status_code == 400
+    take = client.post("/api/record/start", json={"exercise": "bass-001-walks", "instrument_id": "cleveland"}).json()["take"]
+    wait_idle(client)
+    t = next(x for x in client.get("/api/takes").json() if x["id"] == take)
+    assert t["instrument_id"] == "cleveland" and t["instrument_name"] == "New Standard Cleveland"
+    ex = next(e for e in client.get("/api/exercises").json() if e["id"] == "bass-001-walks")
+    assert ex["takes"] == 1 and ex["to_review"] == 1 and ex["last_take"]
+    status["exercises"]["bass-001-walks"]["app_takes"].append(take)  # brought into the project
+    (exdir / "status.json").write_text(json.dumps(status))
+    assert next(e for e in client.get("/api/exercises").json() if e["id"] == "bass-001-walks")["to_review"] == 0
+
+
+def test_without_a_status_file_the_app_still_lists_and_records(client):
+    exs = client.get("/api/exercises").json()
+    assert all(e["status"] == "" and e["to_review"] == 0 for e in exs)
+    assert client.get("/api/instruments").json() == []
