@@ -364,8 +364,19 @@ yet.
     All four services answer and see the 18i8. Nothing has opened the
     18i8 yet.
   - **Wi-Fi:** slot 7 (the board's nvram, a pinned MAC address, 5 GHz).
-  - Not measured yet: the line-up's time after a take (23-27 s on the
-    Pi 3), the ambient synth's CPU, T1-T4, T6, T9, T11.
+  - **The USB audio driver:** `options snd_usb_audio lowlatency=0` in
+    `/etc/modprobe.d/snd-usb-audio.conf` (2026-10-15). It gave fewer
+    playback dropouts with the 18i8 in T9 (swap log). Delete the file to go
+    back to the default.
+  - **T9's sample-exact check** (a sine played and captured back
+    digitally, its phase checked every 100 ms) is in `~/t9-ll0/` on the
+    LIVA: `t9-loopback.py MINUTES OUTDIR`, then `t9-events.py OUTDIR`.
+    Write OUTDIR to the eMMC, not `/tmp`, which is a 930 MB tmpfs. It
+    found what `hwcheck` cannot: zero samples inserted into the playback,
+    with no xrun reported.
+  - **Done on the LIVA:** T6, T9 and T10 (swap log). Not measured yet:
+    T1-T4, T11, the line-up's time after a take (23-27 s on the Pi 3),
+    and the ambient synth's CPU.
 - **Before, 2026-10-10 to 2026-10-14: Raspberry Pi 3 Model B, Rev 1.2:** 4 cores at 1.2 GHz, 1 GB. 4 USB-A ports,
   2.4 GHz Wi-Fi, 100 Mb Ethernet. No real-time clock: the time comes from
   NTP.
@@ -756,6 +767,7 @@ someone in the room.
 | 2026-10-14 | 3, 5 | | scarlett-18i8-gen3 on the LIVA | T6: a 440 Hz tone at -20 dBFS on PCM 1-2 (10 s, `aplay` without `-q`: 0 underruns), then a take through the exercise app at the set level and 10 dB down: the step heard (player). That take (recorded on the Pi) popped; Down Yonder dobro take 1 (recorded on a camera, never on the Pi) through the practice recorder for 40 s: clean (player). The kernel logged nothing | pass |
 | 2026-10-14 | 2, 5 | | scarlett-18i8-gen3 on the Pi 3 (found on the LIVA) | The takes scanned for one-sample steps (lost samples; click-track ticks excluded by their width). The 22 takes before the 18i8 (BMG-04F): 0. All 11 recorded on the Pi through the 18i8 (2026-10-14, 19:26-21:44): 4-17 each, about one every 2-3 s, many on the capture's 100 ms period grid; heard as pops when played on the LIVA. So the Pi 3 lost capture data with the 18i8, and its T6 popping was most likely in the recording it played (its own T5 take) | the Pi's 18i8 takes have gaps; T9 on the LIVA should check for lost samples, not only xruns |
 | 2026-10-14 | 2, 3, 5 | | scarlett-18i8-gen3 on the LIVA | T9 in duplex, sample-exact: 30 min capture of all 20 channels (2 s buffer, 100 ms periods) while playing a 997 Hz sine at -50 dBFS on PCM 1-2. The 18i8 captures PCM 1-2 digitally on channels 11-12, where the sine came back at -50.00 dBFS. Its phase against the capture's sample count was checked every 100 ms. 1800.2 s captured in 1800.0 s; 0 overruns, 0 underruns (arecord and aplay without `-q`); load 0.1-0.3; the kernel logged nothing. Two events (at 50 s and 701 s), each exactly 12 zero samples (two 125 µs USB packets) inserted into the playback, after which the sine ran 12 samples late; a 20 s trial run had one, 1 zero sample. No capture samples were lost (a loss would advance the sine). The driver: implicit feedback for playback, `lowlatency=Y` (snd-usb-audio's default since kernel 5.15) | capture: pass. Playback: about one 0.25 ms dropout every 15 min, which ALSA does not report; to try: `snd_usb_audio lowlatency=0` |
+| 2026-10-15 | 2, 3, 5 | `lowlatency=Y` | `snd_usb_audio lowlatency=0` (driver reloaded, not persisted) | The same T9, 120 min (07:29-09:29). In the first 2.3 s, two insertions of zeros (6 samples each) while the streams settled. After that, one event in 2 h, at 68 min: 46 zero samples (about 1 ms) inserted into the playback. 7200.2 s captured in 7200.0 s; no capture samples lost; 0 overruns, 0 underruns; load 0.1-0.4; the kernel logged nothing | capture: pass. Playback: fewer dropouts than with `lowlatency=Y` (1 in 2 h against 2 in 30 min) but this one was longer (1 ms against 0.25 ms). Kept: `/etc/modprobe.d/snd-usb-audio.conf` (2026-10-15) |
 
 ## Sources
 

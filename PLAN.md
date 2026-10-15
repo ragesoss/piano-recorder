@@ -132,6 +132,19 @@ Debian (netinst, no desktop, SSH server) from a USB stick onto its eMMC.
 That install needs a keyboard and monitor on the LIVA once. After that,
 the same SSH, address and package steps apply.
 
+**2026-10-14/15: the LIVA took the Pi's place** (slot 5, swap log), after
+the Pi's T6 popped with the 18i8. It was upgraded in place over SSH, not
+installed fresh, so no keyboard or monitor was needed. It is `practice` now,
+on 5 GHz Wi-Fi at a new reserved address (`local/README.md`). The Pi is off.
+- **The Pi lost capture samples with the 18i8:** all 11 takes it recorded
+  through the 18i8 (2026-10-14, 19:26-21:44, bass exercises and Down
+  Yonder) have 4-17 gaps each. They are worth recording again on the LIVA.
+  Its T6 popping was most likely in the take it played.
+- **The LIVA:** T6, T9 (sample-exact, in duplex: no capture samples lost)
+  and T10 pass. With `snd_usb_audio lowlatency=0`, about one 1 ms playback
+  dropout every 2 hours remains.
+- **Due:** T1-T4 and T11 on the LIVA; the line-up's time after a take.
+
 ### 2. The mixer on the control unit
 
 The player has to be in the room. This is the first run of slot 2 and
