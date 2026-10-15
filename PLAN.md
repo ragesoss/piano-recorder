@@ -360,7 +360,9 @@ on the same screen as the controls, so a take needs little preparation.
   iPad), from `/api/exercises/<id>/readme`. The page reads the Markdown
   itself (headings, paragraphs, lists, tables, code; all text escaped,
   links as their text). Tried on the desktop with dobro 005 (its ASCII
-  tab) and bass 011 (its table of bars) at 1180x820. Not yet deployed.
+  tab) and bass 011 (its table of bars) at 1180x820. Deployed 2026-10-15
+  (just before 14:00, everything idle), and the 59 exercises pushed again with
+  their instructions; the tunes have none.
 - **Next:** a tool to bring exercise takes into dobro-transcription with
   their `takes.csv` rows (`tools/pull-take` reads only the practice
   recorder's takes; exercise takes need `/etc/exercise-recorder.toml`),
