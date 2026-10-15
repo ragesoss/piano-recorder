@@ -4,6 +4,8 @@ by tools/push-exercise.
     <exercises_dir>/<id>/exercise.json   what it is, its tempo and length, its pages
     <exercises_dir>/<id>/page-1.svg ...  the score, rendered by MuseScore on the desktop
     <exercises_dir>/<id>/score.musicxml  the score itself
+    <exercises_dir>/<id>/readme.md       how to play it (the exercise's README.md in the project),
+                                         shown above the score; optional
     <exercises_dir>/status.json          what the project has of each exercise (tools/push-status,
                                          from dobro-transcription's exercises/status.py): "good",
                                          "wanted" (a new take, and why) or "needed" (no take yet),
@@ -28,6 +30,7 @@ class Exercise:
     beats: float  # from the first note to the end of the last bar
     bars: int
     pages: list[str] = field(default_factory=list)
+    readme: bool = False  # it has instructions (readme.md)
     source: str = ""  # where it came from (a path in the project it was taken from)
     note: str = ""
     status: str = ""  # from status.json: "good", "wanted", "needed"; "" when it does not say
@@ -84,6 +87,7 @@ class Exercises:
                        "beats_per_bar": int(tempo.get("beats_per_bar", 4))},
                 beats=float(raw["beats"]), bars=int(raw.get("bars", 0)),
                 pages=[p for p in raw.get("pages", []) if (d / p).exists()],
+                readme=self._readme_path(d, raw) is not None,
                 source=raw.get("source", ""), note=raw.get("note", ""),
                 status=str(st.get("status", "")), status_note=str(st.get("note", "")),
                 project_takes=[str(t) for t in st.get("app_takes", [])], status_updated=str(status.get("generated", "")))
@@ -100,6 +104,25 @@ class Exercises:
                 except ExerciseNotFound:
                     continue
         return out
+
+    @staticmethod
+    def _readme_path(d: Path, raw: dict) -> Path | None:
+        """The instructions' file, named in exercise.json: in the exercise's own folder only."""
+        name = raw.get("readme")
+        if not isinstance(name, str) or not name or name != Path(name).name or not (d / name).is_file():
+            return None
+        return d / name
+
+    def readme(self, exercise_id: str) -> str:
+        """The exercise's instructions (Markdown)."""
+        d = self._folder(exercise_id)
+        try:
+            path = self._readme_path(d, json.loads((d / "exercise.json").read_text()))
+            if path is None:
+                raise ExerciseNotFound(f"{exercise_id} has no readme")
+            return path.read_text(encoding="utf-8")
+        except (OSError, ValueError, AttributeError) as e:
+            raise ExerciseNotFound(f"{exercise_id} readme: {e}")
 
     def page(self, exercise_id: str, n: int) -> Path:
         ex = self.get(exercise_id)

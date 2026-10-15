@@ -2,12 +2,14 @@
 """Put an exercise (a MusicXML score) on the control unit for the exercise app.
 
     tools/push-exercise SCORE.musicxml [--id bass-001-walks] [--title TEXT] [--instrument bass]
-        [--mscore PATH] [--host practice | --to exercises-dev]
+        [--readme README.md | --no-readme] [--mscore PATH] [--host practice | --to exercises-dev]
 
 The score is rendered to SVG pages by MuseScore here on the desktop (landscape, larger
 staves, trimmed: tools/exercise-page.mss), and its tempo, meter, pickup and length are read
-from the MusicXML (repeats played out), for the click. The pages, the score and
-exercise.json go to the exercises_dir of the exercise app's config on the control unit.
+from the MusicXML (repeats played out), for the click. The pages, the score, the exercise's
+README (README.md beside the score, unless --readme or --no-readme says otherwise: the page
+shows it above the score) and exercise.json go to the exercises_dir of the exercise app's
+config on the control unit.
 MuseScore: --mscore, else $MSCORE, else mscore4portable or mscore on the PATH.
 """
 
@@ -131,6 +133,8 @@ def main() -> None:
     ap.add_argument("--title")
     ap.add_argument("--instrument", help="default: from the part's name (bass, dobro)")
     ap.add_argument("--note", default="")
+    ap.add_argument("--readme", type=Path, help="the instructions to show with the score (default: README.md beside it)")
+    ap.add_argument("--no-readme", action="store_true", help="send no instructions (a tune's README is about its recording)")
     ap.add_argument("--mscore")
     ap.add_argument("--host", default="practice", help="the control unit's ssh host")
     ap.add_argument("--dry-run", action="store_true", help="render and print, copy nothing")
@@ -138,6 +142,11 @@ def main() -> None:
     a = ap.parse_args()
     if not a.score.exists():
         sys.exit(f"no such file: {a.score}")
+    readme = None if a.no_readme else a.readme or a.score.parent / "README.md"
+    if a.readme and not a.readme.exists():
+        sys.exit(f"no such file: {a.readme}")
+    if readme is not None and not readme.exists():
+        readme = None
     ex_id = a.id or re.sub(r"[^a-z0-9-]+", "-", a.score.stem.lower()).strip("-")
     if not ID_RE.match(ex_id):
         sys.exit(f"bad id {ex_id!r}: lower-case letters, digits and hyphens")
@@ -154,12 +163,14 @@ def main() -> None:
         if not pages:
             sys.exit(f"MuseScore rendered nothing ({r.returncode}): {r.stderr[-400:]}")
         shutil.copy(a.score, out / "score.musicxml")
+        if readme is not None:
+            (out / "readme.md").write_text(readme.read_text(encoding="utf-8"), encoding="utf-8")
         meta = {"title": a.title or info["title"], "instrument": instrument, **{k: info[k] for k in ("tempo", "beats", "bars")},
-                "pages": pages, "note": a.note, "source": source_name(a.score),
+                "pages": pages, "readme": "readme.md" if readme is not None else "", "note": a.note, "source": source_name(a.score),
                 "source_sha256": hashlib.sha256(a.score.read_bytes()).hexdigest(),
                 "added": datetime.now().isoformat(timespec="seconds")}
         (out / "exercise.json").write_text(json.dumps(meta, indent=1))
-        print(json.dumps({k: meta[k] for k in ("title", "instrument", "tempo", "beats", "bars", "pages")}))
+        print(json.dumps({k: meta[k] for k in ("title", "instrument", "tempo", "beats", "bars", "pages", "readme")}))
         if a.dry_run:
             return
         if a.to:

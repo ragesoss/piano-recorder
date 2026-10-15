@@ -53,6 +53,21 @@ def test_exercises_and_their_pages_are_listed(client):
     assert client.get("/api/exercises/../pages/1").status_code == 404
 
 
+def test_an_exercise_with_a_readme_serves_it_and_one_without_says_so(client, tmp_path):
+    d = tmp_path / "exercises" / "bass-001-walks"
+    meta = json.loads((d / "exercise.json").read_text())
+    (d / "exercise.json").write_text(json.dumps({**meta, "readme": "readme.md"}))
+    (d / "readme.md").write_text("# Walks\n\n| bars | what |\n|---|---|\n| 1 | G A B C |\n", encoding="utf-8")
+    exs = {e["id"]: e for e in client.get("/api/exercises").json()}
+    assert exs["bass-001-walks"]["readme"] is True and exs["bass-002-roots"]["readme"] is False
+    r = client.get("/api/exercises/bass-001-walks/readme")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/markdown") and "G A B C" in r.text
+    assert client.get("/api/exercises/bass-002-roots/readme").status_code == 404
+    (d / "exercise.json").write_text(json.dumps({**meta, "readme": "../bass-002-roots/exercise.json"}))
+    assert client.get("/api/exercises/bass-001-walks/readme").status_code == 404  # its own folder only
+    assert next(e for e in client.get("/api/exercises").json() if e["id"] == "bass-001-walks")["readme"] is False
+
+
 def test_an_exercise_take_over_its_click_knows_where_its_first_note_is(client):
     take = client.post("/api/record/start", json={"exercise": "bass-001-walks", "tempo_bpm": 200}).json()["take"]
     time.sleep(0.4)

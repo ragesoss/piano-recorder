@@ -352,6 +352,15 @@ on the same screen as the controls, so a take needs little preparation.
   notes on, of the exercise's kind, or another), remembered per kind and
   written to each take's sidecar (`instrument_id`, `instrument_name`).
   Deployed 2026-10-14 with 60 exercises: bass, dobro, guitar, banjo.
+- **The instructions with the score** (2026-10-15, the player's request):
+  `tools/push-exercise` sends the exercise's README.md (beside the score;
+  `--readme`, or `--no-readme` for the tunes, whose READMEs are about
+  their recordings) as `readme.md`; the page shows it above the score in a
+  card that folds away (Instructions; open or folded remembered on the
+  iPad), from `/api/exercises/<id>/readme`. The page reads the Markdown
+  itself (headings, paragraphs, lists, tables, code; all text escaped,
+  links as their text). Tried on the desktop with dobro 005 (its ASCII
+  tab) and bass 011 (its table of bars) at 1180x820. Not yet deployed.
 - **Next:** a tool to bring exercise takes into dobro-transcription with
   their `takes.csv` rows (`tools/pull-take` reads only the practice
   recorder's takes; exercise takes need `/etc/exercise-recorder.toml`),
