@@ -376,7 +376,13 @@ yet.
     with no xrun reported.
   - **Done on the LIVA:** T6, T9 and T10 (swap log). Not measured yet:
     T1-T4, T11, the line-up's time after a take (23-27 s on the Pi 3),
-    and the ambient synth's CPU.
+    and the ambient synth's CPU playing live.
+  - **The ambient synth's CPU, offline, 2026-10-15:** after ambient-room
+    b8cd473 was deployed (the dobro held by string, the player's own bass,
+    GeneralUser GS's guitar and banjo), its Big Sciota and Red Wing moods
+    rendered offline for 20 s took about 8% of one core each, with all
+    eight sampled voices loaded. Its Csound is x86_64, so the Pi's two
+    SoundFont bugs do not apply; the workarounds stay, harmless.
 - **Before, 2026-10-10 to 2026-10-14: Raspberry Pi 3 Model B, Rev 1.2:** 4 cores at 1.2 GHz, 1 GB. 4 USB-A ports,
   2.4 GHz Wi-Fi, 100 Mb Ethernet. No real-time clock: the time comes from
   NTP.
