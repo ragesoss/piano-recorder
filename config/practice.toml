@@ -2,8 +2,9 @@
 # setup/install.sh. It picks the parts by profile name (hardware/<name>.toml);
 # see docs/components.md.
 
-capture = "bmg-04f"
-playback = "bmg-04f"
+# The Scarlett 18i8 3rd Gen from 2026-10-14 (the BMG-04F before: hardware/bmg-04f.toml).
+capture = "scarlett-18i8-gen3"
+playback = "scarlett-18i8-gen3"
 # "~" is the home of the user the service runs as.
 # Backing tracks for play-along takes (tools/push-backing puts them here).
 backing_dir = "~/backing"

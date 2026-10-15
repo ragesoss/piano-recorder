@@ -10,9 +10,8 @@ from recorder.config import REPO, ConfigError, load_config, load_profile
 
 def test_both_configs_load():
     pi = load_config(REPO / "config" / "practice.toml")
-    assert pi.capture.name == "bmg-04f" and pi.playback.name == "bmg-04f"
-    assert pi.capture.capture.keep_channels == (0,)
-    assert pi.capture.capture.controls["gain"].set == 127
+    assert pi.capture.name == "scarlett-18i8-gen3" and pi.playback.name == "scarlett-18i8-gen3"
+    assert pi.capture.capture.keep_channels == (2, 3)
     assert pi.loudness.target_dbfs == -21.0
     assert pi.takes_dir == Path.home() / "takes"
     dev = load_config(REPO / "config" / "dev.toml")
@@ -101,6 +100,27 @@ def test_fake_playback_takes_mono_and_paces():
     with audio.Playback(p) as pb:
         assert pb.write(np.zeros(24000, dtype=np.float32))
     assert 0.4 < time.monotonic() - t0 < 0.8
+
+
+def test_profiles_load():
+    bmg = load_profile("bmg-04f")
+    assert bmg.capture.keep_channels == (0,) and bmg.capture.controls["gain"].set == 127
+    s = load_profile("scarlett-18i8-gen3")
+    assert (s.card, s.usb_id, s.loopback) == ("USB", "1235:8214", False)
+    assert (s.capture.format, s.capture.rate, s.capture.channels) == ("S32_LE", 48000, 20)
+    assert s.capture.keep_channels == (2, 3)
+    assert s.capture.controls["phantom_3_4"].set == "on"
+    assert s.playback.channels == 8
+    assert [s.playback.controls[k].set for k in ("out_01", "out_02")] == ["Mix A", "Mix B"]
+
+
+def test_playback_mixes_a_take_down_to_the_device_channels():
+    from dataclasses import replace
+    p = load_profile("fake")
+    p = replace(p, playback=replace(p.playback, channels=8))
+    with audio.Playback(p) as pb:
+        assert pb.write(np.zeros((4800, 2), dtype=np.float32))
+        assert pb.write(np.zeros((4800, 8), dtype=np.float32))
 
 
 def test_dc_remover_takes_out_a_constant_offset():

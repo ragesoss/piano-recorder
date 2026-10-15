@@ -306,7 +306,11 @@ class Playback:
             self.stderr_lines.append(line.decode(errors="replace").rstrip())
 
     def write(self, x: np.ndarray) -> bool:
-        """Queue audio; False if the device has gone away."""
+        """Queue audio; False if the device has gone away. Mono goes to every channel; so does a
+        take with another number of channels than the device's (mixed to mono first: a take of
+        two inputs played on the 18i8's eight outputs)."""
+        if x.ndim == 2 and x.shape[1] != self.stream.channels:
+            x = x.mean(axis=1)
         if x.ndim == 1:
             x = np.repeat(x[:, None], self.stream.channels, axis=1)
         if self._fake_t0 is not None:

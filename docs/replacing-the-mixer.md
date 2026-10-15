@@ -4,6 +4,11 @@ The player decided on 2026-10-10 to replace the BMG-04F with a device the
 control unit can control over USB. This file holds the requirements and the
 candidates. The facts behind them are in `components.md`.
 
+**Chosen (2026-10-14): the Scarlett 18i8 3rd Gen,** bought by the player, for the music room
+on the control unit (`practice`). Not yet connected; the swap follows "Swapping a part" in
+`components.md` (probe T1-T3, write `hardware/` profile, config, deploy, the slot's tests,
+swap log).
+
 ## What it must do
 
 Each line comes from something found with the BMG-04F on 2026-10-10.

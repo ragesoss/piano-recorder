@@ -2,8 +2,8 @@
 # setup/install.sh. The same devices as the practice recorder; its own port,
 # takes and exercises (tools/push-exercise puts them in exercises_dir).
 
-capture = "bmg-04f"
-playback = "bmg-04f"
+capture = "scarlett-18i8-gen3"
+playback = "scarlett-18i8-gen3"
 # "~" is the home of the user the service runs as.
 takes_dir = "~/exercise-takes"
 exercises_dir = "~/exercises"

@@ -1,0 +1,60 @@
+# Focusrite Scarlett 18i8 3rd Gen: USB audio, the kernel's scarlett2 driver ("Scarlett Gen 3
+# Mixer Driver"). Fills slot 2 (capture) and slot 3 (playback). The facts behind these values:
+# docs/components.md, slots 2 and 3 (probed on the control unit 2026-10-14).
+
+name = "scarlett-18i8-gen3"
+description = "Focusrite Scarlett 18i8 3rd Gen (scarlett2 driver)"
+backend = "alsa"
+usb_id = "1235:8214"
+card = "USB"
+# The Pi's playback reaches the capture only on its own channels (PCM 11-12 carry PCM 1-2),
+# which are not kept: the takes hold the instruments alone.
+loopback = false
+
+[capture]
+device = "hw:CARD=USB,DEV=0"
+format = "S32_LE"
+rate = 48000
+# At 44.1 and 48 kHz the device captures 20 channels: PCM 01-08 = inputs 1-8, 09-10 S/PDIF,
+# 11-12 the Pi's playback (PCM 1-2), 13-20 ADAT.
+channels = 20
+# Inputs 3 (the Nadine) and 4 (a condenser on the piano), as wired 2026-10-14. Change with the
+# cables: the channels are the inputs' numbers less one.
+keep_channels = [2, 3]
+buffer_ms = 2000
+
+[capture.controls]
+# Gain is on the front knobs. Phantom power switches in pairs and comes back off after a power
+# cut (persistence off), so it is set whenever a capture starts.
+phantom_1_2 = { name = "Line In 1-2 Phantom Power Capture Switch", set = "off" }
+phantom_3_4 = { name = "Line In 3-4 Phantom Power Capture Switch", set = "on" }
+# Each capture channel straight from its input (the factory routing, pinned).
+pcm_01 = { name = "PCM 01 Capture Enum", set = "Analogue 1" }
+pcm_02 = { name = "PCM 02 Capture Enum", set = "Analogue 2" }
+pcm_03 = { name = "PCM 03 Capture Enum", set = "Analogue 3" }
+pcm_04 = { name = "PCM 04 Capture Enum", set = "Analogue 4" }
+
+[playback]
+device = "hw:CARD=USB,DEV=0"
+format = "S32_LE"
+rate = 48000
+channels = 8
+buffer_ms = 250
+
+[playback.controls]
+# The speakers (outputs 1-2) carry the internal mixer's Mix A and Mix B: the record player's
+# line in (inputs 5-6; through the BMG-04F's main out until the RCA cables come) and the Pi's
+# playback (PCM 1-2), at unity (160 = 0 dB on 0-184, -80 to +12 dB). The mic inputs are in
+# neither mix: they never reach the speakers. Set 2026-10-14; the unit keeps it in standalone
+# mode, so records play with the Pi off. Speaker volume is the front monitor knob.
+mixer_in_01 = { name = "Mixer Input 01 Capture Enum", set = "Analogue 5" }
+mixer_in_02 = { name = "Mixer Input 02 Capture Enum", set = "Analogue 6" }
+mixer_in_03 = { name = "Mixer Input 03 Capture Enum", set = "PCM 1" }
+mixer_in_04 = { name = "Mixer Input 04 Capture Enum", set = "PCM 2" }
+mix_a_records = { name = "Mix A Input 01 Playback Volume", set = 160 }
+mix_a_pi = { name = "Mix A Input 03 Playback Volume", set = 160 }
+mix_b_records = { name = "Mix B Input 02 Playback Volume", set = 160 }
+mix_b_pi = { name = "Mix B Input 04 Playback Volume", set = 160 }
+out_01 = { name = "Analogue Output 01 Playback Enum", set = "Mix A" }
+out_02 = { name = "Analogue Output 02 Playback Enum", set = "Mix B" }
+standalone = { name = "Standalone Switch", set = "on" }

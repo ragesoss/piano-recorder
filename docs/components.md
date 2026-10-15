@@ -34,9 +34,9 @@ yet.
 | slot | current part | status | software touchpoint | tests on swap |
 |---|---|---|---|---|
 | 1. Microphones | 2 small-diaphragm condensers (SDCs), XLR, at the piano | verified through the BMG-04F, 2026-10-10 (laptop); moved closer 2026-10-11, T5 due | none | T5, T8 |
-| 2. Capture interface | BOMGE BMG-04F, USB | capture verified, 2026-10-10 (laptop) | capture profile; `capture` in the config | T1-T5, T7-T9, T11 |
-| 3. Playback output | BOMGE BMG-04F, USB playback into its mix | unknown: the stream exists, never played | playback profile; `playback` in the config | T1-T3, T6-T9, T11 |
-| 4. Speakers | JBL 3 Series MkII pair, on a BMG-04F output | T6 pass; T8 open (2026-10-10) | none | T6, T8 |
+| 2. Capture interface | Focusrite Scarlett 18i8 3rd Gen, USB (from 2026-10-14; the BOMGE BMG-04F before) | T1-T3 by hand, 2026-10-14; T4, T5, T7-T9, T11 due | capture profile (`scarlett-18i8-gen3`); `capture` in the configs | T1-T5, T7-T9, T11 |
+| 3. Playback output | the 18i8's USB playback (PCM 1-2) into its internal mix, to its monitor outputs | T1-T3 by hand, 2026-10-14; records through it heard (player); T6-T9, T11 due | playback profile; `playback` in the configs; the ambient synth's `device` | T1-T3, T6-T9, T11 |
+| 4. Speakers | JBL 3 Series MkII pair, on the 18i8's monitor outputs 1-2 (from 2026-10-14) | records heard through the 18i8 (2026-10-14); T6, T8 due | none | T6, T8 |
 | 5. Control unit | Raspberry Pi 3 Model B v1.2 (the LIVA as the alternate), host `practice` | running the recorder service; T9 pass (clean), 2026-10-10 | host config; the setup script | T1-T4, T6, T9-T11 |
 | 6. Storage | the Pi's SD card (Transcend, 32 GB) | planned | `takes_dir` in the config | T9 |
 | 7. Network | home LAN and router; the Pi on the home Wi-Fi, at its reserved address | Wi-Fi verified 2026-10-10; address reserved | `address` in the config; a DHCP reservation | T10, T11 |
@@ -94,6 +94,23 @@ yet.
 
 - **Role:** mic preamp, phantom power, and converting to digital audio over
   USB.
+- **Current (2026-10-14): Focusrite Scarlett 18i8 3rd Gen** (`hardware/scarlett-18i8-gen3.toml`),
+  bought by the player for the music room, on the control unit's USB. Probed by hand (T1-T3):
+  - USB id `1235:8214`, ALSA card `USB`, high-speed USB; the kernel's scarlett2 driver
+    ("Scarlett Gen 3 Mixer Driver enabled"), Linux 6.18.
+  - Capture: S32_LE (24 bits), 44.1/48 kHz with 20 channels, 88.2/96 kHz with 16.
+    PCM 01-08 carry inputs 1-8 (the factory routing, pinned in the profile), 09-10 S/PDIF,
+    11-12 the Pi's playback (PCM 1-2), 13-20 ADAT.
+  - Inputs: 1-4 mic preamps (combo XLR, gain on the knobs; 1-2 also instrument), 5-8 line
+    (1/4", rear). Phantom power in pairs (1-2, 3-4), software controls; it comes back off
+    after a power cut (persistence off), so the profile sets it when a capture starts. Air
+    and pad per input, software.
+  - Wired 2026-10-14: the Nadine on input 3, one condenser on the piano on input 4
+    (phantom 3-4 on); kept channels 3 and 4. To change with more XLR cables.
+  - Standalone mode on: the unit keeps its routing with the Pi off.
+- **Before: the BOMGE BMG-04F** (`hardware/bmg-04f.toml`), described below. Off the Pi's USB
+  from 2026-10-14; until RCA-to-1/4" cables come, its main out carries the record player
+  into the 18i8's inputs 5-6.
 - **To be replaced in slots 2 and 3** (the player, 2026-10-10). The
   leading option is a Scarlett 2i2 (3rd or 4th Gen) for the mics and the
   Pi's playback. Its output feeds BMG-04F channel 1 (and 2) as a line
@@ -224,6 +241,14 @@ yet.
 ### 3. Playback output
 
 - **Role:** turn takes back into analog for the speakers.
+- **Current (2026-10-14): the 18i8's USB playback,** S32_LE, 8 channels at 44.1/48 kHz. The
+  recorder sends mono (or a take mixed to mono) to every channel; PCM 1-2 reach the speakers.
+  Its internal mixer, set 2026-10-14 and pinned in the profile: Mix A = input 5 + PCM 1, Mix
+  B = input 6 + PCM 2, at unity (160 on 0-184, -80 to +12 dB); outputs 1-2 (monitor) = Mix
+  A, Mix B. The mic inputs are in no mix, so they never reach the speakers (requirement 2 in
+  `replacing-the-mixer.md`). Before: outputs 1-2 = PCM 1-2 (factory). Speaker volume is the
+  front monitor knob (the outputs' volume control is "HW"). The ambient synth plays here too
+  (`plughw:CARD=USB,DEV=0`). The BMG-04F's playback, described below, is out of use.
 - **Interface:** an ALSA playback device with a fixed card id and format,
   plus a volume control the software can set.
 - **Current: the BMG-04F's USB playback stream.** It enters on **channel
@@ -626,6 +651,12 @@ someone in the room.
 | 2026-10-10 | 5 | | the Pi 3 with the BMG-04F | T9 (30 min, under test load) | **fail**: 4 overruns, 3.1 s lost, a dwc_otg FIQ error |
 | 2026-10-10 | 2, 3, 5 | | BMG-04F on the Pi 3, 2 s buffer (hwcheck) | T1-T4, T9 (30 min, clean) | pass |
 | 2026-10-11 | 3, 5 | | + the ambient synth and the home page; hand-over between them | hand-over both ways; T9 not affected (never together) | pass |
+| 2026-10-14 | 2, 3, 4 | BMG-04F | Scarlett 18i8 3rd Gen (the BMG-04F's main out into its inputs 5-6 for the record player, until RCA cables) | T1-T3 by hand; records heard through it (player); the recorder, exercise app and ambient synth switched (`/etc` configs edited, `*.bmg-04f.bak` kept) | partial: T4-T9, T11 due |
+| 2026-10-14 | 2, 3 | | scarlett-18i8-gen3 | T4 (hwcheck, 10 s, raw 20 channels): inputs not plugged in -110.5 to -111.6 dBFS rms, the Nadine (input 3, on the bass) -96.5, the piano condenser (input 4) -57.5 (the room, the Pi silent), the BMG-04F's main out (inputs 5-6) -94; no xruns. T7: 1 kHz at -20 dBFS back at -64.0 dBFS on the Nadine's channel, through the air (-96.5 before), and heard in the room (player); the electrical copy is on channels 11-12, not kept | pass; T5, T6 (a take, two volumes), T8, T9, T11 due |
+| 2026-10-14 | 1, 2 | | scarlett-18i8-gen3 | T5, the bass (60 s and 75 s, all bass; `~/t5-2026-10-14*.wav` on the Pi): the Nadine at first peaked -22.6 dBFS played hard; with input 3's gain knob at half (straight up; the knobs are not marked, and gain is not in software on the 3rd Gen), -6.1 at the loudest, which was bowed (the player: bowing is louder than any pizz), pizz about -10 to -15, no clipping, no xruns. The piano condenser (input 4) heard the bass across the room at peaks -19 to -26 dBFS | pass for the Nadine; then backed off to about 11 o'clock for headroom (not measured since); T5 for the piano condenser, T6, T8, T9, T11 due |
+| 2026-10-14 | 1, 2 | | scarlett-18i8-gen3 | T5, the piano (45 s, piano alone; `~/t5-2026-10-14-piano.wav`): the condenser (input 4) peaked -0.8 dBFS played hard (5 s peaks -0.8 to -8.0), no samples clipped; the Nadine heard the piano at peaks -25 to -35 | too hot: input 4 to come down about 6-8 dB (hard playing to about -8) |
+| 2026-10-14 | 1, 2 | | scarlett-18i8-gen3 | T5, the piano again (30 s; `~/t5-2026-10-14-piano-b.wav`), input 4's knob at about 8 o'clock: peaks -6.6 dBFS played hard, -9 to -17 normally, no clipping, no xruns. Knobs now: input 3 (the Nadine) about 11 o'clock, input 4 (the piano condenser) about 8 o'clock | pass |
+| 2026-10-14 | 3, 4, 5 | | scarlett-18i8-gen3 on the Pi 3 | T6: the piano T5 recording (2 channels, mixed to mono by the recorder's playback, loudness +6.3 dB) played 10 s at the set level, 10 s 10 dB down, 10 s while the monitor knob turned: heard, with some popping (player). No USB errors in dmesg, `get_throttled` 0x0; xruns not measured | **fail** (popping); the player: move the control unit to the LIVA (slot 5's alternate) |
 
 ## Sources
 
