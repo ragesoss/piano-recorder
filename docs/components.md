@@ -326,7 +326,47 @@ yet.
   - USB-A ports for the audio devices;
   - a network link at a fixed address;
   - fanless, so it is silent in the room.
-- **Current: Raspberry Pi 3 Model B, Rev 1.2:** 4 cores at 1.2 GHz, 1 GB. 4 USB-A ports,
+- **Current (2026-10-14): ECS LIVA** (DMI "ECS BAT-MINI", BIOS 5.6.5 of
+  2014-07-28), in place of the Pi 3 after the Pi's T6 popped with the 18i8
+  (swap log). Celeron N2807 (Bay Trail-M, 2 cores, 1.58 GHz), 1.8 GiB, a
+  29 GB eMMC, fanless.
+  - **Buses:** 2 USB-A ports on the SoC's Intel xHCI controller. Ethernet
+    (Realtek RTL8111G) is on PCIe and the Wi-Fi/Bluetooth chip (Broadcom
+    BCM43241, 2.4 and 5 GHz) on SDIO, so the 18i8 has the USB controller
+    to itself. It enumerates at high speed on `xhci_hcd` with the scarlett2
+    driver. Its ALSA card id stays `USB`, but its index changes between
+    boots (0 or 1); the profiles use the id.
+  - **OS, 2026-10-14:** upgraded in place over SSH, not installed fresh.
+    It had Debian 10 from an earlier use, with old services (Quassel,
+    PostgreSQL, Samba, Transmission, exim, lighttpd) and old projects.
+    Those were archived on the desktop and removed, then the system was
+    upgraded through Debian 11 and 12 to Debian 13.7 (trixie), kernel
+    6.12.111+deb13-amd64.
+    - Hostname `practice`. The user (as on the Pi) logs in with the
+      desktop's key and has sudo without a password. Root also logs in
+      with the key. Password login is off.
+    - Time zone and locale as on the Pi (`local/README.md`).
+    - Packages: the setup scripts' own, plus `firmware-brcm80211`,
+      `firmware-realtek`, `intel-microcode`, `network-manager`,
+      `avahi-daemon`, `iw`.
+    - GRUB also installs to the removable path (`EFI/BOOT/BOOTX64.EFI`),
+      so it boots even if the firmware loses its boot entry. The menu
+      waits 5 s: hold Shift or press Esc at power-on for older kernels.
+    - The first reboot into the new kernel (5.10, during the upgrade)
+      hung until a power-cycle; the journal shows a clean shutdown and
+      nothing after it. Since then, 3 reboots on 6.12 came back by
+      themselves in 46-50 s.
+  - **Deployed 2026-10-14:** practice-recorder and ambient-room
+    (`tools/deploy`). The Pi's four `/etc/*.toml` were copied over as they
+    were, since nothing in them names the Pi: `address` is unused, and
+    the ambient synth names the card `plughw:CARD=USB`. The Pi's takes,
+    exercise takes, exercises, backings and ambient state were copied too.
+    All four services answer and see the 18i8. Nothing has opened the
+    18i8 yet.
+  - **Wi-Fi:** slot 7 (the board's nvram, a pinned MAC address, 5 GHz).
+  - Not measured yet: the line-up's time after a take (23-27 s on the
+    Pi 3), the ambient synth's CPU, T1-T4, T6, T9, T11.
+- **Before, 2026-10-10 to 2026-10-14: Raspberry Pi 3 Model B, Rev 1.2:** 4 cores at 1.2 GHz, 1 GB. 4 USB-A ports,
   2.4 GHz Wi-Fi, 100 Mb Ethernet. No real-time clock: the time comes from
   NTP.
   - **OS, written 2026-10-10:** Raspberry Pi OS Lite (64-bit), the
@@ -397,14 +437,22 @@ yet.
     reported NYET"), heard as crackles; it began while the service was
     still analyzing the take before. throttled 0x0. Capture alone, minutes
     later: no errors.
-- **Alternate:** ECS LIVA, Celeron N2807 (Bay Trail-M, 2 cores), 2 GB,
-  eMMC, fanless. Debian (amd64), installed fresh.
-- Older entries in `~/.ssh/config` for the Pi and the LIVA are from an
-  earlier network (`local/README.md`). The hostname `practice` names the
-  role, not the box: a replacement control unit takes the same name.
+  - Switched off 2026-10-14, its card unchanged (Raspberry Pi OS, the
+    services and a copy of the data as they were).
+- **Alternates:**
+  - the Pi 3 above;
+  - a MacBook Air A1466 (the player's, 2026-10-14). It needs Linux, and
+    `HandleLidSwitch=ignore` and `HandleLidSwitchExternalPower=ignore` in
+    `/etc/systemd/logind.conf` to run with the lid closed. Its Wi-Fi is a
+    Broadcom BCM4360 on 2013 and later models, which needs the `broadcom-sta`
+    driver (built by DKMS on every kernel update). It has a fan.
+- The hostname `practice` names the role, not the box: a replacement
+  control unit takes the same name. `~/.ssh/config` has `Host practice`
+  (the user) and `Host liva` (root) for it (`local/README.md`).
 - **Swap:**
-  1. Install a fresh OS, with the hostname `practice`. For a Pi:
-     `setup/rpi/`. Run the setup script (packages, user, systemd unit).
+  1. Install a fresh OS, with the hostname `practice` (for a Pi:
+     `setup/rpi/`), or bring an old one up to date (the LIVA, 2026-10-14).
+     Run the setup script (packages, user, systemd unit).
      Deploy. Copy the config, with the new host's details.
   2. No code change: the service is plain Python, so arm64 or amd64 does
      not matter.
@@ -416,9 +464,11 @@ yet.
 - **Role:** hold the takes.
 - **Interface:** a directory with room, written at about 0.1 MB/s while
   recording.
-- **Current:** the Pi's SD card, a 32 GB Transcend (planned as storage).
-  After setup, 2.8 GB used and 25 GB free (2026-10-10). 16-bit, 48 kHz
-  mono is about 350 MB an hour, so that holds about 70 hours.
+- **Current (2026-10-14):** the LIVA's eMMC. After setup and the copy of
+  the Pi's data, 20 GB free. 16-bit, 48 kHz mono is about 350 MB an hour,
+  so that holds about 57 hours.
+- **Before:** the Pi's SD card, a 32 GB Transcend. After setup, 2.8 GB
+  used and 25 GB free (2026-10-10).
 - **Later:** copy takes to the desktop or Dropbox (rsync or rclone). That
   is a separate part, not a change to this slot.
 - **Swap** (a USB drive, a bigger card): set `takes_dir`, move the takes.
@@ -440,7 +490,51 @@ yet.
   - The router also offers an IoT network (2.4 GHz, WPA2 only) for older
     gadgets. It is not needed. It may be isolated from the main network,
     which would cut the phone off from the control unit.
-  - **The control unit:** built-in Wi-Fi (`wlan0`) to the home Wi-Fi, at
+  - **The control unit, since 2026-10-14 the LIVA:** built-in Wi-Fi
+    (`wlan0`) to the home Wi-Fi, at its reserved address (DHCP, reserved by
+    the player 2026-10-14; a new address, so the phone's bookmark changed).
+    NetworkManager connections:
+    - The Wi-Fi connection is named after the network, copied from the
+      Pi's: WPA2 (`wpa-psk`), autoconnect on, power saving off.
+    - It pins the Wi-Fi MAC address (`cloned-mac-address`), because the
+      board has none of its own. Its nvram holds Broadcom's placeholder
+      (`00:90:4c:c5:12:38`), so the driver makes up a random address at
+      every boot. The pinned one is the first random one, a locally
+      administered address (`local/README.md`).
+    - Ethernet: `wired`, DHCP. It isn't plugged in in the music room.
+    - `/etc/resolv.conf` is written by NetworkManager. dhcpcd, dhclient,
+      rdnssd and resolvconf were removed.
+  - **The LIVA's nvram and 5 GHz.** The Wi-Fi chip's nvram is in an EFI
+    variable, which the driver (`brcmfmac`) reads when no file is given.
+    It says country `XT` (regrev 26). With it, the chip found no 5 GHz
+    networks at all, not even the neighbours', though `iw list` showed the
+    channels enabled.
+    - A copy with `ccode=US` and `regrev=0` at
+      `/lib/firmware/brcm/brcmfmac43241b4-sdio.ECS-BAT-MINI.txt` (no package
+      owns that name; the driver tries it first) makes 5 GHz work, and the
+      LIVA joins the router's 5 GHz by itself (same network name).
+    - To make it again:
+      `cat /sys/firmware/efi/efivars/nvram-74b00bd9-805a-4d61-b51f-43268123d113 | tail -c +5 | tr '\000' '\n' | grep -v '^$' | sed -e 's/^ccode=.*/ccode=US/' -e 's/^regrev=.*/regrev=0/'`
+      into that file, then `modprobe -r brcmfmac; modprobe brcmfmac`.
+      Do it over Ethernet, or with a fallback that removes the file if
+      the router stops answering, because Wi-Fi may be the only link.
+  - **In the music room, the LIVA** (2026-10-14, Wi-Fi only):
+    - **2.4 GHz** (channel 2-3, -49 to -50 dBm, 85%):
+      - 20 pings to the router: 0% loss, 9.6 ms average, 2.2-40 ms.
+      - Throughput over SSH, 15 MB: LIVA to desktop 1.1-1.4 MB/s (once
+        0.34 MB/s over HTTP), desktop to LIVA 2.2-3.0 MB/s.
+      - The link rate was 24-144 Mbit/s, so the bottleneck is not the
+        radio. Bluetooth off made no difference.
+    - **5 GHz** (channel 100, -66 dBm, link rate 135-243 Mbit/s):
+      - LIVA to desktop 2.6 MB/s, desktop to LIVA 3.1-3.9 MB/s.
+      - 20 pings from the desktop: 0% loss, 6.6 ms average, 9 ms maximum.
+      - Channel 100 is a DFS channel: if the router hears radar it moves,
+        and the LIVA follows or falls back to 2.4 GHz.
+    - It came back by itself on Wi-Fi alone after 2 reboots, at the
+      reserved address.
+    - A 5-minute mono take (about 29 MB) copies to the desktop in about
+      11 s on 5 GHz.
+  - **The Pi, before:** built-in Wi-Fi (`wlan0`) to the home Wi-Fi, at
     its reserved address (DHCP). It is a NetworkManager connection named
     after the network: autoconnect on, Wi-Fi power saving off. The Wi-Fi
     country is set (`setup/rpi/`). It came back by itself after a reboot.
@@ -451,7 +545,8 @@ yet.
     - **In the mixer's room** (2026-10-10, Wi-Fi only):
       - the home Wi-Fi on channel 3, -55 dBm (63%);
       - 20 pings to the router: 0% loss, 18 ms average, 1.4-78 ms.
-  - `practice.local` resolves from the desktop (avahi runs on the Pi).
+  - `practice.local` resolves from the desktop (avahi runs on the control
+    unit).
   - `.local` names work from the desktop, but not reliably on Android, so
     the phone uses the address.
 - **Swap** (a new router, Wi-Fi to Ethernet): re-make the reservation.
@@ -657,6 +752,7 @@ someone in the room.
 | 2026-10-14 | 1, 2 | | scarlett-18i8-gen3 | T5, the piano (45 s, piano alone; `~/t5-2026-10-14-piano.wav`): the condenser (input 4) peaked -0.8 dBFS played hard (5 s peaks -0.8 to -8.0), no samples clipped; the Nadine heard the piano at peaks -25 to -35 | too hot: input 4 to come down about 6-8 dB (hard playing to about -8) |
 | 2026-10-14 | 1, 2 | | scarlett-18i8-gen3 | T5, the piano again (30 s; `~/t5-2026-10-14-piano-b.wav`), input 4's knob at about 8 o'clock: peaks -6.6 dBFS played hard, -9 to -17 normally, no clipping, no xruns. Knobs now: input 3 (the Nadine) about 11 o'clock, input 4 (the piano condenser) about 8 o'clock | pass |
 | 2026-10-14 | 3, 4, 5 | | scarlett-18i8-gen3 on the Pi 3 | T6: the piano T5 recording (2 channels, mixed to mono by the recorder's playback, loudness +6.3 dB) played 10 s at the set level, 10 s 10 dB down, 10 s while the monitor knob turned: heard, with some popping (player). No USB errors in dmesg, `get_throttled` 0x0; xruns not measured | **fail** (popping); the player: move the control unit to the LIVA (slot 5's alternate) |
+| 2026-10-14 | 5, 6, 7 | the Pi 3 (Raspberry Pi OS, 2.4 GHz Wi-Fi) | the ECS LIVA (Debian 13, upgraded in place; 5 GHz Wi-Fi with a board nvram), hostname `practice`, the 18i8 on its USB; the Pi switched off | T10: in the music room on Wi-Fi alone, rebooted twice, back by itself in 46-50 s at its reserved address; 20 pings 0% loss. All four services answer and see the 18i8 (not opened yet) | pass; T1-T4, T6, T9, T11 due |
 
 ## Sources
 
