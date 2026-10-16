@@ -82,6 +82,8 @@ ROOM_S = 1.0  # the room: what was heard up to this long before the attack
 CLIP_S = (ROOM_S, 1.6)  # a check's clip: this long before the attack, and after it
 CHECK_BASS = (L.BASS_NOTE_RANGE[0], L.HI)  # a check's bass: looked for from E1 to the top of the pitch axis
 LABEL_S = 2.0
+ROOM_LEARN_S = 1.0  # the Listen view learns the room from this long of quiet (the piano detector's background):
+ROOM_DB = 4.0  # within this of the quietest of the last 10 s (itself under QUIET_CEIL_DBFS), not a chord's tail
 MIN_FFT = 16384  # at 48 kHz, bins of 2.9 Hz: the bass's semitones apart (2.4 Hz at E1)
 
 NAMES = ("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B")
@@ -370,6 +372,8 @@ class Listener:
         self.recent_kind: collections.deque = collections.deque(maxlen=5)
         self.kind_shown: str | None = None
         self.last_heard: Heard | None = None
+        self.room = None  # the room's peaks (`livechords.quiet_peaks`), learned from a quiet second, for the piano
+        self.quiet_run = 0  # frames of the room alone in a row
         self.now: dict = {"chord": None, "confidence": 0.0, "top": [], "level_dbfs": None, "quiet_dbfs": None}
         self.history: collections.deque = collections.deque(maxlen=12)
         self.check: Check | None = None
@@ -463,17 +467,29 @@ class Listener:
         win = self._between(pos - int(WINDOW_S * self.rate), pos)
         level = dsp.db(float(np.sqrt(np.mean(win ** 2))) if len(win) else 0.0)
         block_level = dsp.db(float(np.sqrt(np.mean(mono ** 2))) if n else 0.0)
+        t_frame = time.perf_counter()
         V = L.window_salience(win, self.rate, 0.0, len(win) / self.rate, min_fft=MIN_FFT)
         tr, bs = L.fold(V)
         s = L.chord_scores(tr, bs, 0.5, inversions=True, vocab=VOCAB)
-        bass_midi, _ = L.bass_note(V)
-        frame_kind = hear(V, s).kind
+        piano = self.instrument == "piano"
+        if piano:  # the piano detector: the notes that best explain the window's peaks, less the room's
+            pn = L.piano_notes(L.window_peaks(win, self.rate, 0.0, len(win) / self.rate, MIN_FFT, background=self.room))
+            pc_chord, pc_bass, ps_scores = L.chord_of_notes(pn, VOCAB)
+            ps_scores = np.zeros(len(CHORDS)) if ps_scores is None else ps_scores
+            ph = heard_of(tuple(m for m, _ in pn), named(tuple(pc_chord), pc_bass) if pc_chord else None, pc_bass)
+            bass_midi, frame_kind = (pn[0][0] if pn else None), ph.kind
+        else:
+            bass_midi, _ = L.bass_note(V)
+            frame_kind = hear(V, s).kind
         self.pulse.hear(mono)
         with self.lock:
             before = list(self.levels)[-3:]
             self.levels.append(block_level)
             quiet = min(min(self.levels), QUIET_CEIL_DBFS)
             loud = level > quiet + QUIET_DB
+            floor = min(self.levels)
+            room = not loud and floor <= QUIET_CEIL_DBFS and level <= floor + ROOM_DB  # the room alone, near its floor
+            self.quiet_run = self.quiet_run + 1 if room else 0
             if loud:
                 prior = STAY * self.post + (1 - STAY) / len(self.post)
                 like = np.exp(BETA * (s - s.max()))
@@ -494,8 +510,8 @@ class Listener:
             if len(self.kind_seen) == 2 and self.kind_seen[0] == self.kind_seen[1]:
                 self.kind_shown = self.kind_seen[0]
             kind = self.kind_shown if loud else None
-            h = hear(V, s, best)
-            if kind == "chord":  # the chord as smoothed, with the bass shown
+            h = ph if piano else hear(V, s, best)
+            if kind == "chord" and not piano:  # the chord as smoothed, with the bass shown
                 c = named(CHORDS[best], self.bass_shown)
                 h = Heard("chord", chord_name(c, self.bass_shown), f"{NAMES[c[0]]} {QUALITY_WORDS[c[1]]}" + (
                     f", {NAMES[self.bass_shown]} in the bass" if self.bass_shown not in (None, c[0]) else ""),
@@ -505,7 +521,7 @@ class Listener:
                 kind = h.kind
             self.last_heard = h if kind else None
             name = h.name if kind else None
-            levels = dict(L.notes_heard(V)) if kind else {}
+            levels = (dict(pn) if piano else dict(L.notes_heard(V))) if kind else {}
             self.now = {"chord": name, "kind": kind, "detail": h.detail if kind else None,
                         "notes": [note_name(m) for m in h.notes] if kind else [],
                         "note_levels": [round(float(levels.get(m, 0.0)), 2) for m in h.notes] if kind else [],
@@ -513,15 +529,19 @@ class Listener:
                         "bass_confidence": round(sum(b == self.bass_shown for b in self.recent_bass) / 5, 2)
                         if kind and self.bass_shown is not None else 0.0,
                         "bass": NAMES[self.bass_shown] if loud and self.bass_shown is not None else None,
-                        "confidence": round(float(self.post[best]), 3) if kind == "chord" else (1.0 if kind else 0.0),
-                        "top": [[chord_name(CHORDS[k]), round(float(s[k]), 3)] for k in order] if kind == "chord" else [],
-                        "level_dbfs": round(block_level, 1), "quiet_dbfs": round(quiet, 1)}
+                        "confidence": (min(1.0, round(float(ps_scores.max()), 3)) if piano else
+                                       round(float(self.post[best]), 3)) if kind == "chord" else (1.0 if kind else 0.0),
+                        "top": ([[chord_name(CHORDS[k]), round(float(ps_scores[k]), 3)]
+                                 for k in np.argsort(ps_scores)[::-1][:4]] if piano else
+                                [[chord_name(CHORDS[k]), round(float(s[k]), 3)] for k in order]) if kind == "chord" else [],
+                        "level_dbfs": round(block_level, 1), "quiet_dbfs": round(quiet, 1),
+                        "frame_ms": round(1000 * (time.perf_counter() - t_frame), 1)}
             if name and self.now["confidence"] >= 0.5 and (not self.history or self.history[-1][1] != name):
                 self.history.append((datetime.now().isoformat(timespec="seconds"), name))
             # this bar: the notes pooled over about half a bar (once the tempo is known), and the loop of those
             tempo = self.pulse.estimate()
             self.pool.set_tau(2 * tempo["beat_s"] if tempo else 0.8)
-            heard = L.notes_heard(V) if loud else []
+            heard = (pn if piano else L.notes_heard(V)) if loud else []
             self.pool.hear(pos / self.rate, heard, n / self.rate)
             ps = self.pool.state()
             bar_name = chord_name(named(ps["chord"], ps["bass"]), ps["bass"]) if ps else None
@@ -544,6 +564,10 @@ class Listener:
                     block_level - min(before) >= ATTACK_DB:
                 ck.state, ck.attack = "hearing", pos - n
             judge = ck is not None and ck.state == "hearing" and pos >= ck.attack + int(CHECK_S * self.rate)
+        if piano and self.quiet_run and self.quiet_run % int(ROOM_LEARN_S / BLOCK_S) == 0:
+            # each quiet second: the room's hum and noise, to take out of the notes
+            self.room = L.quiet_peaks(self._between(pos - int(ROOM_LEARN_S * self.rate), pos), self.rate, 0.0,
+                                      ROOM_LEARN_S, MIN_FFT)
         if judge:
             self._judge(ck)
         if ck is not None and ck.state == "done" and ck.id is None and pos >= ck.attack + int(CLIP_S[1] * self.rate):
@@ -729,9 +753,26 @@ class Listener:
             }
 
 
+def piano_tone(note: int, s: np.ndarray, amp: float, decay: float) -> np.ndarray:
+    """A piano's note `s` seconds after it is struck: its partials up to 5 kHz, at 1/h, partial h dying
+    at `decay` (1 + 0.3 (h - 1)) per second, tuned and stretched as `livechords.PIANO` has the player's
+    piano."""
+    f0 = 440 * 2 ** ((note - 69) / 12 + float(L.PIANO.cents(note)) / 1200)
+    B = float(L.PIANO.B(note))
+    out = np.zeros(len(s))
+    for h in range(1, 40):
+        f = f0 * h * math.sqrt(1 + B * h * h)
+        if f > 5000 and h > 2:
+            break
+        out += amp * np.exp(-decay * (1 + 0.3 * (h - 1)) * s) * np.sin(2 * math.pi * f * s) / h
+    return out
+
+
 class DemoSource:
     """A stand-in for the capture (the page tried on the desktop, and the tests): piano-like chords, a
-    new one every `every_s`, each tone a few decaying partials, on every channel, in real time."""
+    new one every `every_s`, each tone its partials up to 5 kHz (1/h, the higher dying faster), sharp as
+    the player's piano stretches them (`livechords.PIANO`), so the piano detector hears them as notes,
+    on every channel, in real time."""
 
     def __init__(self, chords: list[str], channels: int, rate: int = 48000, every_s: float = 2.5,
                  gap_s: float = 0.3, realtime: bool = True, decay: float = 1.2):
@@ -772,9 +813,7 @@ class DemoSource:
                 for j, tone in enumerate(arp):
                     mm = m & (since >= j * quarter) & (since < self.every - self.gap)
                     s0 = since[mm] - j * quarter
-                    f0 = 440 * 2 ** ((tone - 69) / 12)
-                    for h in range(1, 6):
-                        x[mm] += 0.08 * np.exp(-1.5 * s0) * np.sin(2 * math.pi * f0 * h * s0) / h ** 1.5
+                    x[mm] += piano_tone(tone, s0, 0.08, 1.5)
                 continue
             if t.kind == "note":
                 notes = [t.midi]
@@ -783,11 +822,9 @@ class DemoSource:
             else:
                 root, q = t.chord
                 notes = [48 + root + d for d in L.ALL_QUALITIES[q]] + [36 + (root if t.bass is None else t.bass)]
-            env = np.where(since[m] < self.every - self.gap, np.exp(-self.decay * since[m]), 0.0)
+            on = since[m] < self.every - self.gap
             for tone in notes:
-                f0 = 440 * 2 ** ((tone - 69) / 12)
-                for h in range(1, 6):
-                    x[m] += 0.05 * env * np.sin(2 * math.pi * f0 * h * since[m]) / h ** 1.5
+                x[m] += on * piano_tone(tone, since[m], 0.05, self.decay)
         self.n += frames
         y = dsp.from_float(np.clip(x, -1, 1).astype(np.float32), self.dtype)
         return np.repeat(y[:, None], self.channels, axis=1)
