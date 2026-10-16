@@ -36,6 +36,12 @@ class Take:
     # which instrument it was played on, of those the project knows (or "a guitar (not listed)")
     instrument_id: str | None = None
     instrument_name: str | None = None
+    # the exercise app's: "exercise", "playalong" or "free"; the instruments (one or two:
+    # {"instrument_id", "instrument_name", "kind"}); and what each channel carried, in order
+    # ({"channel", "input", "input_name", "carries", "carries_name"}: an instrument's id, "room" or "none")
+    kind: str | None = None
+    instruments: list | None = None
+    channels: list | None = None
 
 
 class TakeNotFound(Exception):
@@ -97,6 +103,9 @@ class Takes:
             beat0_s=meta.get("beat0_s"),
             instrument_id=meta.get("instrument_id"),
             instrument_name=meta.get("instrument_name"),
+            kind=meta.get("kind"),
+            instruments=meta.get("instruments"),
+            channels=meta.get("channels"),
         )
 
     def list(self) -> list[Take]:
@@ -151,6 +160,26 @@ class Takes:
         dtype = {2: np.dtype("<i2"), 4: np.dtype("<i4")}[width]
         x = dsp.to_float(np.frombuffer(data, dtype=dtype))
         return (x if ch == 1 else x.reshape(-1, ch)), rate
+
+    def peaks(self, take_id: str, n: int = 400) -> "list[float]":
+        """The take's loudest sample in each of `n` equal slices (0-1, all channels), read a second
+        at a time: a waveform to draw."""
+        with wave.open(str(self.path(take_id))) as w:
+            rate, ch, width, total = w.getframerate(), w.getnchannels(), w.getsampwidth(), w.getnframes()
+            dtype = {2: np.dtype("<i2"), 4: np.dtype("<i4")}[width]
+            fs = float(dsp.full_scale(dtype))
+            out = np.zeros(n)
+            edges = np.linspace(0, total, n + 1).astype(np.int64)
+            pos = 0
+            while pos < total:
+                x = np.frombuffer(w.readframes(rate), dtype=dtype).reshape(-1, ch)
+                if not len(x):
+                    break
+                a = np.abs(x.astype(np.int64)).max(axis=1) / fs
+                slot = np.searchsorted(edges, pos + np.arange(len(a)), side="right") - 1
+                np.maximum.at(out, np.clip(slot, 0, n - 1), a)
+                pos += len(a)
+        return [round(float(v), 4) for v in out]
 
     def free_mb(self) -> float:
         return shutil.disk_usage(self.dir).free / 1e6

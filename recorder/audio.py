@@ -138,7 +138,8 @@ def _fake_loop(profile: Profile) -> _FakeLoop | None:
 
 class _FakeSource:
     """Room noise at about -72 dBFS, with a decaying 220 Hz note every 4 s,
-    paced in real time; with loopback, the fake playback comes back too."""
+    paced in real time; with loopback, the fake playback comes back too. Each
+    channel after the first is 6 dB quieter than the one before (so meters differ)."""
 
     def __init__(self, stream: Stream, dtype: np.dtype, loop: _FakeLoop | None = None,
                  loop_db: float = -31.0, loop_delay_s: float = 0.009):
@@ -161,7 +162,8 @@ class _FakeSource:
             x = x + self.loop_gain * self.loop.heard(self.t0 + self.n / rate - self.loop_delay, frames, rate)
         self.n += frames
         mono = dsp.from_float(x.astype(np.float32), self.dtype)
-        return np.repeat(mono[:, None], ch, axis=1).tobytes()
+        gains = 10 ** (-6.0 * np.arange(ch) / 20)
+        return np.round(mono[:, None] * gains).astype(self.dtype).tobytes()
 
 
 class Capture:

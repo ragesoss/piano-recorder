@@ -90,8 +90,10 @@ def test_fake_capture_shapes_blocks_and_runs_in_real_time():
     assert 0.4 < elapsed < 1.0
     with audio.Capture(p, raw=True) as cap:
         raw = cap.read()
-    assert raw.shape == (4800, 2)
-    assert np.array_equal(raw[:, 0], raw[:, 1])
+    assert raw.shape == (4800, 4)
+    # the same sound on every channel, each 6 dB quieter than the one before (so meters differ)
+    assert np.allclose(raw[:, 1], raw[:, 0] * 10 ** (-6 / 20), atol=1)
+    assert np.allclose(raw[:, 3], raw[:, 0] * 10 ** (-18 / 20), atol=1)
 
 
 def test_fake_playback_takes_mono_and_paces():

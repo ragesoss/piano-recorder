@@ -18,6 +18,23 @@ backing_dir = "~/backing"
 # only one plays at a time (recorder/peers.py).
 peers = ["http://127.0.0.1:8000", "http://127.0.0.1:8001"]
 
+# What is plugged into each kept input, by the interface's input number: the app's input panel
+# shows them, and each take's sidecar says what each channel carried. "for": a pickup or mic on
+# one kind of instrument; none: a mic for the room.
+[inputs.1]
+name = "Piezo"
+details = "Fishman Full Circle, through the Fishman Pro-EQ Platinum DI"
+for = "bass"
+
+[inputs.3]
+name = "Nadine"
+details = "Ear Trumpet Labs Nadine, on the bass"
+for = "bass"
+
+[inputs.4]
+name = "Room mic"
+details = "The condenser, pointed at the player"
+
 [web]
 host = "0.0.0.0"
 port = 8002

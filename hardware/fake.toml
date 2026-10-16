@@ -17,7 +17,7 @@ loopback_delay_ms = 9.0
 device = "fake"
 format = "S16_LE"
 rate = 48000
-channels = 2
+channels = 4
 keep_channels = [0]
 remove_dc = true
 

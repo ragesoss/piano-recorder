@@ -9,12 +9,14 @@ Run on the control unit by systemd (setup/exercise-recorder.service), or for dev
 EXERCISE_RECORDER_CONFIG=config/exercises-dev.toml python -m exercises.server
 """
 
+import json
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 
@@ -27,16 +29,21 @@ from recorder.takes import TakeNotFound, Takes
 from .store import ExerciseNotFound, Exercises
 
 STATIC = Path(__file__).parent / "static"
+FONTS = STATIC / "fonts"
 SYSTEM_CONFIG = Path("/etc/exercise-recorder.toml")
+CHOICES_MAX_BYTES = 20000  # the page's choices for the next take (PUT /api/choices)
 
 
 class StartIn(BaseModel):
     exercise: str | None = None
-    tempo_bpm: float | None = None  # None: the exercise's
-    click: bool = True  # a click on every beat through the exercise
+    tempo_bpm: float | None = None  # None: the exercise's; without an exercise, a click at this tempo
+    click: bool = True  # a click on every beat through the exercise (a free take: until stopped)
     count_in: bool = True  # a bar of clicks before it
+    beats_per_bar: int | None = None  # a free take's click (4 if not said)
     backing: str | None = None  # a backing track instead of the click
     instrument_id: str | None = None  # which known instrument (GET /api/instruments), or "other:<kind>"
+    instruments: list[str] | None = None  # one or two, in place of instrument_id
+    inputs: dict[str, str] | None = None  # input number -> what it carries: an instrument's id, "room" or "none"
 
 
 class NoteIn(BaseModel):
@@ -73,6 +80,51 @@ def instrument_meta(instrument_id: str, known: list[dict]) -> dict | None:
     return {"instrument_id": instrument_id, "instrument_name": f"{article} {kind} (not listed)", "kind": kind}
 
 
+def default_carries(inp, instruments: list[dict]) -> str:
+    """What an input carries if the page does not say: a pickup (`for` a kind) the chosen
+    instrument of its kind; a room mic the one chosen instrument without a pickup of its own, or
+    the room (none or two such)."""
+    if inp.for_kind:
+        return next((i["instrument_id"] for i in instruments if i["kind"] == inp.for_kind), "none")
+    return "room"  # refined in played_on, which knows the other inputs
+
+
+def played_on(body: StartIn, known: list[dict], inputs: tuple) -> dict:
+    """The sidecar's instruments and channels for a take (raises HTTPException)."""
+    ids = body.instruments if body.instruments is not None else ([body.instrument_id] if body.instrument_id else [])
+    if len(ids) > 2 or len(set(ids)) != len(ids):
+        raise HTTPException(400, "one or two instruments")
+    insts = [instrument_meta(i, known) for i in ids]
+    if any(i is None for i in insts):
+        raise HTTPException(400, "unknown instrument")
+    meta: dict = {}
+    if insts:
+        meta["instruments"] = insts
+        meta["instrument_name"] = " and ".join(i["instrument_name"] for i in insts)
+    if len(insts) == 1:
+        meta["instrument_id"] = insts[0]["instrument_id"]
+    picked_up = {inp.for_kind for inp in inputs if inp.for_kind}
+    unheard = [i["instrument_id"] for i in insts if i["kind"] not in picked_up]
+    names = {i["instrument_id"]: i["instrument_name"] for i in insts} | {"room": "the room", "none": "nothing"}
+    sent = body.inputs or {}
+    if any(not k.isdigit() or int(k) not in {inp.number for inp in inputs} for k in sent):
+        raise HTTPException(400, "no such input")
+    channels = []
+    for c, inp in enumerate(inputs):
+        carries = sent.get(str(inp.number))
+        if carries is None:
+            carries = default_carries(inp, insts)
+            if not inp.for_kind and len(unheard) == 1:
+                carries = unheard[0]
+        if carries not in names:
+            raise HTTPException(400, f"input {inp.number} cannot carry {carries!r}")
+        channels.append({"channel": c, "input": inp.number, "input_name": inp.name, "carries": carries,
+                         "carries_name": names[carries]})
+    if inputs:
+        meta["channels"] = channels
+    return meta
+
+
 def create_app(cfg: Config) -> FastAPI:
     if cfg.exercises_dir is None:
         raise ConfigError(f"{cfg.path}: the exercise app needs exercises_dir")
@@ -82,6 +134,7 @@ def create_app(cfg: Config) -> FastAPI:
     engine = Engine(cfg, takes, backings, name="the exercise app")
     app = FastAPI(title="Exercises", docs_url=None, redoc_url=None)
     app.state.engine = engine
+    choices_path = cfg.takes_dir / "choices.json"
 
     def guard(fn, *args, **kw):
         try:
@@ -111,9 +164,46 @@ def create_app(cfg: Config) -> FastAPI:
     def icon():
         return FileResponse(STATIC / "icon.svg", media_type="image/svg+xml")
 
+    @app.get("/fonts/{name}")
+    def font(name: str):
+        path = FONTS / name
+        if not re.match(r"^[A-Za-z0-9-]+\.woff2$", name) or not path.is_file():
+            raise HTTPException(404, "no such font")
+        return FileResponse(path, media_type="font/woff2", headers={"Cache-Control": "max-age=86400"})
+
     @app.get("/api/status")
     def status():
         return engine.status()
+
+    @app.get("/api/inputs")
+    def list_inputs():
+        """What is plugged into each input the app keeps, in the take's channel order."""
+        return [{"input": i.number, "channel": c, "name": i.name, "details": i.details, "for": i.for_kind}
+                for c, i in enumerate(cfg.inputs)]
+
+    @app.post("/api/monitor")
+    def monitor():
+        """Keep the inputs' levels coming in the status for a few seconds (the page asks again)."""
+        engine.monitor()
+        return {"ok": True}
+
+    @app.get("/api/choices")
+    def get_choices():
+        """The page's choices for the next take, as it left them (or {} the first time)."""
+        try:
+            return json.loads(choices_path.read_text())
+        except (OSError, ValueError):
+            return {}
+
+    @app.put("/api/choices")
+    def put_choices(body: dict = Body(...)):
+        text = json.dumps({**body, "saved": datetime.now().isoformat(timespec="seconds")})
+        if len(text) > CHOICES_MAX_BYTES:
+            raise HTTPException(413, "too much")
+        tmp = choices_path.with_suffix(".json.tmp")
+        tmp.write_text(text)
+        tmp.replace(choices_path)
+        return {"ok": True}
 
     @app.get("/api/exercises")
     def list_exercises():
@@ -150,6 +240,12 @@ def create_app(cfg: Config) -> FastAPI:
     def list_backings():
         return [b.__dict__ for b in backings.list()]
 
+    @app.post("/api/backings/{backing_id}/play")
+    def play_backing(backing_id: str, body: PlayIn | None = None):
+        """Hear a backing track over the speakers before a take (and set their level)."""
+        guard(engine.play_backing, backing_id, body.start if body else 0.0)
+        return {"ok": True}
+
     @app.post("/api/record/start")
     def record_start(body: StartIn | None = None):
         """Record: with an exercise, over its click (or a backing); the take is tagged with it."""
@@ -159,13 +255,14 @@ def create_app(cfg: Config) -> FastAPI:
         if body.exercise:
             ex = guard(exercises.get, body.exercise)
             meta = {"exercise": ex.id, "exercise_title": ex.title, "instrument": ex.instrument}
-        if body.instrument_id:
-            played_on = instrument_meta(body.instrument_id, exercises.instruments())
-            if played_on is None:
-                raise HTTPException(400, "unknown instrument")
-            meta |= {"instrument_id": played_on["instrument_id"], "instrument_name": played_on["instrument_name"]}
-            if not meta.get("instrument") and played_on["kind"]:  # a free take: at least the kind
-                meta["instrument"] = played_on["kind"]
+        meta["kind"] = "exercise" if ex else "playalong" if body.backing else "free"
+        on = played_on(body, exercises.instruments(), cfg.inputs)
+        if ex is not None and len(on.get("instruments", [])) > 1:
+            raise HTTPException(400, "an exercise is for one instrument")
+        meta |= on
+        kinds = [i["kind"] for i in on.get("instruments", []) if i["kind"]]
+        if not meta.get("instrument") and len(kinds) == 1:  # a free take: at least the kind
+            meta["instrument"] = kinds[0]
         if body.backing:
             return {"take": guard(engine.start_recording, body.backing, body.count_in, meta=meta)}
         if ex is not None and (body.click or body.count_in):
@@ -176,6 +273,15 @@ def create_app(cfg: Config) -> FastAPI:
                 tempo["bpm"] = float(body.tempo_bpm)
             return {"take": guard(engine.start_click, tempo, ex.beats, count_in=body.count_in,
                                   through=body.click, title=ex.title, meta=meta)}
+        if ex is None and body.click and body.tempo_bpm:  # a free take over a click, until stopped
+            if not 20 <= body.tempo_bpm <= 300:
+                raise HTTPException(400, "tempo out of range (20-300)")
+            bpb = body.beats_per_bar or 4
+            if not 1 <= bpb <= 12:
+                raise HTTPException(400, "beats in a bar out of range (1-12)")
+            tempo = {"bpm": float(body.tempo_bpm), "pickup_beats": 0.0, "beats_per_bar": bpb}
+            return {"take": guard(engine.start_click, tempo, None, count_in=body.count_in, through=True,
+                                  title="Click", meta=meta)}
         return {"take": guard(engine.start_recording, meta=meta)}
 
     @app.post("/api/record/stop")
@@ -212,6 +318,13 @@ def create_app(cfg: Config) -> FastAPI:
     def delete(take_id: str):
         guard(engine.delete, take_id)
         return {"ok": True}
+
+    @app.get("/api/takes/{take_id}/peaks")
+    def take_peaks(take_id: str, n: int = 400):
+        """A waveform: the loudest sample in each of n slices (0-1)."""
+        if not 10 <= n <= 2000:
+            raise HTTPException(400, "n out of range (10-2000)")
+        return {"peaks": guard(takes.peaks, take_id, n)}
 
     @app.get("/api/takes/{take_id}/audio")
     def take_audio(take_id: str):

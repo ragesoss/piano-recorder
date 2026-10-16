@@ -269,6 +269,13 @@ def with_count_in(backing: np.ndarray, rate: int, tempo: dict) -> tuple[np.ndarr
     return out, lead
 
 
+def _click(accent: bool, rate: int, level_dbfs: float) -> np.ndarray:
+    dur = int(0.03 * rate)
+    tt = np.arange(dur) / rate
+    freq, lv = (2000.0, level_dbfs) if accent else (1500.0, level_dbfs - 4.0)
+    return (10 ** (lv / 20) * np.sin(2 * np.pi * freq * tt) * np.exp(-tt / 0.006)).astype(np.float32)
+
+
 def click_track(tempo: dict, rate: int, beats: float, count_in_bars: int = 1, through: bool = True,
                 level_dbfs: float = -12.0) -> tuple[np.ndarray, float]:
     """A click to play an exercise to: `count_in_bars` full bars before the bar the music starts
@@ -288,13 +295,45 @@ def click_track(tempo: dict, rate: int, beats: float, count_in_bars: int = 1, th
     n = int(round((lead + (max(ks) + 1) * spb if ks else lead) * rate)) + int(0.3 * rate)
     out = np.zeros(n, dtype=np.float32)
     dur = int(0.03 * rate)
-    tt = np.arange(dur) / rate
+    clicks = {acc: _click(acc, rate, level_dbfs) for acc in (True, False)}
     for k in ks:
-        acc = k % bpb == 0
-        freq, lv = (2000.0, level_dbfs) if acc else (1500.0, level_dbfs - 4.0)
-        click = (10 ** (lv / 20) * np.sin(2 * np.pi * freq * tt) * np.exp(-tt / 0.006)).astype(np.float32)
+        click = clicks[k % bpb == 0]
         i = int(round((lead + k * spb) * rate))
         m = min(dur, n - i)
         if i >= 0 and m > 0:
             out[i:i + m] += click[:m]
     return out, lead - pickup * spb
+
+
+class ClickStream:
+    """A click with no last beat (a free take's), made as it is played: `click_track`'s count-in
+    and beats for a tempo with no pickup, sample for sample, so the take is lined up again from a
+    `click_track` through the beats it played (`beats_through`)."""
+
+    def __init__(self, tempo: dict, rate: int, count_in_bars: int = 1, level_dbfs: float = -12.0):
+        self.rate = rate
+        self.spb = 60.0 / float(tempo["bpm"])
+        self.bpb = int(tempo.get("beats_per_bar", 4))
+        self.k0 = -count_in_bars * self.bpb  # the count-in's first beat; bar 1's downbeat is beat 0
+        self.lead = 0.2 - self.k0 * self.spb  # bar 1's downbeat, from the start
+        self.beat0_s = self.lead  # the music's first note: bar 1's downbeat (no pickup)
+        self.dur = int(0.03 * rate)
+        self.clicks = {acc: _click(acc, rate, level_dbfs) for acc in (True, False)}
+        self.pos = 0
+
+    def read(self, frames: int) -> np.ndarray:
+        """The next `frames` samples."""
+        p0, p1 = self.pos, self.pos + frames
+        out = np.zeros(frames, dtype=np.float32)
+        k = max(self.k0, int(np.floor(((p0 - self.dur) / self.rate - self.lead) / self.spb)))
+        while (i := int(round((self.lead + k * self.spb) * self.rate))) < p1:
+            if i + self.dur > p0:
+                a, b = max(i, p0), min(i + self.dur, p1)
+                out[a - p0:b - p0] += self.clicks[k % self.bpb == 0][a - i:b - i]
+            k += 1
+        self.pos = p1
+        return out
+
+    def beats_through(self, seconds: float) -> float:
+        """The last beat (from the music's first note, beat 0) that had started `seconds` in."""
+        return float(max(0, int(np.floor((seconds - self.lead) / self.spb + 1e-9))))

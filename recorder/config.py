@@ -58,6 +58,15 @@ class Profile:
 
 
 @dataclass(frozen=True)
+class Input:
+    """What is plugged into one of the inputs a program keeps (the config's [inputs.N])."""
+    number: int  # the interface's input number: the capture channel's index plus one
+    name: str  # "Nadine"
+    details: str = ""  # "Ear Trumpet Labs Nadine, on the bass"
+    for_kind: str = ""  # a pickup or mic on one kind of instrument ("bass"); "": a mic for the room
+
+
+@dataclass(frozen=True)
 class Loudness:
     target_dbfs: float
     limit_dbfs: float
@@ -80,6 +89,8 @@ class Config:
     peers: list[str] = field(default_factory=list)
     # The exercise app's exercises (exercises/store.py); None for the practice recorder.
     exercises_dir: Path | None = None
+    # What is plugged into each kept input, in the take's channel order (keep_channels).
+    inputs: tuple[Input, ...] = ()
 
 
 def _stream(raw: dict, where: str) -> Stream:
@@ -157,6 +168,18 @@ def load_config(path: Path | None = None) -> Config:
         d = Path(value).expanduser()
         return d if d.is_absolute() else REPO / d
 
+    named = raw.get("inputs", {})
+    kept = [c + 1 for c in capture.capture.keep_channels]
+    if not isinstance(named, dict) or any(not str(k).isdigit() or int(k) not in kept for k in named):
+        raise ConfigError(f"{path}: [inputs] names an input not kept (kept: {kept})")
+    inputs = []
+    for n in kept:
+        entry = named.get(str(n), {})
+        if not isinstance(entry, dict):
+            raise ConfigError(f"{path}: [inputs.{n}] is not a table")
+        inputs.append(Input(number=n, name=str(entry.get("name") or f"Input {n}"), details=str(entry.get("details", "")),
+                            for_kind=str(entry.get("for", ""))))
+
     takes_dir = place(raw["takes_dir"])
     backing_dir = place(raw.get("backing_dir", "~/backing"))
     web = raw.get("web", {})
@@ -177,4 +200,5 @@ def load_config(path: Path | None = None) -> Config:
         path=path,
         peers=[str(u) for u in raw.get("peers", [])],
         exercises_dir=place(raw["exercises_dir"]) if "exercises_dir" in raw else None,
+        inputs=tuple(inputs),
     )

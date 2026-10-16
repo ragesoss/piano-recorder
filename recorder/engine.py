@@ -16,6 +16,9 @@ from .takes import Takes
 
 MIN_FREE_MB = 200
 TAIL_S = 2.0  # a play-along take keeps recording this long after the backing ends
+MONITOR_S = 5.0  # an input monitor runs this long after it was last asked for (the app's page, while choosing)
+MONITOR_RETRY_S = 10.0  # after it could not open the inputs, or let them go to a peer: wait this long
+CLICK_KEEP_S = playalong.CLICK_EXCERPT_S + 2.0  # an open-ended click keeps this much as played, to line up
 OFFSET_RANGE_DB = (-30.0, 12.0)  # the speakers' level offset; above 0 dB through `dsp.StreamLimiter` (2026-10-15:
 # a guitar over a backing at 0 dB could not hear the dobro over its own playing)
 
@@ -36,6 +39,8 @@ class _Recording:
     rate: int = 48000
     peak_dbfs: float = -240.0
     recent: collections.deque = field(default_factory=lambda: collections.deque(maxlen=3))
+    recent_ch: collections.deque = field(default_factory=lambda: collections.deque(maxlen=3))  # each channel's
+    peak_ch: list = field(default_factory=list)
     clipped: bool = False
     thread: threading.Thread | None = None
     # a play-along take: the backing, prepared for the speakers, and how far it has played
@@ -50,6 +55,7 @@ class _Recording:
     guide: str = "backing"  # what plays: "backing" (a file) or "click" (generated from a tempo)
     beat0_s: float | None = None  # a click: where beat 0 (the music's first note) is in what is played
     click: dict | None = None  # a click: how it was made (playalong.click_track), to rebuild it
+    stream: playalong.ClickStream | None = None  # an open-ended click, made as it plays (no last beat)
     meta: dict = field(default_factory=dict)  # more for the take's sidecar (an exercise app's)
     backing_done: threading.Event = field(default_factory=threading.Event)
     played: list = field(default_factory=list)  # the blocks as written, for the alignment
@@ -57,13 +63,34 @@ class _Recording:
 
 @dataclass
 class _Playing:
-    take_id: str
+    take_id: str | None
     stop: threading.Event = field(default_factory=threading.Event)
+    backing_id: str | None = None  # a backing track heard on its own (the app's preview), not a take
     position: float = 0.0
     seconds: float = 0.0
     gain_db: float = 0.0
     preparing: bool = True
     thread: threading.Thread | None = None
+
+
+@dataclass
+class _Monitor:
+    """The inputs' levels while nothing records (the exercise app's page, while choosing)."""
+    until: float
+    stop: threading.Event = field(default_factory=threading.Event)
+    recent: collections.deque = field(default_factory=lambda: collections.deque(maxlen=3))
+    peaks: list = field(default_factory=list)
+    thread: threading.Thread | None = None
+
+
+def _levels(recent: collections.deque) -> list[float]:
+    """Each channel's level over the last few blocks."""
+    return [round(max(c), 1) for c in zip(*recent)] if recent else []
+
+
+def _guided(rec: _Recording) -> bool:
+    """Something plays during the take: a backing or a click."""
+    return rec.backing is not None or rec.stream is not None
 
 
 class Engine:
@@ -76,6 +103,9 @@ class Engine:
         self.rec: _Recording | None = None
         self.analyzing: str | None = None  # a play-along take being lined up with its backing
         self.play_: _Playing | None = None
+        self.mon: _Monitor | None = None
+        self.mon_error: str | None = None
+        self._mon_wait_until = 0.0  # no monitor before this (time.monotonic())
         self.error: str | None = None
         self.takes_version = 0
         self._prepared: tuple | None = None  # (take_id, mtime, audio, rate, gain_db)
@@ -89,7 +119,7 @@ class Engine:
 
     def status(self) -> dict:
         with self.lock:
-            rec, pl = self.rec, self.play_
+            rec, pl, mon = self.rec, self.play_, self.mon
             state = ("recording" if rec else "preparing" if pl and pl.preparing else "playing" if pl
                      else "analyzing" if self.analyzing else "idle")
             return {
@@ -99,21 +129,29 @@ class Engine:
                     "seconds": round(rec.frames / rec.rate, 1),
                     "meter_dbfs": round(max(rec.recent, default=-240.0), 1),
                     "peak_dbfs": round(rec.peak_dbfs, 1),
+                    "meters_dbfs": _levels(rec.recent_ch),  # each channel's, in the take's order
+                    "peaks_dbfs": [round(p, 1) for p in rec.peak_ch],
                     "clipped": rec.clipped,
-                    "backing": rec.backing is not None and {
+                    "backing": _guided(rec) and {
                         "kind": rec.guide,
                         "id": rec.backing_id,
                         "title": rec.backing_title,
                         "position": round(rec.backing_pos, 2),
-                        "seconds": round(len(rec.backing) / rec.backing_rate, 1),
+                        "seconds": None if rec.stream is not None else round(len(rec.backing) / rec.backing_rate, 1),
                         "count_in_s": round(rec.count_in_s, 2),
                         "beat0_s": rec.beat0_s,
                         "tempo": rec.tempo,
                     },
                 },
                 "analyzing": self.analyzing,
+                "monitor": mon and not rec and {
+                    "meters_dbfs": _levels(mon.recent),
+                    "peaks_dbfs": [round(p, 1) for p in mon.peaks],
+                },
+                "monitor_error": self.mon_error,
                 "playing": pl and {
                     "take": pl.take_id,
+                    "backing": pl.backing_id,
                     "position": round(pl.position, 2),
                     "seconds": round(pl.seconds, 2),
                     "gain_db": round(pl.gain_db, 1),
@@ -157,11 +195,12 @@ class Engine:
             rec.count_in_s, rec.tempo = lead, (tempo if lead else None)
         return self._start(rec)
 
-    def start_click(self, tempo: dict, beats: float, count_in: bool = True, through: bool = True,
+    def start_click(self, tempo: dict, beats: float | None, count_in: bool = True, through: bool = True,
                     title: str = "Click", meta: dict | None = None) -> str:
         """Record over a click in `tempo` ({"bpm", "pickup_beats", "beats_per_bar"}): a bar's
         count-in (with `count_in`), then every beat through `beats` beats from the first note
-        (with `through`). The take's sidecar gets `meta` and, once lined up, where beat 0 is."""
+        (with `through`); `beats` None: every beat until the take is stopped (a free take's click,
+        no pickup). The take's sidecar gets `meta` and, once lined up, where beat 0 is."""
         with self.lock:
             if self.rec:
                 raise Busy("already recording")
@@ -170,6 +209,14 @@ class Engine:
             audio.require(self.cfg.capture)
             audio.require(self.cfg.playback)
         rate = self.cfg.playback.playback.rate
+        if beats is None:
+            tempo = {**tempo, "pickup_beats": 0.0}
+            stream = playalong.ClickStream(tempo, rate, count_in_bars=1 if count_in else 0)
+            click = {"beats": None, "count_in_bars": 1 if count_in else 0, "through": True}
+            rec = _Recording(take_id="", rate=self.cfg.capture.capture.rate, backing_title=title, backing_rate=rate,
+                             tempo=dict(tempo), guide="click", beat0_s=stream.beat0_s, click=click,
+                             count_in_s=stream.beat0_s, stream=stream, meta=dict(meta or {}))
+            return self._start(rec)
         click = {"beats": float(beats), "count_in_bars": 1 if count_in else 0, "through": bool(through)}
         y, beat0 = playalong.click_track(tempo, rate, **click)
         rec = _Recording(take_id="", rate=self.cfg.capture.capture.rate, backing_title=title, backing=y,
@@ -180,6 +227,7 @@ class Engine:
     def _start(self, rec: _Recording) -> str:
         self._claim()  # a peer's music would end up in the take
         self.stop_playback()
+        self._stop_monitor()  # the take's capture needs the inputs
         with self.lock:
             if self.rec:
                 raise Busy("already recording")
@@ -210,12 +258,14 @@ class Engine:
             pb.start()
             pos, block = 0, rate // 10
             lim = self._limiter(rate)
-            while pos < len(y) and not rec.stop.is_set():
-                chunk = lim.process(y[pos:pos + block] * np.float32(10 ** (self.level_offset_db / 20)))
+            while (rec.stream is not None or pos < len(y)) and not rec.stop.is_set():
+                raw = rec.stream.read(block) if rec.stream is not None else y[pos:pos + block]
+                chunk = lim.process(raw * np.float32(10 ** (self.level_offset_db / 20)))
                 if not pb.write(chunk):
                     self.error = "the backing stopped: the playback device went away"
                     break
-                rec.played.append(chunk)
+                if rec.stream is None or pos < CLICK_KEEP_S * rate:  # an open-ended click: its start, to line up
+                    rec.played.append(chunk)
                 pos += len(chunk)
                 with self.lock:
                     rec.backing_pos = pos / rate
@@ -235,10 +285,12 @@ class Engine:
             raise Busy(str(e))
 
     def yield_speakers(self) -> None:
-        """A peer wants the speakers: stop playing. A recording is kept."""
+        """A peer wants the speakers: stop playing. A recording is kept. The input monitor stops
+        too, and waits a while: the peer may be about to record from the same inputs."""
         if self.rec:
             raise Busy(f"{self.name} is recording")
         self.stop_playback()
+        self._stop_monitor(wait=MONITOR_RETRY_S)
 
     def stop_recording(self) -> str | None:
         rec = self.rec
@@ -280,16 +332,20 @@ class Engine:
                                       "the recording stopped: the capture device stopped sending audio")
                         break
                     w.writeframes(block.tobytes())
-                    if rec.backing is not None and feeder is None:
+                    if _guided(rec) and feeder is None:
                         # the backing starts once the capture is surely running, so the take
                         # holds all of it (arecord can take longer to start than aplay)
                         feeder = threading.Thread(target=self._play_backing, args=(rec,), daemon=True)
                         feeder.start()
-                    peak = int(np.max(np.abs(block.astype(np.int32))))
+                    peaks = np.max(np.abs(block.astype(np.int64)), axis=0)
+                    peak = int(peaks.max())
                     level = dsp.db(peak / fs)
+                    levels = [dsp.db(int(p) / fs) for p in peaks]
                     with self.lock:
                         rec.frames += len(block)
                         rec.recent.append(level)
+                        rec.recent_ch.append(levels)
+                        rec.peak_ch = [max(a, b) for a, b in zip(rec.peak_ch, levels)] if rec.peak_ch else levels
                         rec.peak_dbfs = max(rec.peak_dbfs, level)
                         rec.clipped = rec.clipped or peak >= fs - 1
                     if time.monotonic() - last_space_check > 10:
@@ -314,10 +370,10 @@ class Engine:
                     self.takes.update_meta(rec.take_id, rec.meta)
             with self.lock:
                 self.rec = None
-                if rec.backing is not None and not empty:
+                if _guided(rec) and not empty:
                     self.analyzing = rec.take_id
                 self.takes_version += 1
-        if rec.backing is not None and not empty:
+        if _guided(rec) and not empty:
             self._line_up(rec)
 
     def line_up_again(self, take_id: str) -> dict:
@@ -364,6 +420,8 @@ class Engine:
                 "level_offset_db": self.level_offset_db if level_offset_db is None else level_offset_db}
         if rec.guide == "click":
             meta["click"] = rec.click
+            if rec.stream is not None:  # how far the open-ended click went: to rebuild it (line_up_again)
+                meta["click"] = {**rec.click, "beats": rec.stream.beats_through(rec.backing_pos)}
         try:
             played = np.concatenate(rec.played) if rec.played else np.zeros(0, dtype=np.float32)
             channels, rate = self.takes.load(rec.take_id)
@@ -400,6 +458,14 @@ class Engine:
 
     def play(self, take_id: str, start_s: float = 0.0) -> None:
         self.takes.path(take_id)  # raises TakeNotFound
+        self._play_start(_Playing(take_id=take_id, position=max(0.0, start_s)))
+
+    def play_backing(self, backing_id: str, start_s: float = 0.0) -> None:
+        """A backing track over the speakers on its own: to hear it, and set the level, before a take."""
+        self.backings.path(backing_id)  # raises BackingNotFound
+        self._play_start(_Playing(take_id=None, backing_id=backing_id, position=max(0.0, start_s)))
+
+    def _play_start(self, pl: _Playing) -> None:
         with self.lock:
             if self.rec:
                 raise Busy("recording: stop it before playing")
@@ -408,7 +474,6 @@ class Engine:
         self.stop_playback()
         with self.lock:
             self.error = None
-            pl = _Playing(take_id=take_id, position=max(0.0, start_s))
             pl.thread = threading.Thread(target=self._play, args=(pl,), daemon=True)
             self.play_ = pl
             pl.thread.start()
@@ -439,10 +504,13 @@ class Engine:
 
     def _play(self, pl: _Playing) -> None:
         try:
-            y, rate, gain_db = self._prepare(pl.take_id)
+            if pl.backing_id is not None:
+                _, y, rate, gain_db = self._prepare_backing(pl.backing_id)
+            else:
+                y, rate, gain_db = self._prepare(pl.take_id)
         except Exception as e:
             with self.lock:
-                self.error = f"could not prepare {pl.take_id}: {e}"
+                self.error = f"could not prepare {pl.take_id or pl.backing_id}: {e}"
                 self.play_ = None
             return
         with self.lock:
@@ -473,6 +541,63 @@ class Engine:
             with self.lock:
                 if self.play_ is pl:
                     self.play_ = None
+
+    # The inputs' levels between takes
+
+    def monitor(self) -> None:
+        """Keep the inputs' levels coming for `MONITOR_S` more (start listening if need be). Not
+        while recording (the take has its own meters) or soon after the inputs were given up."""
+        with self.lock:
+            if self.rec or time.monotonic() < self._mon_wait_until:
+                return
+            if self.mon is not None and not self.mon.stop.is_set():
+                self.mon.until = time.monotonic() + MONITOR_S
+                return
+            if not audio.present(self.cfg.capture):
+                self.mon_error = "the mixer is not connected"
+                return
+            mon = _Monitor(until=time.monotonic() + MONITOR_S)
+            mon.thread = threading.Thread(target=self._monitor, args=(mon,), daemon=True)
+            self.mon = mon
+            mon.thread.start()
+
+    def _stop_monitor(self, wait: float = 0.0) -> None:
+        with self.lock:
+            mon = self.mon
+            if wait:
+                self._mon_wait_until = time.monotonic() + wait
+        if mon is not None:
+            mon.stop.set()
+            if mon.thread is not threading.current_thread():
+                mon.thread.join(timeout=5)
+
+    def _monitor(self, mon: _Monitor) -> None:
+        cap = audio.Capture(self.cfg.capture)
+        try:
+            cap.start()
+            fs = dsp.full_scale(cap.dtype)
+            while not mon.stop.is_set() and time.monotonic() < mon.until:
+                block = cap.read()
+                if block is None:  # another program has the inputs (the practice recorder, recording)
+                    said = next((l for l in reversed(cap.stderr_lines) if l.strip()), "")
+                    with self.lock:
+                        self.mon_error = "the inputs are in use" + (f" ({said})" if said else "")
+                        self._mon_wait_until = time.monotonic() + MONITOR_RETRY_S
+                    break
+                levels = [dsp.db(int(p) / fs) for p in np.max(np.abs(block.astype(np.int64)), axis=0)]
+                with self.lock:
+                    self.mon_error = None
+                    mon.recent.append(levels)
+                    mon.peaks = [max(a, b) for a, b in zip(mon.peaks, levels)] if mon.peaks else levels
+        except Exception as e:
+            with self.lock:
+                self.mon_error = f"could not listen to the inputs: {e}"
+                self._mon_wait_until = time.monotonic() + MONITOR_RETRY_S
+        finally:
+            cap.stop()
+            with self.lock:
+                if self.mon is mon:
+                    self.mon = None
 
     # Takes and settings
 

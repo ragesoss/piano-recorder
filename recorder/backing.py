@@ -6,6 +6,7 @@ import json
 import re
 import wave
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -24,6 +25,7 @@ class Backing:
     note: str
     # for a count-in: {"bpm", "first_note_s" (in the file), "pickup_beats", "beats_per_bar"}; None: unknown
     tempo: dict | None = None
+    added: str = ""  # when it was pushed (ISO 8601, local time): its sidecar's, else the file's time
 
 
 class BackingNotFound(Exception):
@@ -60,8 +62,11 @@ class Backings:
         tempo = meta.get("tempo")
         if not (isinstance(tempo, dict) and tempo.get("bpm") and "first_note_s" in tempo):
             tempo = None
+        added = meta.get("added")
+        if not isinstance(added, str) or not added:
+            added = datetime.fromtimestamp(p.stat().st_mtime).isoformat(timespec="seconds")
         return Backing(id=backing_id, title=meta.get("title") or backing_id, seconds=round(seconds, 2),
-                       source=meta.get("source", ""), note=meta.get("note", ""), tempo=tempo)
+                       source=meta.get("source", ""), note=meta.get("note", ""), tempo=tempo, added=added)
 
     def list(self) -> list[Backing]:
         ids = sorted(p.stem for p in self.dir.glob("*.wav") if ID_RE.match(p.stem))
