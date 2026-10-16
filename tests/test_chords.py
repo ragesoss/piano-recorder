@@ -81,6 +81,7 @@ def test_nothing_is_named_in_the_quiet(cfg):
 
 def test_a_check_hears_the_chord_after_its_attack_and_keeps_the_clip(cfg):
     lis = Listener(cfg, cfg.takes_dir)
+    lis.instrument = "other"  # DemoSource's partials are exact harmonics, not a piano's: judged by the chroma
     src = demo(["Dm", "Dm", "F"], cfg)  # strikes at 0, 2.5 and 5 s, each after a quiet gap but the first
     lis.start_check(parse_target("Dm"))
     feed(lis, src, 2.4)
@@ -92,7 +93,7 @@ def test_a_check_hears_the_chord_after_its_attack_and_keeps_the_clip(cfg):
     feed(lis, src, 0.5)
     st = lis.status()["check"]
     side = json.loads((cfg.takes_dir / f"{st['id']}.json").read_text())
-    assert side["kind"] == "check" and side["target"] == "Dm" and side["instrument"] == "piano"
+    assert side["kind"] == "check" and side["target"] == "Dm" and side["instrument"] == "other"
     assert side["mixed"] == [4] and [c["input"] for c in side["channels"]] == [3, 4, 1]  # the room mic heard
     assert side["detector"].startswith("livechords@") and side["scores"][0][0] == "Dm"
     assert abs(side["seconds"] - sum(LS.CLIP_S)) < 0.11
@@ -108,6 +109,7 @@ def test_a_check_hears_the_chord_after_its_attack_and_keeps_the_clip(cfg):
 
 def test_an_inversion_check_judges_the_chord_and_the_bass(cfg):
     lis = Listener(cfg, cfg.takes_dir)
+    lis.instrument = "other"  # DemoSource's partials are exact harmonics, not a piano's: judged by the chroma
     src = demo(["C", "C/E", "C/G"], cfg)
     lis.start_check(parse_target("C/E"))
     feed(lis, src, 3.8)  # the strike at 2.5 s: C/E
@@ -141,6 +143,7 @@ def test_note_and_pair_checks_judge_what_was_asked(cfg):
         with pytest.raises(ValueError):
             parse_target(bad)
     lis = Listener(cfg, cfg.takes_dir)
+    lis.instrument = "other"  # DemoSource's partials are exact harmonics, not a piano's: judged by the chroma
     src = demo(["E4", "E4", "E3", "C+G"], cfg)
     feed(lis, src, 2.4)
     for target, want in (("E4", True), ("E4", False), ("C+G", True)):  # the strikes at 2.5, 5 and 7.5 s
@@ -189,6 +192,7 @@ def test_the_copied_listener_is_the_projects():
 
 def test_a_strike_is_held_until_the_player_says_what_it_was(cfg):
     lis = Listener(cfg, cfg.takes_dir)
+    lis.instrument = "other"  # DemoSource's partials are exact harmonics, not a piano's: judged by the chroma
     src = demo(["-", "C/E", "-", "Am"], cfg)
     feed(lis, src, 2.4)
     lis.start_check()  # a strike: nothing asked for

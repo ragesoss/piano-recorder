@@ -13,14 +13,21 @@ frames agree. Nothing is named while the level is within `QUIET_DB` of the quiet
 (or of `QUIET_CEIL_DBFS`, if nothing that quiet has been heard yet).
 
 A check: a chord, a note ("E4", its octave too) or two notes ("C+G", any octave) is asked for; the
-next attack (a rise of `ATTACK_DB` within 0.3 s, over the quiet) starts it, and it is judged over
-`CHECK_SPAN_S` after the attack, once the strike has passed. A strike is a check with nothing asked
-for: one chord played, what was heard kept and shown until the player says what it was
-(`relabel`), with its clip to hear again (`listen_wav`: the mixed inputs, louder, 16-bit mono, as a
-browser plays it).
-The clip (every kept channel, from just before the attack) and what was asked, heard and scored are
-kept in the config's takes_dir, for study on the desktop (`tools/pull-checks`). A label is the same
-from the Listen view: the last `LABEL_S` kept with the chord the player says it was.
+next attack (a rise of `ATTACK_DB` within 0.3 s, over the quiet) starts it, and it is judged `CHECK_S`
+after the attack, over the chord as it sounds (`judged_span`): from just after its onset until it
+falls `SOUNDS_DB` under its peak or to `OVER_ROOM_DB` over the room, so a chord damped at once is
+judged on itself, not on the quiet after it. Its bass is looked for over the whole pitch axis
+(`CHECK_BASS`), so a chord with nothing under E4 has one; when that is over the bass chroma's range
+(D3), the chord is scored without the bass chroma, which then holds only the strike's thump and the
+room. For the piano, the span is judged by the piano detector instead (`livechords.hear_piano`, in
+`heard_by_piano`: the notes A0-C8 that best explain its peaks, the chord they make, the lowest note
+its bass), when the listener has one. A strike is a check with nothing asked for: one chord played, what
+was heard kept and shown until the player says what it was (`relabel`), with its clip to hear again
+(`listen_wav`: the mixed inputs, louder, 16-bit mono, as a browser plays it).
+The clip (every kept channel, from `ROOM_S` before the attack) and what was asked, heard and scored
+(with where the chord began and was judged) are kept in the config's takes_dir, for study on the
+desktop (`tools/pull-checks`; `tools/check_study.py` judges them again). A label is the same from
+the Listen view: the last `LABEL_S` kept with the chord the player says it was.
 
 The Listen view follows the playing on three time scales (the player: "this instant, this bar, and
 overall orientation"): the notes this moment (each frame's); the chord this bar (`livechords.ChordPool`:
@@ -64,8 +71,16 @@ QUIET_DB = 12.0  # a chord is heard while the level is this far over the quietes
 QUIET_CEIL_DBFS = -50.0  # ...or over this, if nothing that quiet has been heard (playing from the start;
 # the room through the condenser was -57.5 dBFS rms, docs/components.md T4)
 ATTACK_DB = 9.0  # a check starts at a rise this big within 0.3 s
-CHECK_SPAN_S = (0.1, 1.1)  # a check judges the chord over this span after its attack
-CLIP_S = (0.3, 1.6)  # a check's clip: this long before the attack, and after it
+CHECK_S = 1.1  # a check is judged once this much after its attack is heard, over the chord as it sounds:
+ONSET_SEARCH_S = 0.1  # from its onset (the steepest rise of the 10 ms levels within this of the attack's block,
+ONSET_DB = 6.0  # if it rises this much over the 50 ms before)
+SKIP_S = 0.05  # ...and this long after it (the hammers' knock)...
+SOUNDS_DB = 30.0  # ...until its level (over 50 ms) falls this far under its peak...
+OVER_ROOM_DB = 10.0  # ...or to this far over the room's (before the onset)...
+MIN_JUDGED_S = 0.2  # ...but this long at least (a shorter window smears the bass: E2 and F2 are 5 Hz apart)
+ROOM_S = 1.0  # the room: what was heard up to this long before the attack
+CLIP_S = (ROOM_S, 1.6)  # a check's clip: this long before the attack, and after it
+CHECK_BASS = (L.BASS_NOTE_RANGE[0], L.HI)  # a check's bass: looked for from E1 to the top of the pitch axis
 LABEL_S = 2.0
 MIN_FFT = 16384  # at 48 kHz, bins of 2.9 Hz: the bass's semitones apart (2.4 Hz at E1)
 
@@ -162,17 +177,23 @@ class Heard:
     bass: int | None = None  # the bass's pitch class
 
 
-def hear(V: np.ndarray, s: np.ndarray, best: int | None = None) -> Heard:
+def hear(V: np.ndarray, s: np.ndarray, best: int | None = None, bass_range: tuple[int, int] | None = None) -> Heard:
     """What `V` (semitone saliences) and `s` (VOCAB's chord scores) say: `best` is the chord to name
-    (the smoothed one, in the Listen view), else the scores' best."""
-    bass_midi, _ = L.bass_note(V)
+    (the smoothed one, in the Listen view), else the scores' best; `bass_range`: where to look for the
+    bass (MIDI; the listener's own range if None)."""
+    bass_midi, _ = L.bass_note(V) if bass_range is None else L.bass_note(V, rng=bass_range)
     bass = bass_midi % 12 if bass_midi is not None else None
     notes = tuple(m for m, _ in L.notes_heard(V))
+    return heard_of(notes, named(CHORDS[int(np.argmax(s)) if best is None else best], bass), bass)
+
+
+def heard_of(notes: tuple[int, ...], chord: tuple[int, str] | None, bass: int | None) -> Heard:
+    """What the notes sounding (MIDI, low to high), the chord named and the bass (a pitch class) make:
+    a note, two, or a chord, by how many pitch classes sound."""
     pcs = []
     for m in notes:
         if m % 12 not in pcs:
             pcs.append(m % 12)
-    chord = named(CHORDS[int(np.argmax(s)) if best is None else best], bass)
     if len(pcs) == 1:
         octs = [m for m in notes if m % 12 == pcs[0]]
         detail = f"{note_name(octs[0])}, a single note" if len(octs) == 1 else \
@@ -184,7 +205,7 @@ def hear(V: np.ndarray, s: np.ndarray, best: int | None = None) -> Heard:
         word = INTERVALS[(hi - lo) % 12]
         return Heard("pair", f"{NAMES[pcs[0]]}+{NAMES[pcs[1]]}",
                      f"{note_name(lo)} and {note_name(hi)}, a {word}", notes, chord, bass)
-    if not notes:
+    if not notes or chord is None:
         return Heard(None, None, "", notes, chord, bass)
     words = f"{NAMES[chord[0]]} {QUALITY_WORDS[chord[1]]}"
     return Heard("chord", chord_name(chord, bass), words + (f", {NAMES[bass]} in the bass" if bass is not None
@@ -221,6 +242,75 @@ def same_chord(a: tuple[int, str], b: tuple[int, str]) -> bool:
 def named(c: tuple[int, str], bass: int | None) -> tuple[int, str]:
     """A diminished seven named by its bass, when the bass is one of its notes."""
     return (bass, "dim7") if c[1] == "dim7" and bass is not None and bass in tones(c) else c
+
+
+def judged_span(x: np.ndarray, rate: int, attack: int) -> dict:
+    """Where in `x` (the mix around a check's attack, which is at sample `attack`) its chord is judged:
+    from `SKIP_S` after its onset, until its level over 50 ms falls `SOUNDS_DB` under its peak or to
+    `OVER_ROOM_DB` over the room (the 10 ms levels' median before the onset), but `MIN_JUDGED_S` at
+    least. The onset is the steepest rise of the 10 ms levels within `ONSET_SEARCH_S` of the attack (an
+    attack is found a block at a time: the onset is up to a block after it, or just before), if that
+    rises `ONSET_DB` over the 50 ms before it; else the attack, with no room known. {"onset", "a", "b"}
+    (samples into x), "peak_dbfs", "room_dbfs" (None with no room known) and "sounds_s" (from the
+    onset)."""
+    hop = max(1, rate // 100)
+    n = len(x) // hop
+    if n < 2:
+        return {"onset": attack, "a": 0, "b": len(x), "peak_dbfs": None, "room_dbfs": None, "sounds_s": None}
+    pw = np.mean(x[: n * hop].astype(np.float64).reshape(n, hop) ** 2, axis=1) + 1e-20
+    lv = 10 * np.log10(pw)
+    k = min(n - 1, attack // hop)
+    lo, hi = max(1, k - int(ONSET_SEARCH_S * 100)), min(n, k + int(ONSET_SEARCH_S * 100) + 1)
+    on = lo + int(np.argmax(lv[lo:hi] - lv[lo - 1:hi - 1])) if hi > lo else k
+    if on < 3 or lv[on] - float(np.median(lv[max(0, on - 6): on - 1])) < ONSET_DB:
+        on = k  # no rise: a chord already sounding (a label's, or a replay's)
+        room = None
+    else:
+        room = float(np.median(lv[: on - 2]))
+    pk = on + int(np.argmax(lv[on: on + 10]))
+    peak = float(lv[pk])
+    smooth = 10 * np.log10(np.convolve(pw, np.ones(5) / 5, mode="same"))
+    stop = peak - SOUNDS_DB if room is None else max(peak - SOUNDS_DB, room + OVER_ROOM_DB)
+    below = np.nonzero(smooth[pk:] < stop)[0]
+    end = (pk + int(below[0])) * hop if len(below) else len(x)
+    a = min(len(x), on * hop + int(SKIP_S * rate))
+    b = min(len(x), max(end, a + int(MIN_JUDGED_S * rate)))
+    return {"onset": on * hop, "a": a, "b": b, "peak_dbfs": round(peak, 1),
+            "room_dbfs": None if room is None else round(room, 1), "sounds_s": round((end - on * hop) / rate, 2)}
+
+
+def heard_in(seg: np.ndarray, rate: int) -> tuple[Heard, list, int | None, float | None]:
+    """A check's span heard: its semitone saliences (`window_salience`), the bass over `CHECK_BASS`, the
+    chords scored (with the bass chroma only when the bass is in its range: else it holds only the
+    strike's thump and the room). (Heard, the six best [name, score], the bass's MIDI note, its share)."""
+    V = L.window_salience(seg, rate, 0.0, len(seg) / rate, min_fft=MIN_FFT)
+    bass_midi, bass_share = L.bass_note(V, rng=CHECK_BASS)
+    tr, bs = L.fold(V)
+    if bass_midi is None or bass_midi > L.BASS_RANGE[1]:
+        bs = None
+    s = L.chord_scores(tr, bs, 0.5, inversions=True, vocab=VOCAB)
+    order = np.argsort(s)[::-1]
+    return hear(V, s, bass_range=CHECK_BASS), [[chord_name(CHORDS[k]), round(float(s[k]), 3)] for k in order[:6]], \
+        bass_midi, bass_share
+
+
+RANG_S = 0.3  # what rang before a check's onset, for the piano detector: this long before it (as its study took it)
+
+
+def heard_by_piano(x: np.ndarray, rate: int, span: dict) -> tuple[Heard, list, int | None, None]:
+    """The same by the listener's piano detector (`hear_piano`: the notes that best explain the span's
+    peaks; the chord they make, the lowest note its bass). What rang in the `RANG_S` before the onset is
+    taken out only when the chord rose over it (an onset was found: before it, the room or an earlier
+    chord); a chord already sounding with no onset (a label's, held) would take itself out."""
+    a, b, on = span["a"] / rate, span["b"] / rate, span["onset"] / rate
+    rang = L.quiet_peaks(x, rate, max(0.0, on - RANG_S), on - 0.02) if span["room_dbfs"] is not None and on >= 0.1 \
+        else None
+    p = L.hear_piano(x, rate, a, b, vocab=VOCAB, rang=rang)
+    bass = p.bass % 12 if p.bass is not None else None
+    chord = named(tuple(p.chord), bass) if p.chord is not None else None
+    scores = [] if p.scores is None else [[chord_name(CHORDS[k]), round(float(p.scores[k]), 3)]
+                                          for k in np.argsort(p.scores)[::-1][:6]]
+    return heard_of(tuple(m for m, _ in p.notes), chord, bass), scores, p.bass, None
 
 
 def detector() -> str:
@@ -453,45 +543,48 @@ class Listener:
             if ck is not None and ck.state == "waiting" and before and loud and \
                     block_level - min(before) >= ATTACK_DB:
                 ck.state, ck.attack = "hearing", pos - n
-            judge = ck is not None and ck.state == "hearing" and pos >= ck.attack + int(CHECK_SPAN_S[1] * self.rate)
+            judge = ck is not None and ck.state == "hearing" and pos >= ck.attack + int(CHECK_S * self.rate)
         if judge:
             self._judge(ck)
         if ck is not None and ck.state == "done" and ck.id is None and pos >= ck.attack + int(CLIP_S[1] * self.rate):
             self._keep(ck)
 
     def _keep(self, ck: Check) -> None:
-        """The check's clip, from just before its attack, kept with what was asked and heard."""
-        sid = self._save("check" if ck.target is not None else "strike", ck.attack - int(CLIP_S[0] * self.rate),
-                         ck.attack + int(CLIP_S[1] * self.rate), ck.meta)
+        """The check's clip, from just before its attack, kept with what was asked and heard (and where
+        in it the attack is: less than CLIP_S[0] in when the listening began just before it)."""
+        p0 = ck.attack - int(CLIP_S[0] * self.rate)
+        with self.lock:
+            first = self.raw[0][0] if self.raw else p0
+        meta = {**(ck.meta or {}), "attack_s": round((ck.attack - max(p0, first)) / self.rate, 3)}
+        sid = self._save("check" if ck.target is not None else "strike", p0,
+                         ck.attack + int(CLIP_S[1] * self.rate), meta)
         with self.lock:
             ck.id = sid
 
     def _judge(self, ck: Check) -> None:
-        a, b = (ck.attack + int(t * self.rate) for t in CHECK_SPAN_S)
-        seg = self._between(a, b)
-        V = L.window_salience(seg, self.rate, 0.0, len(seg) / self.rate, min_fft=MIN_FFT)
-        tr, bs = L.fold(V)
-        s = L.chord_scores(tr, bs, 0.5, inversions=True, vocab=VOCAB)
-        order = np.argsort(s)[::-1]
-        bass_midi, bass_share = L.bass_note(V)
-        h = hear(V, s)
+        start = max(ck.attack - int(ROOM_S * self.rate), self.pos - self.K, 0)
+        x = self._between(start, ck.attack + int(CHECK_S * self.rate))
+        span = judged_span(x, self.rate, ck.attack - start)
+        if self.instrument == "piano" and hasattr(L, "hear_piano"):
+            h, scores, bass_midi, bass_share = heard_by_piano(x, self.rate, span)
+        else:
+            h, scores, bass_midi, bass_share = heard_in(x[span["a"]: span["b"]], self.rate)
         t = ck.target
         chord_right = bass_right = right = None
         heard_name = h.name
         if t is None:  # a strike: what it was comes later
             pass
         elif t.kind == "chord":  # judged as a chord whatever the count of notes
-            chord_right = same_chord(h.chord, t.chord)
+            chord_right = h.chord is not None and same_chord(h.chord, t.chord)
             bass_right = h.bass == (t.chord[0] if t.bass is None else t.bass)
             right = chord_right and bass_right
-            heard_name = chord_name(h.chord, h.bass)
+            heard_name = chord_name(h.chord, h.bass) if h.chord is not None else None
         elif t.kind == "note":
             right = h.kind == "note" and h.notes[0] == t.midi
             heard_name = h.name
         else:
             right = h.kind == "pair" and {m % 12 for m in h.notes} == set(t.pcs)
             heard_name = h.name
-        scores = [[chord_name(CHORDS[k]), round(float(s[k]), 3)] for k in order[:6]]
         with self.lock:
             ck.heard, ck.scores, ck.state = h, scores, "done"
             ck.chord_right, ck.bass_right, ck.right = chord_right, bass_right, right
@@ -501,7 +594,11 @@ class Listener:
                        "heard_detail": h.detail, "notes_heard": [note_name(m) for m in h.notes],
                        "bass": NAMES[h.bass] if h.bass is not None else None, "bass_midi": bass_midi,
                        "bass_share": bass_share, "scores": scores, "attack_s": CLIP_S[0],
-                       "judged_s": list(CHECK_SPAN_S)}
+                       # where the chord began and was judged, in seconds from the attack; its levels
+                       "onset_s": round((span["onset"] + start - ck.attack) / self.rate, 3),
+                       "judged_s": [round((span[k] + start - ck.attack) / self.rate, 3) for k in ("a", "b")],
+                       "sounds_s": span["sounds_s"], "peak_dbfs": span["peak_dbfs"],
+                       "room_dbfs": span["room_dbfs"]}
 
     # --- checks and labels
 

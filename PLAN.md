@@ -560,6 +560,54 @@ same way).
   not. The loop gives way to another found the same way, and goes once two chords in its last two
   rounds are not its own. Before, an Am-G loop held on through C-Am-F-G. The home tile shows the bar's
   chord once it is sure. Deployed 2026-10-16, about 08:50 (everything idle).
+- **Checks at every register, and chords that don't ring** (2026-10-16, the player: "the chord
+  detector gets many wrong. some octaves are fine and others are not. chords that don't ring are not
+  detected well"). Studied on the 32 clips kept that morning (16 labels 07:14-07:47, 16 checks
+  08:12-08:15; piano, the room mic). `tools/check_study.py DIR` judges each again through the app's
+  `Listener._judge` (`--livechords` for another listener, `--old-span`, `--compare`, a CSV) and
+  breaks the results down by register (the octaves of the lowest and highest notes played, read from
+  the spectrum against the target) and by ring (damped: under 0.4 s to 20 dB under its peak; short:
+  under 1 s; rings; held: a label with no attack; faint: no target note over the room). The replay of
+  the deployed code gives every check's kept verdict (16 of 16).
+  - **What failed, as deployed** (8 of the 16 checks right, 20 of the 32 clips):
+    - Chords over E4: the bass was the lowest strong peak from E1 to E4 only. F5-A5-C6 was F/F#
+      (the room's hum its bass); F4-A4-C5, A4-C5-E5 and C6-E6-G6 had none.
+    - Chords that don't ring: a check was judged over 0.1-1.1 s after the attack whatever the chord
+      did. A C damped at 0.25 s had 2.6% of that window's weight, and half the window's energy came
+      after it; the soft F near F1 was over before the window opened. A chord with nothing in the
+      bass chroma's range (E1-D3) got a bass chroma of the strike's thump (near 115 Hz, 20-25 dB
+      under the chord): the chroma is scaled by its own sum, so the thump counted in full. C was C7.
+    - Low chords: partials taken for notes (a low root's seventh partial made C7 and F7; G#2's made
+      Abm of an E).
+    - `attack_s` (0.3) and `judged_s` ([0.1, 1.1]) were constants: where the attack is in the clip,
+      and the span after it. The attack is found a block (0.1 s) at a time: the onsets were 0.01-0.09
+      s after it, and once 0.04 s before.
+  - **Changed:** a check is judged from 50 ms after the chord's onset (the steepest 10 ms rise
+    within 0.1 s of the attack) until it falls 30 dB under its peak or to 10 dB over the room, 0.2 s
+    at least, up to 1.1 s after the attack as before. Its bass is looked for from E1 to the top of the
+    pitch axis, and a chord whose bass is over D3 is scored without the bass chroma. For the piano, the
+    span is judged by the merged listener's piano detector (`hear_piano`: notes A0-C8, the chord they
+    make, the lowest note the bass; what rang in the 0.3 s before the onset taken out only when the
+    chord rose over it). Other instruments keep the chroma. A clip keeps the second before its attack,
+    and its sidecar the onset, the span judged, how long the chord sounded and its levels.
+  - **Results** (the 32 clips / the 16 checks right): as deployed 20 / 8; the new span and bass with
+    the deployed listener 26 / 13; with the piano detector 28 / 15. Of the checks: damped 0/3, 2/3,
+    3/3; short 2/5, 5/5, 5/5; ringing 6/7, 6/7, 7/7; lowest note in octave 4 1/3 to 3/3, in 5 0/2 to
+    2/2, in 6 0/1 to 1/1. Nothing right before went wrong, except one held label with the piano
+    detector (a Bb heard Bb/F: an F2 33 dB under the Bb2, played softly or ringing in sympathy).
+    Still wrong: the soft F near F1 (18 dB over the room, no fundamental clear) and the C4 and D3
+    labels, whose clips hold no note (its partials at -95 dBFS, within 10 dB of the floor).
+  - **What holds and what doesn't:** the span's settings were reasoned, not fitted, and the counts
+    stay within one check over 0-0.05 s from the onset, 25-60 dB under the peak, 3-20 dB over the room
+    and 0.1-0.6 s at least; 0.08 s or more from the onset loses the damped chords. These are 32 clips
+    with 3 damped checks: the counts move by single clips. The register is the study's estimate; it
+    agreed with a reading of the spectra on 31 of the 32 (the F near F1 is the player's). On
+    synthetic chords damped at 0.2-0.5 s with the bass in octaves 1-3, the piano detector is right on
+    14 of 27 over the new span and 9 over the old: short low chords are still the weak spot.
+  - Tests: `tests/test_checks.py` strikes chords with the piano's partials (its tuning and stretch)
+    over a room's hum and each strike's thump, damped and ringing, A0 to G6, on both paths. DemoSource's
+    checks judge as "other": its partials are exact harmonics, and the piano detector hears its Dm as
+    D2 and F3.
 - **Deployed 2026-10-16, about 07:10** (both recorders idle). The installer added
   `/etc/chord-listener.toml` and the unit; by hand, the peers line of `/etc/practice-recorder.toml` and
   `/etc/exercise-recorder.toml` and the tile in `/etc/room-home.toml` (copies kept as
