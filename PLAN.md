@@ -374,6 +374,30 @@ on the same screen as the controls, so a take needs little preparation.
   its median. On the takes of 2026-10-13 to 15 (15 through the 18i8, 11 through the BMG-04F):
   all found, 24 at the lag measured by hand (one BMG-04F take 28 ms off, one 18i8 take 13 ms);
   a click at the wrong tempo never found. Not yet deployed.
+- **The start panel** (2026-10-15, the player's feedback: "the ui for starting a recording is
+  bewildering"; a backing pushed that day could not be found, and a guitar take went in as
+  "another instrument (not listed)"). The controls above Record now say what the next take is:
+  - **What:** a switch, Exercise or Free take, in one tap (the last exercise comes back); the
+    card under it opens the picker, which no longer has a Free take button.
+  - **From the speakers:** a switch, the click (Nothing, for a free take) or a backing track
+    (with how many there are), and a list of the backings when that is chosen. The backings
+    are listed again every 8 s while the page is idle and in view, and when the switch is
+    touched, so one pushed while the page is open shows up (and is the one offered next)
+    without a reload. Remembered apart for exercises and free takes.
+  - **Played on:** every known instrument, the exercise's kind first, and for each kind one
+    not listed ("Another guitar (not listed)", "A banjo (not listed)"), then "Something else".
+    The sidecar's `instrument_name` for one not listed is "a guitar (not listed)" ("an
+    instrument (not listed)" for something else), and a free take's sidecar gets
+    `instrument` (the kind).
+  - **Tempo:** a control that does not apply is off and says why ("120 bpm, set by the
+    backing"; "No click: the backing plays instead"; a free take has no click or count-in).
+  - Beside Record, the next take in a sentence (what, over what, on what); while recording,
+    the count-in and the bar there instead.
+  - Tried on the desktop (fake device, headless Chromium at 1180x820, 820x1180 and 390x844,
+    light and dark): each mode's request, a backing added while the page was open (listed
+    within 9 s), a free take on "other:guitar" (its sidecar: "a guitar (not listed)",
+    `instrument` guitar). Record ends at 667 px over the click and 711 px over a backing, in
+    820 px. Not yet deployed.
 - **Next:** a tool to bring exercise takes into dobro-transcription with
   their `takes.csv` rows (`tools/pull-take` reads only the practice
   recorder's takes; exercise takes need `/etc/exercise-recorder.toml`),

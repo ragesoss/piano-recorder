@@ -10,6 +10,7 @@ EXERCISE_RECORDER_CONFIG=config/exercises-dev.toml python -m exercises.server
 """
 
 import os
+import re
 from pathlib import Path
 
 import uvicorn
@@ -48,6 +49,28 @@ class PlayIn(BaseModel):
 
 class SettingsIn(BaseModel):
     level_offset_db: float
+
+
+OTHER_KIND_RE = re.compile(r"^[a-z][a-z0-9 -]{0,29}$")  # "other:guitar": a kind of instrument, not one the project knows
+
+
+def instrument_meta(instrument_id: str, known: list[dict]) -> dict | None:
+    """What a take's sidecar says it was played on: a known instrument (GET /api/instruments)
+    by its name, or one not listed by its kind ("other:guitar": "a guitar (not listed)";
+    "other:": "an instrument (not listed)"). None: not a known instrument or a kind."""
+    by_id = {i["id"]: i for i in known}
+    if instrument_id in by_id:
+        i = by_id[instrument_id]
+        return {"instrument_id": instrument_id, "instrument_name": i["name"], "kind": i["kind"]}
+    if not instrument_id.startswith("other:"):
+        return None
+    kind = instrument_id[len("other:"):]
+    if not kind:
+        return {"instrument_id": instrument_id, "instrument_name": "an instrument (not listed)", "kind": ""}
+    if not OTHER_KIND_RE.match(kind):
+        return None
+    article = "an" if kind[0] in "aeiou" else "a"
+    return {"instrument_id": instrument_id, "instrument_name": f"{article} {kind} (not listed)", "kind": kind}
 
 
 def create_app(cfg: Config) -> FastAPI:
@@ -137,15 +160,12 @@ def create_app(cfg: Config) -> FastAPI:
             ex = guard(exercises.get, body.exercise)
             meta = {"exercise": ex.id, "exercise_title": ex.title, "instrument": ex.instrument}
         if body.instrument_id:
-            known = {i["id"]: i for i in exercises.instruments()}
-            if body.instrument_id in known:
-                meta |= {"instrument_id": body.instrument_id, "instrument_name": known[body.instrument_id]["name"],
-                         "instrument": meta.get("instrument") or known[body.instrument_id]["kind"]}
-            elif body.instrument_id.startswith("other:") and len(body.instrument_id) <= 40:
-                kind = body.instrument_id[6:] or "instrument"
-                meta |= {"instrument_id": body.instrument_id, "instrument_name": f"another {kind} (not listed)"}
-            else:
+            played_on = instrument_meta(body.instrument_id, exercises.instruments())
+            if played_on is None:
                 raise HTTPException(400, "unknown instrument")
+            meta |= {"instrument_id": played_on["instrument_id"], "instrument_name": played_on["instrument_name"]}
+            if not meta.get("instrument") and played_on["kind"]:  # a free take: at least the kind
+                meta["instrument"] = played_on["kind"]
         if body.backing:
             return {"take": guard(engine.start_recording, body.backing, body.count_in, meta=meta)}
         if ex is not None and (body.click or body.count_in):

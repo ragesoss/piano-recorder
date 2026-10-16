@@ -151,3 +151,30 @@ def test_without_a_status_file_the_app_still_lists_and_records(client):
     exs = client.get("/api/exercises").json()
     assert all(e["status"] == "" and e["to_review"] == 0 for e in exs)
     assert client.get("/api/instruments").json() == []
+
+
+def test_an_instrument_not_listed_is_named_by_its_kind():
+    from exercises.server import instrument_meta
+    known = [{"id": "cleveland", "kind": "bass", "short": "Cleveland", "name": "New Standard Cleveland", "details": ""}]
+    assert instrument_meta("cleveland", known) == {"instrument_id": "cleveland", "instrument_name": "New Standard Cleveland",
+                                                   "kind": "bass"}
+    assert instrument_meta("other:guitar", known)["instrument_name"] == "a guitar (not listed)"
+    assert instrument_meta("other:bass", known)["instrument_name"] == "a bass (not listed)"
+    assert instrument_meta("other:oud", known)["instrument_name"] == "an oud (not listed)"
+    assert instrument_meta("other:", known) == {"instrument_id": "other:", "instrument_name": "an instrument (not listed)",
+                                                "kind": ""}
+    for bad in ("nope", "other:Guitar", "other:<b>", "other:" + "x" * 40, "other: guitar"):
+        assert instrument_meta(bad, known) is None, bad
+
+
+def test_a_free_take_on_a_guitar_not_listed_keeps_the_kind_in_its_sidecar(client, tmp_path):
+    assert client.post("/api/record/start", json={"instrument_id": "other:<b>"}).status_code == 400
+    take = client.post("/api/record/start", json={"instrument_id": "other:guitar", "click": False,
+                                                  "count_in": False}).json()["take"]
+    time.sleep(0.3)
+    client.post("/api/record/stop")
+    wait_idle(client)
+    t = next(x for x in client.get("/api/takes").json() if x["id"] == take)
+    assert t["exercise"] is None and t["instrument_id"] == "other:guitar" and t["instrument_name"] == "a guitar (not listed)"
+    side = json.loads((tmp_path / "takes" / f"{take}.json").read_text())
+    assert side["instrument"] == "guitar"

@@ -33,7 +33,7 @@ class Take:
     exercise_title: str | None = None
     tempo_bpm: float | None = None
     beat0_s: float | None = None
-    # which instrument it was played on, of those the project knows (or "another ...")
+    # which instrument it was played on, of those the project knows (or "a guitar (not listed)")
     instrument_id: str | None = None
     instrument_name: str | None = None
 

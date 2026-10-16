@@ -12,15 +12,16 @@
 :root {
   --bg: #f1f1ee; --card: #ffffff; --text: #1b1d22; --muted: #6b6f78; --line: #e2e2de;
   --rec: #d93a3f; --rec-text: #ffffff; --ok: #2f9e5b; --warn: #d9a400; --accent: #2d6cdf;
-  --meter-bg: #e9e9e6; --paper: #ffffff; --warn-text: #8a6700;
+  --meter-bg: #e9e9e6; --paper: #ffffff; --warn-text: #8a6700; --on-accent: #ffffff;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #16181d; --card: #1f2229; --text: #eceef2; --muted: #9aa0ab; --line: #2e323b;
-    --rec: #e5484d; --meter-bg: #2a2e36; --accent: #6b9cff; --paper: #f4f2ec; --warn-text: #e2b93b;
+    --rec: #e5484d; --meter-bg: #2a2e36; --accent: #6b9cff; --paper: #f4f2ec; --warn-text: #e2b93b; --on-accent: #16181d;
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
@@ -79,27 +80,51 @@ button.small {
   border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 10px;
   padding: 8px 12px; font-size: 15px; cursor: pointer; min-height: 44px; min-width: 44px;
 }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 button:disabled { opacity: .45; }
-.toggles { display: flex; gap: 16px; font-size: 15px; }
-.toggles label { display: flex; align-items: center; gap: 6px; min-height: 36px; }
-.toggles input { width: 20px; height: 20px; accent-color: var(--accent); }
-.rec { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 6px 0; }
+.toggles { display: flex; gap: 6px 18px; font-size: 15px; flex-wrap: wrap; }
+.toggles label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.toggles input { width: 22px; height: 22px; accent-color: var(--accent); margin: 0; }
+.toggles .why { align-self: center; flex: 1 1 12em; }
+/* the start panel: what the next take is, over what, on what, at what tempo */
+fieldset.start { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.label { font-size: 13px; font-weight: 600; color: var(--muted); }
+.why { font-size: 13px; color: var(--muted); }
+.why:empty { display: none; }
+.seg { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 12px; background: var(--meter-bg); }
+.seg button { flex: 1; min-height: 44px; border: 0; border-radius: 9px; background: transparent; color: var(--text);
+  font: inherit; font-weight: 600; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.seg button:disabled { opacity: .45; }
+.seg .n { font-weight: 400; }
+.tempo .bpm-box { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.tempo .bpm-box .why { font-size: 12px; line-height: 1.25; text-align: center; }
+.tempo .bpm.off { color: var(--muted); }
+fieldset:disabled .toggles label { cursor: default; }
+/* Record, and beside it the next take in a sentence; while recording, where the player is */
+.rec { display: flex; flex-direction: column; gap: 8px; padding: 2px 0; }
+.rec-row { display: flex; align-items: center; gap: 14px; }
+.rec-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#summary { font-size: 14px; line-height: 1.35; }
 #recBtn {
-  width: 118px; height: 118px; border-radius: 50%; border: 0; cursor: pointer;
+  width: 100px; height: 100px; flex: none; border-radius: 50%; border: 0; cursor: pointer;
   background: var(--rec); color: var(--rec-text); font-size: 20px; font-weight: 600;
   box-shadow: 0 2px 10px rgba(0,0,0,.15);
 }
-#recBtn.active { border-radius: 26px; animation: pulse 1.6s ease-in-out infinite; }
+#recBtn.active { border-radius: 24px; animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .82; } }
 #recBtn:disabled { opacity: .45; }
-#where { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; min-height: 1.3em; text-align: center; }
+#where { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.25; }
 #where.count { color: var(--rec); font-size: 34px; }
-#timer { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 1.2em; }
+#timer { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+#where:empty, #timer:empty { display: none; }
 .meter { width: 100%; height: 12px; background: var(--meter-bg); border-radius: 6px; overflow: hidden; position: relative; }
 .meter > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ok); transition: width .12s linear; }
 .meter > b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: .6; left: 0; }
-#clip { color: var(--rec); font-weight: 600; font-size: 14px; min-height: 1.2em; text-align: center; }
+#clip { color: var(--rec); font-weight: 600; font-size: 14px; text-align: center; }
+#clip:empty { display: none; }
 .now { display: none; border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
 .now.show { display: block; }
 .now-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -165,13 +190,14 @@ button.current:disabled { opacity: .55; }
 .ex-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .ex-title { font-weight: 600; font-size: 16px; }
 .ex-sub { font-size: 13px; color: var(--muted); }
-.instr { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); margin-top: 8px; }
-.instr select { flex: 1; min-height: 40px; }
 li.group { padding: 12px 16px 4px; font-size: 13px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); }
 @media (max-width: 860px) {  /* a phone, or the iPad held upright: controls under the score */
   body { overflow: auto; }
   .app { display: block; height: auto; }
   .side { border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (min-width: 600px) and (max-width: 860px) {  /* the iPad upright: the start panel in two columns */
+  fieldset.start { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; align-items: start; }
 }
 </style>
 </head>
@@ -187,33 +213,60 @@ li.group { padding: 12px 16px 4px; font-size: 13px; color: var(--muted); font-we
 
     <div id="error"></div>
 
-    <div>
-      <button class="current" id="exPick" aria-haspopup="dialog">
-        <span class="cur-line"><span class="cur-num" id="curNum"></span><span class="cur-title" id="curTitle">Choose an exercise</span><span class="chev">›</span></span>
-        <span class="cur-status" id="curStatus"></span>
-      </button>
-      <div class="meta" id="exMeta"></div>
-      <label class="instr"><span>Played on</span><select id="instrSel" aria-label="The instrument played"></select></label>
-    </div>
+    <fieldset class="start" id="startPanel">
+      <legend class="vh">The next take</legend>
 
-    <div class="row tempo" id="tempoRow">
-      <button class="small" id="slower" aria-label="Slower">−</button>
-      <span class="bpm" id="bpm">–</span>
-      <button class="small" id="faster" aria-label="Faster">+</button>
-      <button class="small" id="tempoReset" title="The score's tempo">↺</button>
-    </div>
+      <div class="field">
+        <div class="seg" role="group" aria-label="What to record">
+          <button type="button" id="modeEx" aria-pressed="true">Exercise</button>
+          <button type="button" id="modeFree" aria-pressed="false">Free take</button>
+        </div>
+        <button type="button" class="current" id="exPick" aria-haspopup="dialog">
+          <span class="cur-line"><span class="cur-num" id="curNum"></span><span class="cur-title" id="curTitle">Choose an exercise</span><span class="chev">›</span></span>
+          <span class="cur-status" id="curStatus"></span>
+        </button>
+        <div class="meta" id="exMeta"></div>
+      </div>
 
-    <div class="toggles">
-      <label><input type="checkbox" id="countIn" checked> Count-in</label>
-      <label><input type="checkbox" id="click" checked> Click</label>
-    </div>
+      <div class="field">
+        <div class="label" id="guideLabel">From the speakers</div>
+        <div class="seg" id="guideSeg" role="group" aria-labelledby="guideLabel">
+          <button type="button" id="guideClick" aria-pressed="true">The click</button>
+          <button type="button" id="guideBacking" aria-pressed="false">Backing track</button>
+        </div>
+        <select id="backingSel" aria-label="Which backing track" hidden></select>
+      </div>
 
-    <select id="guideSel" aria-label="What plays"></select>
+      <div class="field">
+        <label class="label" for="instrSel">Played on</label>
+        <select id="instrSel"></select>
+      </div>
+
+      <div class="field">
+        <div class="label">Tempo</div>
+        <div class="row tempo" id="tempoRow">
+          <button type="button" class="small" id="slower" aria-label="Slower">−</button>
+          <span class="bpm-box"><span class="bpm" id="bpm">–</span><span class="why" id="bpmWhy"></span></span>
+          <button type="button" class="small" id="faster" aria-label="Faster">+</button>
+          <button type="button" class="small" id="tempoReset" title="The score's tempo" aria-label="The score's tempo">↺</button>
+        </div>
+        <div class="toggles">
+          <label id="countInBox"><input type="checkbox" id="countIn" checked><span>Count-in</span></label>
+          <label id="clickBox"><input type="checkbox" id="click" checked><span>Click on every beat</span></label>
+          <span class="why" id="tempoWhy"></span>
+        </div>
+      </div>
+    </fieldset>
 
     <div class="rec">
-      <button id="recBtn">Record</button>
-      <div id="where"></div>
-      <div id="timer"></div>
+      <div class="rec-row">
+        <button id="recBtn">Record</button>
+        <div class="rec-side">
+          <div id="summary"></div>
+          <div id="where"></div>
+          <div id="timer"></div>
+        </div>
+      </div>
       <div class="meter" aria-label="input level"><i id="meterBar"></i><b id="peakMark"></b></div>
       <div id="clip"></div>
     </div>
@@ -239,7 +292,6 @@ li.group { padding: 12px 16px 4px; font-size: 13px; color: var(--muted); font-we
   <div class="picker-box" role="dialog" aria-label="Choose an exercise">
     <div class="picker-head">
       <div class="tabs" id="tabs"></div>
-      <button class="small" id="freeTake">Free take</button>
       <button class="small primary" id="pickClose">Done</button>
     </div>
     <div class="filters" id="filters"></div>
@@ -251,6 +303,7 @@ li.group { padding: 12px 16px 4px; font-size: 13px; color: var(--muted); font-we
 document.getElementById("home").href = `http://${location.hostname}/`;
 const $ = (id) => document.getElementById(id);
 let status = null, takesVersion = -1, takes = [], pollTimer = null, exercises = [], backings = [];
+let backingsAt = Date.now(), backingsLoaded = false;  // when the backing tracks were last listed (one can be pushed while the page is open)
 let selectedId = null;  // the exercise chosen ("" for a free take)
 let instrumentsKnown = [];  // the instruments the project keeps notes on (status.json)
 const store = {
@@ -287,7 +340,11 @@ async function act(fn) { try { showError(""); await fn(); } catch (e) { showErro
 
 // --- the exercise and its score
 function current() { return exercises.find((e) => e.id === selectedId) || null; }
-function backing() { return backings.find((b) => b.id === $("guideSel").value) || null; }
+// what plays from the speakers: "click" (the click for an exercise, nothing for a free take) or a
+// backing's id; remembered apart for exercises and free takes
+let guide = "click";
+function guideKey() { return selectedId ? "guide:exercise" : "guide:free"; }
+function backing() { return backings.find((b) => b.id === guide) || null; }
 function tempoFor(ex) { return ex ? Number(store.get(`tempo:${ex.id}`, ex.tempo.bpm)) : null; }
 
 // what the project has of each exercise (status.json, from dobro-transcription), and what is here
@@ -314,45 +371,90 @@ function instruments() {
 }
 
 async function refreshExercises(first) {
+  let list;
   try {
-    [exercises, backings, instrumentsKnown] = await Promise.all(
+    [exercises, list, instrumentsKnown] = await Promise.all(
       [api("GET", "/api/exercises"), api("GET", "/api/backings"), api("GET", "/api/instruments")]);
   } catch (e) { return; }
-  const g = $("guideSel"), gkeep = g.value || store.get("guide", "click");
-  g.innerHTML = "";
-  const c = document.createElement("option"); c.value = "click"; c.textContent = "Click from the speakers"; g.appendChild(c);
-  for (const b of backings) {
-    const o = document.createElement("option"); o.value = b.id; o.textContent = `Along with: ${b.title}`; g.appendChild(o);
-  }
-  g.value = [...g.options].some((o) => o.value === gkeep) ? gkeep : "click";
+  newBackings(list);
   if (first || selectedId === null || (selectedId && !exercises.some((e) => e.id === selectedId))) {
     const keep = first ? store.get("exercise", null) : null;
     selectedId = keep === "" ? "" : exercises.some((e) => e.id === keep) ? keep : firstExercise();
     showExercise();
-  } else showCurrent();
+  } else { showCurrent(); renderGuide(); }
   if (!$("picker").hidden) renderPicker();
 }
+// the backing tracks again, every so often: one pushed while the page is open shows up without a reload
+async function refreshBackings() {
+  backingsAt = Date.now();
+  let list;
+  try { list = await api("GET", "/api/backings"); } catch (e) { return; }
+  if (newBackings(list)) renderGuide();
+}
+function newBackings(list) {  // true when the list changed
+  backingsAt = Date.now();
+  if (backingsLoaded && JSON.stringify(list) === JSON.stringify(backings)) return false;
+  const had = new Set(backings.map((b) => b.id)), added = list.filter((b) => !had.has(b.id));
+  if (added.length && backingsLoaded) store.set("backing", added[0].id);  // the one just pushed is the one offered next
+  backings = list; backingsLoaded = true;
+  return true;
+}
 
-// which instrument the take is on: the known ones of the exercise's kind, or another
+// which instrument the take is on: the known ones (the exercise's kind first), or one not listed,
+// by its kind, so the take says at least that ("a guitar (not listed)", as the server writes it)
+const KIND_RE = /^[a-z][a-z0-9 -]{0,29}$/;  // a kind the server takes in "other:<kind>"
 function instrKind() { const ex = current(); return ex ? (ex.instrument || "") : ""; }
+function notListed(kind) { return kind ? `${/^[aeiou]/.test(kind) ? "an" : "a"} ${kind} (not listed)` : "an instrument (not listed)"; }
+function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
+function instrKinds() {
+  const own = instrKind(), rank = (k) => (k === own ? -1 : ORDER.indexOf(k) < 0 ? 99 : ORDER.indexOf(k));
+  const all = new Set([...ORDER, ...instrumentsKnown.map((i) => i.kind), ...exercises.map((e) => e.instrument || "")]);
+  return [...all].filter(Boolean).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+}
 function renderInstruments() {
-  const sel = $("instrSel"), kind = instrKind();
-  const list = kind ? instrumentsKnown.filter((i) => i.kind === kind) : instrumentsKnown;
+  const sel = $("instrSel"), own = instrKind();
   sel.innerHTML = "";
-  for (const i of list) {
-    const o = document.createElement("option");
-    o.value = i.id; o.textContent = kind ? i.short : `${instName(i.kind)}: ${i.short}`; o.title = `${i.name}: ${i.details}`;
-    sel.appendChild(o);
+  for (const kind of instrKinds()) {
+    const g = document.createElement("optgroup"), mine = instrumentsKnown.filter((i) => i.kind === kind);
+    g.label = instName(kind);
+    for (const i of mine) {
+      const o = document.createElement("option");
+      o.value = i.id; o.textContent = i.short; o.title = [i.name, i.details].filter(Boolean).join(": ");
+      g.appendChild(o);
+    }
+    if (KIND_RE.test(kind)) {
+      const o = document.createElement("option");
+      o.value = `other:${kind}`; o.textContent = mine.length ? `Another ${kind} (not listed)` : cap(notListed(kind));
+      g.appendChild(o);
+    }
+    if (g.children.length) sel.appendChild(g);
   }
   const other = document.createElement("option");
-  other.value = `other:${kind}`; other.textContent = kind ? `Another ${kind} (not listed)` : "Not listed";
+  other.value = "other:"; other.textContent = "Something else (not listed)";
   sel.appendChild(other);
-  const keep = store.get(`instr:${kind}`, list[0] ? list[0].id : other.value);
-  sel.value = [...sel.options].some((o) => o.value === keep) ? keep : sel.options[0].value;
+  // remembered per kind; else the first of the exercise's kind (the first listed, for a free take)
+  const keep = store.get(`instr:${own}`, null), has = (v) => [...sel.options].some((o) => o.value === v);
+  const first = instrumentsKnown.find((i) => i.kind === own);
+  sel.value = has(keep) ? keep : first ? first.id : own && has(`other:${own}`) ? `other:${own}` : sel.options[0].value;
+  showInstrument();
+}
+function instrument() {  // what was chosen: a known one, or {kind} for one not listed
+  const v = $("instrSel").value || "";
+  return instrumentsKnown.find((i) => i.id === v) || (v.startsWith("other:") ? { kind: v.slice(6), other: true } : null);
+}
+function showInstrument() {
+  const i = instrument();
+  $("instrSel").title = !i ? "" : i.other ? `The take will say “${notListed(i.kind)}”` : [i.name, i.details].filter(Boolean).join(": ");
+  renderSummary();
 }
 
 function showCurrent() {
   const ex = current(), st = ex ? state(ex) : null;
+  $("modeEx").setAttribute("aria-pressed", ex ? "true" : "false");
+  $("modeFree").setAttribute("aria-pressed", ex ? "false" : "true");
+  $("modeEx").disabled = !exercises.length;
+  $("modeEx").title = exercises.length ? "" : "No exercises on the control unit yet";
+  $("exPick").hidden = !ex; $("exMeta").hidden = !ex;
   renderInstruments();
   $("curNum").textContent = ex ? [instName(ex.instrument), exNum(ex)].filter(Boolean).join(" ") : "";
   $("curTitle").textContent = ex ? shortTitle(ex) : "Free take";
@@ -441,10 +543,11 @@ async function showReadme(ex) {
 function showExercise() {
   const ex = current();
   store.set("exercise", ex ? ex.id : "");
+  if (ex) store.set("lastExercise", ex.id);
   const score = $("score");
   score.innerHTML = "";
   if (!ex) {
-    score.innerHTML = '<div class="none">A free take: no score, no click (or along with a backing track).</div>';
+    score.innerHTML = '<div class="none">A free take: no score. Play anything, alone or along with a backing track.</div>';
   } else {
     if (ex.readme) showReadme(ex);
     ex.pages.forEach((_, i) => {
@@ -457,8 +560,16 @@ function showExercise() {
     score.scrollTop = 0;
   }
   showCurrent();
-  showGuide();
+  renderGuide();
   takesVersion = -1; poll(true);
+}
+// the start panel's switch: an exercise (the last one chosen) or a free take, in one tap
+function setMode(exercise) {
+  if (!!selectedId === exercise) return;
+  if (!exercise) { selectedId = ""; showExercise(); return; }
+  const keep = store.get("lastExercise", null);
+  selectedId = exercises.some((e) => e.id === keep) ? keep : firstExercise();
+  if (selectedId) showExercise(); else openPicker();
 }
 
 // --- the picker: by instrument, each exercise with what it still wants
@@ -524,16 +635,72 @@ function renderPicker() {
   }
 }
 
+// --- what plays from the speakers: the click (nothing, for a free take) or a backing track
+let backingsStale = false;  // the list changed while its select was open
+function renderGuide() {
+  const keep = store.get(guideKey(), null) || "click";
+  guide = keep !== "click" && backings.some((b) => b.id === keep) ? keep : "click";
+  renderBackings();
+  showGuide();
+}
+function renderBackings() {
+  const sel = $("backingSel");
+  if (document.activeElement === sel) { backingsStale = true; return; }
+  backingsStale = false;
+  sel.innerHTML = "";
+  for (const b of backings) {
+    const o = document.createElement("option");
+    o.value = b.id; o.textContent = b.title;
+    sel.appendChild(o);
+  }
+  const want = backing() ? guide : store.get("backing", null);
+  if (backings.length) sel.value = backings.some((b) => b.id === want) ? want : backings[0].id;
+}
+function setGuide(value) {
+  guide = value;
+  store.set(guideKey(), value);
+  if (value !== "click") store.set("backing", value);
+  showGuide();
+}
+// the tempo, the count-in and the click: on or off for what plays, and why when off
 function showGuide() {
-  const ex = current(), bk = backing();
-  store.set("guide", $("guideSel").value);
-  const clickable = !!ex && !bk;
-  $("tempoRow").style.opacity = clickable ? 1 : 0.4;
+  const ex = current(), bk = backing(), n = backings.length;
+  $("guideClick").textContent = ex ? "The click" : "Nothing";
+  $("guideClick").setAttribute("aria-pressed", bk ? "false" : "true");
+  $("guideBacking").setAttribute("aria-pressed", bk ? "true" : "false");
+  $("guideBacking").disabled = !n;
+  $("guideBacking").innerHTML = n ? `Backing track <span class="n">(${n})</span>` : "No backing tracks";
+  $("backingSel").hidden = !bk;
+  // a control that does not apply over this is off, and hidden behind the reason
+  const clickable = !!ex && !bk, countable = clickable || !!(bk && bk.tempo);
   for (const id of ["slower", "faster", "tempoReset"]) $(id).disabled = !clickable;
-  $("click").disabled = !clickable;
-  $("countIn").disabled = !(clickable || (bk && bk.tempo));
-  $("bpm").innerHTML = clickable ? `${Math.round(tempoFor(ex))} <small>bpm</small>`
-    : bk ? (bk.tempo ? `${Math.round(bk.tempo.bpm)} <small>bpm</small>` : "–") : "–";
+  $("click").disabled = !clickable; $("clickBox").hidden = !clickable;
+  $("countIn").disabled = !countable; $("countInBox").hidden = !countable;
+  const bpm = clickable ? tempoFor(ex) : bk && bk.tempo ? bk.tempo.bpm : null;
+  $("bpm").innerHTML = bpm ? `${Math.round(bpm)} <small>bpm</small>` : "–";
+  $("bpm").classList.toggle("off", !clickable);
+  $("bpmWhy").textContent = clickable ? "" : bk ? (bk.tempo ? "set by the backing" : "the backing's is not known") : "none: no click";
+  $("tempoWhy").textContent = clickable ? (!$("click").checked && !$("countIn").checked ? "Nothing plays: no count-in, no click." : "")
+    : bk ? (bk.tempo ? "No click: the backing plays instead." : "No count-in (the backing's tempo is not known), no click (the backing plays instead).")
+    : "A free take has no click or count-in; a backing track with a tempo has a count-in.";
+  renderSummary();
+}
+// the next take in a sentence: what, over what, on what
+function renderSummary() {
+  const ex = current(), bk = backing(), i = instrument();
+  const countIn = $("countIn").checked && !$("countIn").disabled;
+  let over;
+  if (bk) over = `along with “${bk.title}” (${fmt(bk.seconds)})` + (countIn ? `, after a count-in at ${Math.round(bk.tempo.bpm)}` : "");
+  else if (ex) {
+    const bpm = Math.round(tempoFor(ex)), click = $("click").checked;
+    over = click && countIn ? `over the click at ${bpm}, after a bar's count-in` : click ? `over the click at ${bpm}, no count-in`
+      : countIn ? `after a bar's count-in at ${bpm}, then no click` : "with nothing playing";
+  } else over = "with nothing playing";
+  const what = !ex ? "A free take" : exNum(ex) ? `${instName(ex.instrument)} ${exNum(ex)}, ${shortTitle(ex)}` : ex.title;
+  const on = !i ? "" : i.other ? notListed(i.kind) : `the ${i.short}`;
+  const s = $("summary");
+  s.innerHTML = "<b>Next take:</b> ";
+  s.append(`${what}, ${over}` + (on ? `, on ${on}.` : "."));
 }
 function nudge(d) {
   const ex = current(); if (!ex) return;
@@ -623,7 +790,8 @@ function render(s) {
   btn.textContent = rec ? "Stop" : "Record";
   btn.classList.toggle("active", !!rec);
   btn.disabled = !s.devices.capture && !rec;
-  for (const id of ["exPick", "guideSel", "instrSel"]) $(id).disabled = !!rec;
+  $("startPanel").disabled = !!rec;
+  $("summary").hidden = !!rec || s.state === "analyzing";  // the take may have been started elsewhere
   const [w, counting] = rec ? where(rec) : [s.state === "analyzing" ? "Lining up…" : "", false];
   $("where").textContent = w;
   $("where").classList.toggle("count", counting);
@@ -656,6 +824,7 @@ async function poll(once) {
   try { render(await api("GET", "/api/status")); }
   catch (e) { $("devDot").classList.remove("on"); $("devText").textContent = "Not reachable"; }
   const busy = status && status.state !== "idle";
+  if (status && !busy && !document.hidden && Date.now() - backingsAt > 8000) refreshBackings();
   pollTimer = setTimeout(poll, busy ? 120 : 1500);
 }
 
@@ -672,18 +841,26 @@ function start() {
 $("recBtn").onclick = () => act(() => status && status.recording ? api("POST", "/api/record/stop") : start());
 $("stopBtn").onclick = () => act(() => api("POST", "/api/stop"));
 $("exPick").onclick = openPicker;
-$("instrSel").onchange = () => store.set(`instr:${instrKind()}`, $("instrSel").value);
+$("modeEx").onclick = () => setMode(true);
+$("modeFree").onclick = () => setMode(false);
+$("instrSel").onchange = () => { store.set(`instr:${instrKind()}`, $("instrSel").value); showInstrument(); };
 $("pickClose").onclick = closePicker;
-$("freeTake").onclick = () => choose("");
 $("picker").onclick = (ev) => { if (ev.target === $("picker")) closePicker(); };
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !$("picker").hidden) closePicker(); });
-$("guideSel").onchange = showGuide;
+$("guideClick").onclick = () => setGuide("click");
+$("guideBacking").onclick = () => { if (backings.length) setGuide($("backingSel").value || backings[0].id); };
+$("backingSel").onchange = () => setGuide($("backingSel").value);
+$("backingSel").onblur = () => { if (backingsStale) { renderBackings(); showGuide(); } };
+// and the backing tracks listed again when the choice is touched (else every 8 s, in poll)
+const touchedGuide = () => { if (Date.now() - backingsAt > 2000) refreshBackings(); };
+$("guideSeg").addEventListener("pointerdown", touchedGuide);
+$("backingSel").addEventListener("focus", touchedGuide);
 $("slower").onclick = () => nudge(-4);
 $("faster").onclick = () => nudge(4);
 $("tempoReset").onclick = () => { const ex = current(); if (ex) { store.set(`tempo:${ex.id}`, ex.tempo.bpm); showGuide(); } };
 for (const id of ["countIn", "click"]) {
   $(id).checked = store.get(id, "1") !== "0";
-  $(id).onchange = () => store.set(id, $(id).checked ? "1" : "0");
+  $(id).onchange = () => { store.set(id, $(id).checked ? "1" : "0"); showGuide(); };
 }
 $("progress").onclick = (ev) => {
   const pl = status && status.playing;
