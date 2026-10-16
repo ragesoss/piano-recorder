@@ -19,13 +19,14 @@ listener judged), so every listener is broken down the same way:
   label with no attack; faint: none of the target's notes stands over the room.
 
     tools/check_study.py DIR [--livechords PATH | git:REV] [--csv OUT] [--compare OLD.csv]
-                             [--old-span] [--played CSV] [--only ID ...]
+                             [--old-span] [--instrument NAME] [--played CSV] [--only ID ...]
 
 `--livechords`: judge with another copy of the listener (a file, or git:REV for dobro-transcription's
 pipeline/src/transcribe/livechords.py at that revision) in place of chords/livechords.py.
 `--compare`: what changed from an earlier run's CSV. `--old-span`: judge over the span the app judged
 until 2026-10-16 (0.1-1.1 s after the attack, whatever the chord did), to tell a listener's own
-gain from the span's.
+gain from the span's. `--instrument`: judge every clip as this (the piano has its own detector;
+"other" judges by the chroma), not as the instrument kept with it.
 """
 
 from __future__ import annotations
@@ -52,6 +53,9 @@ if str(REPO) not in sys.path:
 NAMES = ("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B")
 RINGS = ((0.4, "damped"), (1.0, "short"), (float("inf"), "rings"))
 OLD_SPAN_S = (0.1, 1.1)  # the span a check was judged over, after its attack, until 2026-10-16
+# what the Listen view builds (a Listener makes them, though a check never uses them): an older listener
+# without them borrows the app's copy's, so that it can be judged at all
+LISTEN_ONLY = ("Pulse", "LoopFinder", "ChordPool", "chord_from_weights")
 
 
 def use_livechords(spec: str) -> str:
@@ -76,12 +80,24 @@ def use_livechords(spec: str) -> str:
         name, origin = f"{path}" + (f" ({rev})" if rev else ""), str(path)
     import chords
 
-    mod = types.ModuleType("chords.livechords")
-    mod.__file__ = origin
-    sys.modules["chords.livechords"] = mod  # dataclasses look their module up here
-    exec(compile(src, origin, "exec"), mod.__dict__)
+    mod = _module("chords.livechords", src, origin)
+    lacking = [k for k in LISTEN_ONLY if not hasattr(mod, k)]
+    if lacking:
+        app = REPO / "chords" / "livechords.py"
+        own = _module("chords._own_livechords", app.read_text(), str(app))
+        for k in lacking:
+            setattr(mod, k, getattr(own, k))
+        name += f" (the Listen view's {', '.join(lacking)} from the app's copy)"
     chords.livechords = mod
     return name
+
+
+def _module(qualname: str, src: str, origin: str):
+    mod = types.ModuleType(qualname)
+    mod.__file__ = origin
+    sys.modules[qualname] = mod  # dataclasses look their module up here
+    exec(compile(src, origin, "exec"), mod.__dict__)
+    return mod
 
 
 def read_clip(wav: Path, meta: dict) -> tuple[int, np.ndarray]:
@@ -244,7 +260,7 @@ def parse_note(s: str) -> int | None:
 # --- the study ------------------------------------------------------------------------------------
 
 
-def study(directory: Path, played: dict, only: list[str] | None = None) -> list[dict]:
+def study(directory: Path, played: dict, only: list[str] | None = None, instrument: str | None = None) -> list[dict]:
     from chords import listen as LS
     from recorder.config import load_config
 
@@ -261,6 +277,7 @@ def study(directory: Path, played: dict, only: list[str] | None = None) -> list[
         target = LS.parse_target(meta["target"])
         rate, y = read_clip(directory / f"{sid}.wav", meta)
         lis = LS.Listener(cfg, tmp)
+        lis.instrument = instrument or meta.get("instrument") or "piano"  # as the app judged it
         if lis.rate != rate:
             lis.rate = rate
             lis._reset()
@@ -281,7 +298,8 @@ def study(directory: Path, played: dict, only: list[str] | None = None) -> list[
             lo, hi = played[sid]
         m = ck.meta or {}
         rows.append({
-            "id": sid, "kind": meta.get("kind"), "target": target.name, "target_kind": target.kind,
+            "id": sid, "kind": meta.get("kind"), "instrument": lis.instrument, "target": target.name,
+            "target_kind": target.kind,
             "heard": m.get("heard"), "right": m.get("right"), "chord_right": m.get("chord_right"),
             "bass_right": m.get("bass_right"), "notes_heard": " ".join(m.get("notes_heard", [])),
             "bass": m.get("bass"), "judged_s": " ".join(str(v) for v in m.get("judged_s", [])),
@@ -372,6 +390,7 @@ def main(argv=None) -> int:
     ap.add_argument("--played", type=Path, help="a CSV of id, lowest, highest (as heard by ear)")
     ap.add_argument("--only", nargs="*", help="only these ids (or their ends)")
     ap.add_argument("--compare", type=Path, help="an earlier run's CSV: show what changed")
+    ap.add_argument("--instrument", help="judge every clip as this instrument (default: each clip's own)")
     ap.add_argument("--old-span", action="store_true",
                     help="judge over 0.1-1.1 s after the attack, as until 2026-10-16")
     a = ap.parse_args(argv)
@@ -386,12 +405,13 @@ def main(argv=None) -> int:
             for row in csv.reader(fh):
                 if row and not row[0].startswith("#") and row[0] != "id":
                     played[row[0]] = (parse_note(row[1]), parse_note(row[2]))
-    rows = study(a.dir, played, a.only)
+    rows = study(a.dir, played, a.only, a.instrument)
     if name is None:
         from chords import listen as LS
 
         name = LS.detector() + " (the app's copy)"
-    print(report(rows, name + (", over the old span" if a.old_span else "")))
+    print(report(rows, name + (", over the old span" if a.old_span else "") +
+                 (f", as {a.instrument}" if a.instrument else "")))
     if a.compare:
         print("\n" + compare(rows, a.compare))
     if a.csv:

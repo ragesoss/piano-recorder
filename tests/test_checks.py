@@ -1,6 +1,6 @@
 """The chord app's check judging (chords/listen.py): the chord judged while it sounds, its bass at any
-register, the piano detector when the listener has one, and the study that replays kept checks
-(tools/check_study.py). Synthetic strikes, with a room under them."""
+register, by the piano detector for the piano and by the chroma for anything else, and the study that
+replays kept checks (tools/check_study.py). Synthetic strikes, with a room under them."""
 
 import csv
 import importlib.util
@@ -25,10 +25,11 @@ def cfg(tmp_path):
 
 
 class Strikes:
-    """A stand-in for the capture: chords struck at given times, each note six partials (1/h^1.5, a
-    little sharp with h, the higher ones dying faster) decaying at `decay` per second, damped `sounds_s`
-    after the strike (60 dB in 0.1 s), and the room under them: noise at -80 dBFS, a hum at 92 Hz at
-    -75 dBFS, and each strike's thump at 115 Hz, 25 dB under it and gone in 0.3 s."""
+    """A stand-in for the capture: chords struck at given times, each note a piano's partials (up to
+    5 kHz, 1/h, sharp as the player's piano's strings stretch them: `livechords.PIANO`), the higher ones
+    dying faster, at `decay` per second, damped `sounds_s` after the strike (60 dB in 0.1 s); and the room
+    under them: noise at -80 dBFS, a hum at 92 Hz at -75 dBFS, and each strike's thump at 115 Hz, 25 dB
+    under it and gone in 0.3 s."""
 
     def __init__(self, strikes, channels: int, rate: int = RATE):
         self.strikes = strikes  # (time s, MIDI notes, sounds_s, decay per s)
@@ -36,6 +37,9 @@ class Strikes:
         self.n = 0
         self.rng = np.random.default_rng(1)
         self.stderr_lines: list[str] = []
+        piano = getattr(LS.L, "PIANO", None)
+        self.cents = (lambda m: float(piano.cents(m))) if piano else (lambda m: 0.0)
+        self.B = (lambda m: float(piano.B(m))) if piano else (lambda m: 3e-4)
 
     def start(self) -> None:
         pass
@@ -57,12 +61,12 @@ class Strikes:
             damp = np.where(s < sounds_s, 1.0, np.exp(-(s - sounds_s) * 69.0))  # 60 dB in 0.1 s
             x[m] += 0.05 * np.exp(-s / 0.1) * np.sin(2 * math.pi * 115.0 * s) * 10 ** (-25 / 20) * len(notes)
             for note in notes:
-                f0 = 440 * 2 ** ((note - 69) / 12)
-                for h in range(1, 7):
-                    f = f0 * h * math.sqrt(1 + 3e-4 * h * h)
-                    if f < self.rate / 2:
-                        x[m] += 0.05 * np.exp(-decay * (1 + 0.3 * h) * s) * damp * np.sin(
-                            2 * math.pi * f * s) / h ** 1.5
+                f0 = 440 * 2 ** ((note - 69) / 12 + self.cents(note) / 1200)
+                for h in range(1, 40):
+                    f = f0 * h * math.sqrt(1 + self.B(note) * h * h)
+                    if f > 5000 and h > 2:
+                        break
+                    x[m] += 0.05 * np.exp(-decay * (1 + 0.3 * h) * s) * damp * np.sin(2 * math.pi * f * s) / h
         self.n += frames
         y = dsp.from_float(np.clip(x, -1, 1).astype(np.float32), self.dtype)
         return np.repeat(y[:, None], self.channels, axis=1)
@@ -74,10 +78,12 @@ def feed(lis: Listener, src, seconds: float) -> None:
         lis._hear(src.read(), fs)
 
 
-def check(cfg, target: str, notes, sounds_s: float = 3.0, decay: float = 1.0, at: float = 1.53):
+def check(cfg, target: str, notes, sounds_s: float = 3.0, decay: float = 1.0, at: float = 1.53,
+          instrument: str = "piano"):
     """One chord struck `at` s in (not on a block's edge: the attack is found a block late or early),
     checked against `target`; the check's status and kept sidecar."""
     lis = Listener(cfg, cfg.takes_dir)
+    lis.instrument = instrument
     src = Strikes([(at, notes, sounds_s, decay)], len(cfg.inputs))
     lis.start_check(parse_target(target))
     feed(lis, src, at + LS.CHECK_S + 0.3)
@@ -87,39 +93,60 @@ def check(cfg, target: str, notes, sounds_s: float = 3.0, decay: float = 1.0, at
     return st, side
 
 
-def test_a_damped_chord_is_judged_while_it_sounds(cfg):
-    st, side = check(cfg, "C", [60, 64, 67], sounds_s=0.25, decay=3.0)  # C4 E4 G4, the keys let go at once
+BOTH = pytest.mark.parametrize("instrument", ["piano", "other"])  # the piano detector, and the chroma
+
+
+@BOTH
+def test_a_damped_chord_is_judged_while_it_sounds(cfg, instrument):
+    st, side = check(cfg, "C", [60, 64, 67], sounds_s=0.25, decay=3.0, instrument=instrument)  # C4 E4 G4, let go
     assert st["state"] == "done" and st["heard"] == "C" and st["right"] is True, st
     assert abs(side["onset_s"] - 0.03) <= 0.02  # struck 1.53 s in: the attack's block began at 1.5
     assert side["judged_s"][0] >= side["onset_s"] + LS.SKIP_S - 0.011 and side["judged_s"][1] < 0.5, side["judged_s"]
 
 
-def test_a_chord_that_rings_is_judged_over_the_whole_span(cfg):
-    st, side = check(cfg, "C", [48, 52, 55])  # C3 E3 G3, held
+@BOTH
+def test_a_chord_that_rings_is_judged_over_the_whole_span(cfg, instrument):
+    st, side = check(cfg, "C", [48, 52, 55], instrument=instrument)  # C3 E3 G3, held
     assert st["right"] is True and side["bass"] == "C"
     assert side["judged_s"][1] >= LS.CHECK_S - 0.01 and side["sounds_s"] >= LS.CHECK_S - 0.05
 
 
+@BOTH
 @pytest.mark.parametrize("target,notes,bass", [
     ("F", [77, 81, 84], "F"),  # F5 A5 C6: nothing under E4 but the room's hum
     ("F", [65, 69, 72], "F"),  # F4 A4 C5: just over E4
     ("C/E", [64, 67, 72], "E"),  # E4 G4 C5
     ("G/B", [71, 74, 79], "B"),  # B4 D5 G5
 ])
-def test_a_high_chord_has_its_bass(cfg, target, notes, bass):
-    st, side = check(cfg, target, notes, decay=2.5)  # the treble dies sooner
+def test_a_high_chord_has_its_bass(cfg, instrument, target, notes, bass):
+    st, side = check(cfg, target, notes, decay=2.5, instrument=instrument)  # the treble dies sooner
     assert (st["bass"], st["right"]) == (bass, True), (st["heard"], side["notes_heard"])
 
 
+@BOTH
 @pytest.mark.parametrize("target,notes", [("F", [41, 45, 48]), ("G", [43, 47, 50]), ("Em", [40, 43, 47])])
-def test_a_low_chord_that_rings_stays_right(cfg, target, notes):  # F2 A2 C3, G2 B2 D3, E2 G2 B2
-    st, _ = check(cfg, target, notes)
+def test_a_low_chord_that_rings_stays_right(cfg, instrument, target, notes):  # F2 A2 C3, G2 B2 D3, E2 G2 B2
+    st, _ = check(cfg, target, notes, instrument=instrument)
     assert st["right"] is True, st["heard"]
 
 
-def test_a_low_chord_damped_keeps_its_bass(cfg):
-    st, side = check(cfg, "F", [41, 45, 48], sounds_s=0.3, decay=2.0)
+@BOTH
+def test_a_low_chord_damped_keeps_its_bass(cfg, instrument):
+    st, side = check(cfg, "F", [41, 45, 48], sounds_s=0.3, decay=2.0, instrument=instrument)
     assert st["bass"] == "F" and st["right"] is True, (st["heard"], side["judged_s"])
+
+
+@pytest.mark.parametrize("target,notes,sounds_s", [
+    ("A", [21, 25, 28], 3.0),  # A0 C#1 E1: under the chroma's axis (C1)
+    ("F", [29, 33, 36], 3.0),  # F1 A1 C2
+    ("Am", [81, 84, 88], 3.0),  # A5 C6 E6: over the chroma's treble (C6)
+    ("C", [84, 88, 91], 0.25),  # C6 E6 G6, damped
+])
+def test_the_piano_detector_hears_the_whole_keyboard(cfg, target, notes, sounds_s):
+    if not hasattr(LS.L, "hear_piano"):
+        pytest.skip("the listener has no piano detector")
+    st, side = check(cfg, target, notes, sounds_s=sounds_s, decay=0.8 if notes[0] < 40 else 2.5)
+    assert st["right"] is True, (st["heard"], side["notes_heard"])
 
 
 def test_the_span_starts_at_the_onset_not_the_block():
@@ -147,15 +174,13 @@ def test_the_sidecar_says_where_the_attack_and_the_span_are(cfg):
     assert side["attack_s"] == 0.4 and abs(side["seconds"] - (0.4 + LS.CLIP_S[1])) < 0.01
 
 
-def test_a_listener_with_a_piano_detector_judges_by_it(cfg, monkeypatch):
+def test_the_piano_detector_is_what_judges_the_piano(cfg, monkeypatch):
     calls = []
 
     def hear_piano(y, sr, a, b, vocab=None, rang=None, room=None):
         calls.append((a, b, rang))
         notes = [(50, 1.0), (53, 0.8), (57, 0.9)]  # D3 F3 A3, whatever was played
-        return LS.L.PianoHeard(notes, (2, "min"), 50, np.eye(len(vocab.chords))[vocab.chords.index((2, "min"))]) \
-            if hasattr(LS.L, "PianoHeard") else type("P", (), {"notes": notes, "chord": (2, "min"), "bass": 50,
-                                                                "scores": None})()
+        return type("P", (), {"notes": notes, "chord": (2, "min"), "bass": 50, "scores": None})()
 
     monkeypatch.setattr(LS.L, "hear_piano", hear_piano, raising=False)
     monkeypatch.setattr(LS.L, "quiet_peaks", lambda y, sr, a, b: ("peaks", round(b - a, 2)), raising=False)
@@ -163,12 +188,12 @@ def test_a_listener_with_a_piano_detector_judges_by_it(cfg, monkeypatch):
     assert (st["heard"], st["right"], side["notes_heard"]) == ("Dm", True, ["D3", "F3", "A3"])
     (a, b, rang), = calls
     assert rang == ("peaks", round(LS.RANG_S - 0.02, 2)) and b - a > 0.9  # what rang before the onset; the span
-    lis = Listener(cfg, cfg.takes_dir)
-    lis.instrument = "guitar"  # not a piano: the chroma, as before
-    src = Strikes([(1.53, [48, 52, 55], 3.0, 1.0)], len(cfg.inputs))
-    lis.start_check(parse_target("C"))
-    feed(lis, src, 3.0)
-    assert lis.status()["check"]["heard"] == "C" and len(calls) == 1
+    st, _ = check(cfg, "C", [48, 52, 55], instrument="guitar")  # not a piano: the chroma, as before
+    assert st["heard"] == "C" and len(calls) == 1
+    # a chord with no onset (sounding already): what rang before it is itself, so nothing is taken out
+    x = np.zeros(RATE * 2, dtype=np.float32)
+    LS.heard_by_piano(x, RATE, {"onset": RATE // 2, "a": RATE // 2, "b": RATE, "room_dbfs": None})
+    assert calls[-1][2] is None
 
 
 def study_module():

@@ -19,8 +19,9 @@ falls `SOUNDS_DB` under its peak or to `OVER_ROOM_DB` over the room, so a chord 
 judged on itself, not on the quiet after it. Its bass is looked for over the whole pitch axis
 (`CHECK_BASS`), so a chord with nothing under E4 has one; when that is over the bass chroma's range
 (D3), the chord is scored without the bass chroma, which then holds only the strike's thump and the
-room. For the piano, a listener with a piano detector (`livechords.hear_piano`) judges the span by
-that instead (`heard_by_piano`). A strike is a check with nothing asked for: one chord played, what
+room. For the piano, the span is judged by the piano detector instead (`livechords.hear_piano`, in
+`heard_by_piano`: the notes A0-C8 that best explain its peaks, the chord they make, the lowest note
+its bass), when the listener has one. A strike is a check with nothing asked for: one chord played, what
 was heard kept and shown until the player says what it was (`relabel`), with its clip to hear again
 (`listen_wav`: the mixed inputs, louder, 16-bit mono, as a browser plays it).
 The clip (every kept channel, from `ROOM_S` before the attack) and what was asked, heard and scored
@@ -42,7 +43,6 @@ It listens only while a page asks (`listen()`: `LISTEN_S` more each time), and l
 from __future__ import annotations
 
 import collections
-import inspect
 import json
 import math
 import re
@@ -298,15 +298,14 @@ RANG_S = 0.3  # what rang before a check's onset, for the piano detector: this l
 
 
 def heard_by_piano(x: np.ndarray, rate: int, span: dict) -> tuple[Heard, list, int | None, None]:
-    """The same by the listener's piano detector, when it has one (`hear_piano`: the notes that best
-    explain the span's peaks, less what rang in the `RANG_S` before the onset; the chord they make, the
-    lowest note its bass)."""
+    """The same by the listener's piano detector (`hear_piano`: the notes that best explain the span's
+    peaks; the chord they make, the lowest note its bass). What rang in the `RANG_S` before the onset is
+    taken out only when the chord rose over it (an onset was found: before it, the room or an earlier
+    chord); a chord already sounding with no onset (a label's, held) would take itself out."""
     a, b, on = span["a"] / rate, span["b"] / rate, span["onset"] / rate
-    kw: dict = {"vocab": VOCAB}
-    if on >= 0.1:
-        params = inspect.signature(L.hear_piano).parameters
-        kw["rang" if "rang" in params else "room"] = L.quiet_peaks(x, rate, max(0.0, on - RANG_S), on - 0.02)
-    p = L.hear_piano(x, rate, a, b, **kw)
+    rang = L.quiet_peaks(x, rate, max(0.0, on - RANG_S), on - 0.02) if span["room_dbfs"] is not None and on >= 0.1 \
+        else None
+    p = L.hear_piano(x, rate, a, b, vocab=VOCAB, rang=rang)
     bass = p.bass % 12 if p.bass is not None else None
     chord = named(tuple(p.chord), bass) if p.chord is not None else None
     scores = [] if p.scores is None else [[chord_name(CHORDS[k]), round(float(p.scores[k]), 3)]
