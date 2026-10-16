@@ -4,6 +4,7 @@ Run on the control unit by systemd (setup/practice-recorder.service), or
 for development: PRACTICE_RECORDER_CONFIG=config/dev.toml python -m recorder.server
 """
 
+import re
 from pathlib import Path
 
 import uvicorn
@@ -18,6 +19,7 @@ from .engine import Busy, Engine, LowSpace
 from .takes import TakeNotFound, Takes
 
 STATIC = Path(__file__).parent / "static"
+FONTS = Path(__file__).parent.parent / "exercises" / "static" / "fonts"  # the exercise app's (SIL OFL 1.1)
 
 
 class NoteIn(BaseModel):
@@ -64,6 +66,13 @@ def create_app(cfg: Config) -> FastAPI:
     @app.get("/icon.svg")
     def icon():
         return FileResponse(STATIC / "icon.svg", media_type="image/svg+xml")
+
+    @app.get("/fonts/{name}")
+    def font(name: str):
+        path = FONTS / name
+        if not re.match(r"^[A-Za-z0-9-]+\.woff2$", name) or not path.is_file():
+            raise HTTPException(404, "no such font")
+        return FileResponse(path, media_type="font/woff2", headers={"Cache-Control": "max-age=86400"})
 
     @app.get("/api/status")
     def status():

@@ -6,130 +6,234 @@
 <title>Practice recorder</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg">
-<meta name="theme-color" content="#16181d">
+<meta name="theme-color" content="#121016">
 <style>
+/* The piano's recorder, mostly from a phone: record and stop, the level, the takes. The exercise
+   app's look (exercises/static/index.html): dark, purple for what to tap, red only for recording.
+   One column on a phone; on an iPad, recording on the left and the takes on the right. */
+@font-face { font-family: "Bricolage Grotesque"; src: url(/fonts/bricolage-grotesque.woff2) format("woff2");
+  font-weight: 200 800; font-display: swap; }
+@font-face { font-family: "Public Sans"; src: url(/fonts/public-sans.woff2) format("woff2");
+  font-weight: 100 900; font-display: swap; }
 :root {
-  --bg: #f6f6f4; --card: #ffffff; --text: #1b1d22; --muted: #6b6f78; --line: #e2e2de;
-  --rec: #d93a3f; --rec-text: #ffffff; --ok: #2f9e5b; --warn: #d9a400; --accent: #2d6cdf;
-  --meter-bg: #e9e9e6;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #16181d; --card: #1f2229; --text: #eceef2; --muted: #9aa0ab; --line: #2e323b;
-    --rec: #e5484d; --meter-bg: #2a2e36; --accent: #6b9cff;
-  }
+  color-scheme: dark;
+  --bg: #121016; --surf2: #1E1A24; --surf: #28232F; --line: #3E3748; --line-soft: #2F2A37;
+  --ink: #F2EEF8; --ink2: #CEC7DA; --ink3: #A79FB4; --faint: #7E768B;
+  --purple-fill: #7C3AED; --purple: #8B5CF6; --purple-ink: #B9A0FF; --purple-tint: #33264F;
+  --red: #D42A1F; --red-dot: #FF5147; --red-ink: #FF8F85; --red-tint: #3E1F24;
+  --green: #4ADE80; --amber: #E8B93B;
+  --display: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --text: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 * { box-sizing: border-box; }
-body {
-  margin: 0; background: var(--bg); color: var(--text);
-  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  padding: max(12px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
-  -webkit-tap-highlight-color: transparent;
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.4 var(--text); -webkit-tap-highlight-color: transparent; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+a { color: var(--purple-ink); }
+h1, h2, p { margin: 0; }
+.tnum { font-variant-numeric: tabular-nums; }
+.svg-i { flex: none; }
+
+.wrap { max-width: 600px; margin: 0 auto;
+  padding: max(6px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+
+/* the top: back home, the mixer and the space left */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; }
+.home { min-height: 44px; display: flex; align-items: center; gap: 6px; color: var(--ink3); font-size: 17px; text-decoration: none; flex: none; }
+.home svg path { stroke: var(--ink3); }
+.dev { display: flex; flex-direction: column; align-items: flex-end; font-size: 15px; line-height: 1.35; color: var(--ink3); text-align: right; min-width: 0; }
+.dev .line { display: inline-flex; align-items: center; gap: 8px; color: var(--ink2); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); display: inline-block; flex: none; }
+.dot.on { background: var(--green); }
+h1 { font-family: var(--display); font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; margin: 2px 0 14px; }
+.banner { margin: 0 0 14px; padding: 10px 12px 10px 16px; border-radius: 14px; background: var(--red-tint); color: var(--ink);
+  border: 1.5px solid var(--red-ink); font-size: 16px; display: flex; gap: 12px; align-items: center; }
+.banner span { flex: 1; min-width: 0; }
+.banner button { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1.5px solid var(--ink3); background: transparent; flex: none; }
+
+.cols, .side { display: flex; flex-direction: column; gap: 14px; }
+.panel { background: var(--surf); border: 1.5px solid var(--line); border-radius: 22px; padding: 16px 18px 18px; }
+.label { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); }
+
+/* recording: the state and time, Record/Stop, the level */
+.rec { display: flex; flex-direction: column; gap: 14px; }
+.rec-line { min-height: 48px; display: flex; align-items: center; gap: 12px; }
+.rec-state { font-size: 17px; color: var(--ink3); }
+.recording-chip { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 18px; border-radius: 22px; background: var(--red);
+  color: #fff; font-size: 18px; font-weight: 700; flex: none; animation: pulse 1.6s ease-in-out infinite; }
+.recording-chip i { width: 10px; height: 10px; border-radius: 50%; background: #fff; }
+@keyframes pulse { 50% { opacity: .78; } }
+.timer { margin-left: auto; font-family: var(--display); font-size: 46px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.recbtn { width: 100%; min-height: 120px; border: 0; border-radius: 26px; background: var(--red); color: #fff; display: flex; align-items: center;
+  justify-content: center; gap: 18px; font-family: var(--display); font-size: 40px; font-weight: 700; }
+.recbtn i { width: 28px; height: 28px; border-radius: 50%; background: #fff; flex: none; }
+.recbtn.stop i { border-radius: 5px; }
+.recbtn:disabled { background: #2A2531; color: var(--faint); }
+.recbtn:disabled i { background: var(--faint); }
+.level-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.meter { height: 14px; border-radius: 7px; background: var(--line); position: relative; overflow: hidden; }
+.meter > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 7px; background: var(--ink2); transition: width .12s linear; }
+.meter > b { position: absolute; top: 0; bottom: 0; width: 3px; background: var(--ink); opacity: .8; left: 0; display: none; }
+.legend { display: flex; justify-content: space-between; font-size: 14px; color: var(--ink3); margin-top: 6px; }
+.clip { color: var(--red-ink); font-weight: 700; font-size: 16px; }
+.backing-now { font-size: 16px; color: var(--ink2); }
+.clip:empty, .backing-now:empty { display: none; }
+
+/* on the speakers: the take playing, Stop, where it is (tap to play from there) */
+.now { display: flex; flex-direction: column; gap: 4px; border-color: var(--purple); }
+.now-head { display: flex; align-items: center; gap: 12px; }
+.now-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.now-title { font-size: 19px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.now-note { font-size: 15px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.progress { height: 44px; display: flex; align-items: center; cursor: pointer; touch-action: manipulation; padding: 0 10px; }
+.progress .bar { flex: 1; height: 8px; border-radius: 4px; background: var(--line); position: relative; }
+.progress .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 4px; background: var(--purple); }
+.progress .bar b { position: absolute; top: 50%; left: 0; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; background: var(--purple-ink); }
+.times { display: flex; justify-content: space-between; font-size: 15px; color: var(--ink3); margin-top: -6px; }
+
+/* buttons */
+.btn { min-height: 52px; padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1.5px solid var(--line);
+  border-radius: 16px; background: transparent; color: var(--ink); font-size: 17px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.btn.fill { border-color: var(--purple-fill); background: var(--purple-fill); color: #fff; }
+.btn.outline-p { border-color: var(--purple); color: var(--purple-ink); }
+.btn.icon { width: 52px; padding: 0; }
+
+/* the speakers' level */
+.speakers { display: flex; flex-direction: column; gap: 8px; }
+.sp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.sp-head label { font-family: var(--display); font-size: 24px; font-weight: 700; }
+.lv { font-family: var(--display); font-size: 34px; font-weight: 700; line-height: 1; }
+.sp-row { display: flex; align-items: center; gap: 12px; }
+.pm { width: 52px; height: 52px; flex: none; border: 1.5px solid var(--line); border-radius: 26px; background: transparent; font-size: 28px; line-height: 1; }
+input[type=range] { flex: 1; min-width: 0; height: 44px; margin: 0; accent-color: var(--purple); }
+.hint { font-size: 15px; line-height: 1.4; color: var(--ink3); }
+.hint b { color: var(--ink2); }
+
+/* the takes, newest first */
+.takes-col h2 { font-family: var(--display); font-size: 26px; font-weight: 700; margin: 6px 2px 10px; display: flex; align-items: baseline; gap: 10px; }
+.takes-col h2 small { font-family: var(--text); font-size: 16px; font-weight: 400; color: var(--ink3); }
+ul.takes { list-style: none; margin: 0; padding: 0; overflow: hidden; background: var(--surf); border: 1.5px solid var(--line); border-radius: 22px; }
+li.take { display: flex; flex-direction: column; gap: 2px; padding: 12px 16px 14px; border-top: 1px solid var(--line-soft); }
+li.take:first-child { border-top: 0; }
+li.take.playing { background: var(--purple-tint); }
+.take-top { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+.take-when { font-size: 18px; font-weight: 700; min-width: 0; }
+li.playing .take-when { color: var(--purple-ink); }
+.take-len { margin-left: auto; font-size: 16px; color: var(--ink2); flex: none; }
+.pill { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 13px; font-size: 14px; font-weight: 700; flex: none; }
+.pill.red { background: var(--red-tint); color: var(--red-ink); }
+.take-along { font-size: 14px; color: var(--ink3); }
+.take-note { min-height: 44px; display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 11px 0; border: 0; background: transparent;
+  text-align: left; font-size: 16px; line-height: 22px; color: var(--ink2); }
+.take-note svg { margin-top: 2px; }
+.take-note span { min-width: 0; overflow-wrap: anywhere; }
+.take-note svg path { stroke: var(--ink3); }
+.take-note.none { color: var(--purple-ink); font-weight: 600; }
+.take-note.none svg path { stroke: var(--purple-ink); }
+.take-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 2px; }
+.take-actions > .btn:first-child { min-width: 140px; }
+.take-actions .del { margin-left: auto; }
+li.empty { color: var(--ink3); padding: 14px 16px; }
+
+/* a phone: the take playing sits at the foot of the screen, over the takes */
+@media (max-width: 759px) {
+  .now { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; border-radius: 22px 22px 0 0; border-width: 1.5px 0 0; background: var(--surf2);
+    padding: 12px max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    box-shadow: 0 -10px 28px rgba(0, 0, 0, .5); }
+  body.now-on .wrap { padding-bottom: 190px; }
 }
-main { max-width: 560px; margin: 0 auto; }
-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
-h1 { font-size: 18px; margin: 0; font-weight: 600; }
-a.home { display: inline-block; font-size: 14px; color: var(--muted); text-decoration: none; margin-bottom: 4px; }
-.status { font-size: 13px; color: var(--muted); text-align: right; }
-.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 4px; vertical-align: 1px; }
-.dot.on { background: var(--ok); }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 12px; }
-.rec { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-#recBtn {
-  width: 132px; height: 132px; border-radius: 50%; border: 0; cursor: pointer;
-  background: var(--rec); color: var(--rec-text); font-size: 20px; font-weight: 600;
-  box-shadow: 0 2px 10px rgba(0,0,0,.15);
+@media (max-width: 380px) {
+  .btn { padding: 0 14px; }
+  .timer { font-size: 40px; }
 }
-#recBtn.active { border-radius: 28px; animation: pulse 1.6s ease-in-out infinite; }
-@keyframes pulse { 50% { opacity: .82; } }
-#recBtn:disabled { opacity: .45; }
-#timer { font-variant-numeric: tabular-nums; font-size: 28px; font-weight: 600; min-height: 1.2em; }
-.meter { width: 100%; height: 14px; background: var(--meter-bg); border-radius: 7px; overflow: hidden; position: relative; }
-.meter > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ok); transition: width .12s linear; }
-.meter > b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: .6; left: 0; }
-.meter-legend { display: flex; justify-content: space-between; width: 100%; font-size: 12px; color: var(--muted); }
-#clip { color: var(--rec); font-weight: 600; font-size: 14px; min-height: 1.2em; }
-.now { display: none; }
-.now.show { display: block; }
-.now-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
-.now-title { font-weight: 600; }
-.progress { height: 28px; display: flex; align-items: center; cursor: pointer; }
-.progress > div { flex: 1; height: 6px; background: var(--meter-bg); border-radius: 3px; position: relative; }
-.progress > div > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); border-radius: 3px; }
-.times { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-button.small {
-  border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 10px;
-  padding: 8px 12px; font-size: 15px; cursor: pointer; min-height: 40px;
+/* an iPad: two columns that fill the screen; the takes scroll on their own */
+@media (min-width: 760px) {
+  html, body { height: 100%; }
+  body { overflow: hidden; }
+  .wrap { max-width: 1180px; height: 100vh; height: 100dvh; display: flex; flex-direction: column;
+    padding: max(6px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) 0 max(24px, env(safe-area-inset-left)); }
+  .top, h1, .banner { flex: none; }
+  .cols { flex: 1; min-height: 0; display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 24px; }
+  .side { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+  .takes-col { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+  .takes-col h2 { position: sticky; top: 0; z-index: 1; background: var(--bg); margin: 0; padding: 0 2px 10px; }
 }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.level { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
-.level input { flex: 1; accent-color: var(--accent); }
-.hint { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
-#error { display: none; background: color-mix(in srgb, var(--rec) 14%, var(--card)); border-color: var(--rec); }
-#error.show { display: block; }
-h2 { font-size: 15px; margin: 18px 4px 8px; color: var(--muted); font-weight: 600; }
-ul { list-style: none; margin: 0; padding: 0; }
-li.take { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-top: 1px solid var(--line); }
-li.take:first-child { border-top: 0; padding-top: 0; }
-.take-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.take-when { font-weight: 600; }
-.take-len { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
-.take-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.take-note { font-size: 14px; color: var(--muted); cursor: pointer; }
-.take-note:empty::before { content: "Add a note"; opacity: .7; }
-li.playing .take-when { color: var(--accent); }
-.empty { color: var(--muted); font-size: 14px; }
-#backingNow { font-size: 14px; color: var(--muted); text-align: center; min-height: 1.2em; }
-.take-along { font-size: 13px; color: var(--muted); }
+@media (min-width: 1000px) {
+  .cols { grid-template-columns: 420px minmax(0, 1fr); gap: 28px; }
+}
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <div><a class="home" id="home" href="/">‹ Music room</a>
-    <h1>Practice recorder</h1></div>
-    <div class="status"><span class="dot" id="devDot"></span><span id="devText">connecting…</span><br><span id="free"></span></div>
+<div class="wrap">
+  <header class="top">
+    <a class="home" id="home" href="/"><svg class="svg-i" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>Music room</a>
+    <div class="dev"><span class="line"><span class="dot" id="devDot"></span><span id="devText">Connecting…</span></span><span id="free"></span></div>
   </header>
+  <h1>Practice recorder</h1>
+  <div class="banner" id="error" role="alert" hidden><span id="errorText"></span><button type="button" id="errorOk">OK</button></div>
 
-  <section class="card" id="error"></section>
+  <div class="cols">
+    <div class="side">
+      <section class="panel rec" aria-label="Record">
+        <div class="rec-line">
+          <span class="recording-chip" id="recChip" hidden><i></i>Recording</span>
+          <span class="rec-state" id="recState"></span>
+          <span class="timer tnum" id="timer"></span>
+        </div>
+        <button type="button" class="recbtn" id="recBtn"><i></i><span id="recText">Record</span></button>
+        <div>
+          <div class="level-head"><span class="label">Level</span></div>
+          <div class="meter" role="img" aria-label="Input level"><i id="meterBar"></i><b id="peakMark"></b></div>
+          <div class="legend tnum"><span>−60</span><span>−40</span><span>−20</span><span>0 dB</span></div>
+        </div>
+        <div class="clip" id="clip"></div>
+        <div class="backing-now" id="backingNow"></div>
+      </section>
 
-  <section class="card rec">
-    <button id="recBtn">Record</button>
-    <div id="timer"></div>
-    <div class="meter" aria-label="input level"><i id="meterBar"></i><b id="peakMark"></b></div>
-    <div class="meter-legend"><span>−60</span><span>−40</span><span>−20</span><span>0 dBFS</span></div>
-    <div id="clip"></div>
-    <div id="backingNow"></div>
-  </section>
+      <section class="panel now" id="now" aria-label="On the speakers" hidden>
+        <div class="now-head">
+          <div class="now-text"><span class="label" id="nowLabel">On the speakers</span><span class="now-title" id="nowTitle"></span><span class="now-note" id="nowNote" hidden></span></div>
+          <button type="button" class="btn fill" id="stopBtn"><svg class="svg-i" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"></rect></svg>Stop</button>
+        </div>
+        <div class="progress" id="progress" title="Tap to play from there" aria-label="Where in the take: tap to play from there"><div class="bar"><i id="progBar"></i><b id="progHead"></b></div></div>
+        <div class="times tnum"><span id="pos">0:00</span><span id="dur">0:00</span></div>
+      </section>
 
-  <section class="card now" id="now">
-    <div class="now-head">
-      <span class="now-title" id="nowTitle"></span>
-      <button class="small" id="stopBtn">Stop</button>
+      <section class="panel speakers" aria-label="Speakers">
+        <div class="sp-head"><label for="level">Speakers</label><span class="lv tnum" id="levelText">0 dB</span></div>
+        <div class="sp-row">
+          <button type="button" class="pm" id="levelDown" aria-label="Quieter, 1 dB">−</button>
+          <input type="range" id="level" min="-30" max="12" step="1" value="0">
+          <button type="button" class="pm" id="levelUp" aria-label="Louder, 1 dB">+</button>
+        </div>
+        <p class="hint">To hear takes, the mixer's channel 3/4 button must be on <b>MP3/USB</b>. Records play on <b>3/4</b>.</p>
+      </section>
     </div>
-    <div class="progress" id="progress"><div><i id="progBar"></i></div></div>
-    <div class="times"><span id="pos">0:00</span><span id="dur">0:00</span></div>
-  </section>
 
-  <section class="card">
-    <div class="level">
-      <span>Playback level</span>
-      <input type="range" id="level" min="-30" max="12" step="1" value="0">
-      <span id="levelText">0 dB</span>
-    </div>
-    <p class="hint">To hear takes, the mixer's channel 3/4 button must be on <b>MP3/USB</b>. Records play on <b>3/4</b>.</p>
-  </section>
-
-  <h2>Takes</h2>
-  <section class="card"><ul id="takes"><li class="empty">No takes yet.</li></ul></section>
-</main>
+    <section class="takes-col" aria-label="Takes">
+      <h2>Takes <small id="takesCount"></small></h2>
+      <ul class="takes" id="takes"><li class="empty">No takes yet.</li></ul>
+    </section>
+  </div>
+</div>
 
 <script>
-document.getElementById("home").href = `http://${location.hostname}/`;
 const $ = (id) => document.getElementById(id);
-let status = null, takesVersion = -1, takes = [], pollTimer = null;
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ICON = {
+  play: '<svg class="svg-i" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"></path></svg>',
+  stop: '<svg class="svg-i" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"></rect></svg>',
+  phone: '<svg class="svg-i" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"></rect><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>',
+  trash: '<svg class="svg-i" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5" fill="none" stroke="#F2EEF8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  pencil: '<svg class="svg-i" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+};
+$("home").href = `http://${location.hostname}/`;
+let status = null, takesVersion = -1, takes = [], pollTimer = null, dismissed = null, dragging = false;
+const LEVEL_MIN = -30, LEVEL_MAX = 12;
 
-function signedDb(v) { return (v > 0 ? `+${v}` : `${v}`) + " dB"; }  // the speakers' offset: a boost shows its sign
+function signedDb(v) { return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v)} dB`; }  // the speakers' offset: a boost shows its sign
 function fmt(s) {
   s = Math.max(0, Math.floor(s));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = String(s % 60).padStart(2, "0");
@@ -156,60 +260,39 @@ async function api(method, path, body) {
   return r.json();
 }
 function showError(msg) {
-  $("error").textContent = msg || "";
-  $("error").classList.toggle("show", !!msg);
+  $("errorText").textContent = msg || "";
+  $("error").hidden = !msg;
 }
 
 async function refreshTakes() {
   takes = await api("GET", "/api/takes");
   renderTakes();
 }
+function takeHtml(t, playingId) {
+  const id = encodeURIComponent(t.id), on = t.id === playingId, pa = t.playalong;
+  const clipped = t.peak_dbfs != null && t.peak_dbfs > -1;
+  // a play-along take made here before 2026-10-13 (they are made in the exercise app now)
+  const along = !t.backing ? "" : `With ${t.backing}` + (pa ? (pa.found
+    ? ` · lined up (${pa.lag_ms.toFixed(1)} ms) · backing taken out to ${Math.round(pa.left_dbfs)} dBFS`
+    : " · the track was not found in the take") : " · lining up…");
+  return `<li class="take${on ? " playing" : ""}">
+    <div class="take-top"><span class="take-when">${esc(when(t.started))}</span>${clipped ? '<span class="pill red">clipped?</span>' : ""}<span class="take-len tnum">${esc(fmt(t.seconds))}</span></div>
+    ${along ? `<div class="take-along">${esc(along)}</div>` : ""}
+    <button type="button" class="take-note${t.note ? "" : " none"}" data-act="note" data-id="${esc(t.id)}" title="Edit note">${ICON.pencil}<span>${t.note ? esc(t.note) : "Add a note"}</span></button>
+    <div class="take-actions">
+      ${on ? `<button type="button" class="btn fill" data-act="stop">${ICON.stop}Stop</button>`
+        : `<button type="button" class="btn outline-p" data-act="play" data-id="${esc(t.id)}">${ICON.play}Speakers</button>`}
+      <a class="btn" href="/api/takes/${id}/audio">${ICON.phone}Phone</a>
+      ${t.backing && t.clean ? `<a class="btn" href="/api/takes/${id}/clean">${ICON.phone}Phone, without the track</a>` : ""}
+      <button type="button" class="btn icon del" data-act="del" data-id="${esc(t.id)}" aria-label="Delete this take" title="Delete">${ICON.trash}</button>
+    </div></li>`;
+}
 function renderTakes() {
-  const ul = $("takes");
-  ul.innerHTML = "";
-  if (!takes.length) { ul.innerHTML = '<li class="empty">No takes yet.</li>'; return; }
   const playingId = status && status.playing && status.playing.take;
   const recordingId = status && status.recording && status.recording.take;
-  for (const t of takes) {
-    if (t.id === recordingId) continue;
-    const li = document.createElement("li");
-    li.className = "take" + (t.id === playingId ? " playing" : "");
-    li.innerHTML = `
-      <div class="take-top"><span class="take-when"></span><span class="take-len"></span></div>
-      <div class="take-along"></div>
-      <div class="take-note" title="Edit note"></div>
-      <div class="take-actions">
-        <button class="small primary" data-act="play">▶ Speakers</button>
-        <a class="small" style="text-decoration:none;display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 12px;color:var(--text)" data-act="phone">Phone</a>
-        <button class="small" data-act="del">Delete</button>
-      </div>`;
-    li.querySelector(".take-when").textContent = when(t.started);
-    li.querySelector(".take-len").textContent = fmt(t.seconds) + (t.peak_dbfs != null && t.peak_dbfs > -1 ? " · clipped?" : "");
-    li.querySelector(".take-note").textContent = t.note || "";
-    const pa = t.playalong, along = li.querySelector(".take-along");
-    if (t.backing) {
-      along.textContent = `With ${t.backing}` + (pa ? (pa.found
-        ? ` · lined up (${pa.lag_ms.toFixed(1)} ms) · backing taken out to ${Math.round(pa.left_dbfs)} dBFS`
-        : " · the track was not found in the take") : " · lining up…");
-      if (t.clean) {
-        const a = document.createElement("a");
-        a.className = "small"; a.textContent = "Phone, without the track"; a.href = `/api/takes/${t.id}/clean`;
-        a.style.cssText = "text-decoration:none;display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 12px;color:var(--text)";
-        li.querySelector(".take-actions").insertBefore(a, li.querySelector('[data-act="del"]'));
-      }
-    } else along.remove();
-    li.querySelector('[data-act="phone"]').href = `/api/takes/${t.id}/audio`;
-    li.querySelector('[data-act="play"]').onclick = () => act(() => api("POST", `/api/takes/${t.id}/play`, { start: 0 }));
-    li.querySelector('[data-act="del"]').onclick = () => {
-      if (confirm(`Delete the take from ${when(t.started)} (${fmt(t.seconds)})?`))
-        act(() => api("DELETE", `/api/takes/${t.id}`));
-    };
-    li.querySelector(".take-note").onclick = () => {
-      const note = prompt("Note for this take:", t.note || "");
-      if (note !== null) act(() => api("PUT", `/api/takes/${t.id}/note`, { note }));
-    };
-    ul.appendChild(li);
-  }
+  const shown = takes.filter((t) => t.id !== recordingId);
+  $("takesCount").textContent = shown.length ? String(shown.length) : "";
+  $("takes").innerHTML = shown.length ? shown.map((t) => takeHtml(t, playingId)).join("") : '<li class="empty">No takes yet.</li>';
 }
 
 async function act(fn) {
@@ -223,16 +306,20 @@ function render(s) {
   $("devDot").classList.toggle("on", devOk);
   $("devText").textContent = devOk ? "Mixer connected" : "Mixer not found";
   $("free").textContent = `${(s.free_mb / 1000).toFixed(1)} GB free`;
-  if (s.error) showError(s.error);
+  if (!s.error) dismissed = null;
+  else if (s.error !== dismissed) showError(s.error);
 
   const rec = s.recording;
   const btn = $("recBtn");
-  btn.textContent = rec ? "Stop" : "Record";
-  btn.classList.toggle("active", !!rec);
+  $("recText").textContent = rec ? "Stop" : "Record";
+  btn.classList.toggle("stop", !!rec);
   btn.disabled = !s.devices.capture && !rec;
+  $("recChip").hidden = !rec;
+  $("recState").hidden = !!rec;
+  $("recState").textContent = s.devices.capture ? "Ready to record" : "Mixer not found";
   $("timer").textContent = rec ? fmt(rec.seconds) : "";
   $("meterBar").style.width = rec ? meterPct(rec.meter_dbfs) + "%" : "0";
-  $("meterBar").style.background = rec && rec.meter_dbfs > -6 ? "var(--rec)" : rec && rec.meter_dbfs > -12 ? "var(--warn)" : "var(--ok)";
+  $("meterBar").style.background = rec && rec.meter_dbfs > -6 ? "var(--red-dot)" : rec && rec.meter_dbfs > -12 ? "var(--amber)" : "var(--ink2)";
   $("peakMark").style.left = rec ? `calc(${meterPct(rec.peak_dbfs)}% - 2px)` : "0";
   $("peakMark").style.display = rec ? "block" : "none";
   $("clip").textContent = rec && rec.clipped ? "Clipping: turn the mic channels' gain down a little." : "";
@@ -242,15 +329,21 @@ function render(s) {
     : s.state === "analyzing" ? "Lining the take up with its track…" : "";
 
   const pl = s.playing;
-  $("now").classList.toggle("show", !!pl || s.state === "preparing");
+  $("now").hidden = !(pl || s.state === "preparing");
+  document.body.classList.toggle("now-on", !$("now").hidden);
   if (pl) {
     const t = takes.find((x) => x.id === pl.take);
-    $("nowTitle").textContent = (s.state === "preparing" ? "Preparing " : "Playing ") + (t ? when(t.started) : pl.take);
-    $("progBar").style.width = pl.seconds ? (100 * pl.position / pl.seconds) + "%" : "0";
+    $("nowLabel").textContent = s.state === "preparing" ? "Preparing" : "On the speakers";
+    $("nowTitle").textContent = t ? when(t.started) : pl.take || "a backing track";
+    $("nowNote").textContent = t && t.note ? t.note : "";
+    $("nowNote").hidden = !(t && t.note);
+    const frac = pl.seconds ? Math.min(1, pl.position / pl.seconds) : 0;
+    $("progBar").style.width = 100 * frac + "%";
+    $("progHead").style.left = 100 * frac + "%";
     $("pos").textContent = fmt(pl.position);
     $("dur").textContent = fmt(pl.seconds);
   }
-  if (document.activeElement !== $("level")) {
+  if (document.activeElement !== $("level") && !dragging) {
     $("level").value = s.level_offset_db;
     $("levelText").textContent = signedDb(s.level_offset_db);
   }
@@ -267,6 +360,7 @@ async function poll(once) {
   } catch (e) {
     $("devDot").classList.remove("on");
     $("devText").textContent = "Recorder not reachable";
+    $("free").textContent = "";
   }
   const busy = status && status.state !== "idle";
   pollTimer = setTimeout(poll, busy ? 250 : 1500);
@@ -275,15 +369,41 @@ async function poll(once) {
 $("recBtn").onclick = () => act(() =>
   status && status.recording ? api("POST", "/api/record/stop") : api("POST", "/api/record/start"));
 $("stopBtn").onclick = () => act(() => api("POST", "/api/stop"));
+$("errorOk").onclick = () => { dismissed = status && status.error; showError(""); };
 $("progress").onclick = (ev) => {
   const pl = status && status.playing;
-  if (!pl || !pl.seconds) return;
+  if (!pl || !pl.seconds || !pl.take) return;
   const r = $("progress").firstElementChild.getBoundingClientRect();
   const frac = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
-  act(() => api("POST", `/api/takes/${pl.take}/play`, { start: frac * pl.seconds }));
+  act(() => api("POST", `/api/takes/${encodeURIComponent(pl.take)}/play`, { start: frac * pl.seconds }));
 };
-$("level").oninput = () => { $("levelText").textContent = signedDb(Number($("level").value)); };
-$("level").onchange = () => act(() => api("PUT", "/api/settings", { level_offset_db: Number($("level").value) }));
+// the takes: play on the speakers, stop, a note, delete
+$("takes").onclick = (ev) => {
+  const el = ev.target.closest("[data-act]");
+  if (!el) return;
+  const a = el.dataset.act, t = takes.find((x) => x.id === el.dataset.id);
+  if (a === "stop") act(() => api("POST", "/api/stop"));
+  else if (!t) return;
+  else if (a === "play") act(() => api("POST", `/api/takes/${encodeURIComponent(t.id)}/play`, { start: 0 }));
+  else if (a === "del") {
+    if (confirm(`Delete the take from ${when(t.started)} (${fmt(t.seconds)})?`))
+      act(() => api("DELETE", `/api/takes/${encodeURIComponent(t.id)}`));
+  } else if (a === "note") {
+    const note = prompt("Note for this take:", t.note || "");
+    if (note !== null) act(() => api("PUT", `/api/takes/${encodeURIComponent(t.id)}/note`, { note }));
+  }
+};
+// the speakers' level: shown while dragged, sent when let go; or a dB at a time
+function setLevel(v) {
+  v = Math.max(LEVEL_MIN, Math.min(LEVEL_MAX, Math.round(v)));
+  $("level").value = v;
+  $("levelText").textContent = signedDb(v);
+  act(() => api("PUT", "/api/settings", { level_offset_db: v }));
+}
+$("level").oninput = () => { dragging = true; $("levelText").textContent = signedDb(Number($("level").value)); };
+$("level").onchange = () => { dragging = false; setLevel(Number($("level").value)); };
+$("levelDown").onclick = () => setLevel(Number($("level").value) - 1);
+$("levelUp").onclick = () => setLevel(Number($("level").value) + 1);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(true); });
 
 poll(true);

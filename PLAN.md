@@ -98,6 +98,29 @@ Served by the control unit, saved to the home screen:
 
 Home network only, no login, for the first version.
 
+- **Restyled 2026-10-16,** with the home page, in the exercise app's new look
+  (step 6, "The page, redesigned"): dark, purple for what to tap, red only
+  for recording, and its fonts (each server has `/fonts/`, from
+  `exercises/static/fonts/`). Every feature is kept.
+  - On a phone, a take that is playing sits at the foot of the screen, with
+    Stop and where it is (tap to play from there). On an iPad, landscape or
+    portrait, recording is on the left and the takes scroll on the right.
+  - A take that is playing has Stop in place of Speakers. The speakers'
+    level has − and + buttons (1 dB). A server error can be put away (OK)
+    until a different one comes.
+  - The home page's tiles say what each app is doing in words: the exercise
+    app's like the practice recorder's (it showed the raw state before), and
+    the chords app's to come (port 8003): "Hearing G", "Listening",
+    "Letting a recorder have the inputs", "Ready". A recording turns its
+    tile red.
+  - Tried on the desktop (fake device, headless Chromium at 390x844,
+    1180x820 and 820x1180): takes recorded, played, sought, noted and
+    deleted; the level changed; "Stop everything" stopped a recording. No
+    console errors, and no sideways scroll on the phone. Not yet deployed.
+  - Still on both pages, from the BMG-04F: "the mixer's channel 3/4 button
+    must be on MP3/USB" to hear takes. Since the 18i8 (2026-10-14) takes
+    play through it, not the BMG-04F's USB, so this needs checking.
+
 ## Steps
 
 ### 0. This plan and the component inventory (done 2026-10-10)

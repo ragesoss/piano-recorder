@@ -6,75 +6,101 @@
 <title>Music room</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg">
-<meta name="theme-color" content="#16181d">
+<meta name="theme-color" content="#121016">
 <style>
+/* The way into each app, and what each is doing. The exercise app's look
+   (exercises/static/index.html): dark, purple for what to tap, red only for recording. */
+@font-face { font-family: "Bricolage Grotesque"; src: url(/fonts/bricolage-grotesque.woff2) format("woff2");
+  font-weight: 200 800; font-display: swap; }
+@font-face { font-family: "Public Sans"; src: url(/fonts/public-sans.woff2) format("woff2");
+  font-weight: 100 900; font-display: swap; }
 :root {
-  --bg: #f6f6f4; --card: #ffffff; --text: #1b1d22; --muted: #6b6f78; --line: #e2e2de;
-  --practice: #d93a3f; --ambient: #3f7f8c; --on: #2f9e5b; --warn: #c2410c;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #16181d; --card: #1f2229; --text: #eceef2; --muted: #9aa0ab; --line: #2e323b;
-    --practice: #e5484d; --ambient: #6fb7c4; --on: #46c37b; --warn: #f0883e;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #16181d; --card: #1f2229; --text: #eceef2; --muted: #9aa0ab; --line: #2e323b;
-  --practice: #e5484d; --ambient: #6fb7c4; --on: #46c37b; --warn: #f0883e;
+  color-scheme: dark;
+  --bg: #121016; --surf2: #1E1A24; --surf: #28232F; --line: #3E3748; --line-soft: #2F2A37; --dash: #514960;
+  --ink: #F2EEF8; --ink2: #CEC7DA; --ink3: #A79FB4; --faint: #7E768B;
+  --purple-fill: #7C3AED; --purple: #8B5CF6; --purple-ink: #B9A0FF; --purple-tint: #33264F;
+  --red: #D42A1F; --red-dot: #FF5147; --red-ink: #FF8F85; --red-tint: #3E1F24;
+  --green: #4ADE80;
+  --display: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --text: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 * { box-sizing: border-box; }
-body {
-  margin: 0; background: var(--bg); color: var(--text);
-  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  padding: max(12px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
-  -webkit-tap-highlight-color: transparent;
-}
-main { max-width: 560px; margin: 0 auto; }
-h1 { font-size: 20px; margin: 4px 0 14px; font-weight: 600; }
-a.app {
-  display: block; text-decoration: none; color: inherit; background: var(--card);
-  border: 1px solid var(--line); border-left: 6px solid var(--c); border-radius: 14px;
-  padding: 18px 18px 16px; margin-bottom: 12px;
-}
-a.app:active { opacity: .8; }
-.name { font-size: 22px; font-weight: 600; }
-.about { color: var(--muted); font-size: 14px; }
-.state { margin-top: 10px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
-.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
-.dot.on { background: var(--on); animation: pulse 1.6s ease-in-out infinite; }
-.dot.down { background: var(--warn); }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.4 var(--text); -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { cursor: default; opacity: .7; }
+h1, p { margin: 0; }
+main { max-width: 600px; margin: 0 auto;
+  padding: max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+h1 { font-family: var(--display); font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; margin: 4px 2px 16px; }
+.apps { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+
+/* a tile: the app's name, what it is for, what it is doing; tap to open it */
+a.app { display: flex; flex-direction: column; gap: 4px; min-height: 132px; padding: 16px 16px 16px 20px; text-decoration: none; color: inherit;
+  background: var(--surf); border: 1.5px solid var(--line); border-radius: 22px; }
+a.app:active { background: var(--purple-tint); }
+.head { display: flex; align-items: center; gap: 12px; }
+.name { flex: 1; min-width: 0; font-family: var(--display); font-size: 28px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; }
+.go { width: 44px; height: 44px; flex: none; border-radius: 22px; background: var(--purple-tint); display: flex; align-items: center; justify-content: center; }
+.about { font-size: 16px; color: var(--ink3); }
+.state { margin-top: auto; padding-top: 10px; display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; color: var(--ink2); }
+.dot { width: 11px; height: 11px; border-radius: 50%; background: var(--faint); flex: none; }
+a.app.on .state { color: var(--ink); }
+a.app.on .dot { background: var(--green); animation: pulse 1.6s ease-in-out infinite; }
+a.app.rec { background: var(--red-tint); border-color: var(--red-ink); }
+a.app.rec .state { color: var(--red-ink); }
+a.app.rec .dot { background: var(--red-dot); }
+a.app.down { background: transparent; border-style: dashed; border-color: var(--dash); }
+a.app.down .state { color: var(--ink3); font-weight: 400; }
+a.app.down .dot { background: transparent; border: 2px solid var(--faint); }
 @keyframes pulse { 50% { opacity: .4; } }
-#stopAll {
-  display: none; width: 100%; min-height: 52px; border-radius: 14px; border: 1px solid var(--line);
-  background: var(--card); color: var(--text); font-size: 17px; font-weight: 600; cursor: pointer; margin-bottom: 12px;
+
+.stop-all { width: 100%; min-height: 64px; margin-top: 14px; border: 0; border-radius: 20px; background: var(--purple-fill); color: #fff;
+  display: flex; align-items: center; justify-content: center; gap: 12px; font-family: var(--display); font-size: 24px; font-weight: 700; }
+.notes { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+.note { color: var(--ink3); font-size: 15px; line-height: 1.4; padding: 0 2px; }
+.note b { color: var(--ink2); }
+
+/* an iPad: two tiles to a row */
+@media (min-width: 700px) {
+  main { max-width: 1000px; padding-left: max(28px, env(safe-area-inset-left)); padding-right: max(28px, env(safe-area-inset-right)); padding-top: max(24px, env(safe-area-inset-top)); }
+  h1 { font-size: 44px; margin-bottom: 22px; }
+  .apps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  a.app { min-height: 168px; padding: 20px 20px 20px 24px; }
+  .name { font-size: 34px; }
+  .stop-all { max-width: 420px; margin: 20px auto 0; }
+  .notes { max-width: 720px; }
 }
-#stopAll.show { display: block; }
-.note { color: var(--muted); font-size: 13px; margin: 14px 4px; }
 </style>
 </head>
 <body>
 <main>
   <h1>Music room</h1>
-  <div id="apps"></div>
-  <button id="stopAll">Stop everything</button>
-  <p class="note">Only one of these plays at a time: starting one fades the other out. A recording is never interrupted.</p>
-  <p class="note">The mixer's button: MP3/USB for these, 3/4 for records.</p>
+  <div class="apps" id="apps"></div>
+  <button type="button" class="stop-all" id="stopAll" hidden><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"></rect></svg>Stop everything</button>
+  <div class="notes">
+    <p class="note">Only one of these plays at a time: starting one fades the other out. A recording is never interrupted.</p>
+    <p class="note">The mixer's button: <b>MP3/USB</b> for these, <b>3/4</b> for records.</p>
+  </div>
 </main>
 <script>
-const COLORS = { practice: "var(--practice)", ambient: "var(--ambient)" };
 const $ = (id) => document.getElementById(id);
+const GO = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="#B9A0FF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
 
 function mmss(s) { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
 
-// What each app is doing, in a few words; and whether it is active.
+// The practice recorder and the exercise app: the same engine (recorder/engine.py), so the same words.
+function recorderState(s) {
+  if (s.state === "recording") return [`Recording ${mmss(s.recording.seconds)}`, true, false, true];
+  if (s.state === "playing" || s.state === "preparing") return [s.playing && s.playing.backing ? "Playing a backing track" : "Playing a take", true];
+  return ["Ready", false];
+}
+
+// What each app is doing, in a few words: [text, active, not running, recording].
 function describe(a) {
   const s = a.status;
-  if (!a.up) return ["not running", false, true];
-  if (a.id === "practice") {
-    if (s.state === "recording") return [`Recording ${mmss(s.recording.seconds)}`, true];
-    if (s.state === "playing" || s.state === "preparing") return ["Playing a take", true];
-    return ["Ready", false];
-  }
+  if (!a.up) return ["Not running", false, true];
+  if (a.id === "practice" || a.id === "exercises") return recorderState(s);
   if (a.id === "ambient") {
     const st = s.state;
     const sc = s.explain && s.explain.scale;
@@ -83,7 +109,13 @@ function describe(a) {
     if (s.fading) return ["Fading out", true];
     return ["Stopped", false];
   }
-  return [s && s.state ? String(s.state) : "running", false];
+  if (a.id === "chords") {
+    if (s.state === "listening") return [s.chord ? `Hearing ${s.chord}` : "Listening", true];
+    if (s.state === "waiting") return ["Letting a recorder have the inputs", false];
+    return ["Ready", false];
+  }
+  const st = s && s.state ? String(s.state) : "running";
+  return [st[0].toUpperCase() + st.slice(1), false];
 }
 
 function render(data) {
@@ -95,19 +127,18 @@ function render(data) {
     if (!el) {
       el = document.createElement("a");
       el.className = "app"; el.id = `app-${a.id}`;
-      el.style.setProperty("--c", COLORS[a.id] || "var(--muted)");
-      el.innerHTML = `<div class="name"></div><div class="about"></div><div class="state"><span class="dot"></span><span class="text"></span></div>`;
+      el.innerHTML = `<span class="head"><span class="name"></span><span class="go">${GO}</span></span><span class="about"></span><span class="state"><span class="dot"></span><span class="text"></span></span>`;
       box.append(el);
     }
     el.href = `http://${host}:${a.port}/`;
     el.querySelector(".name").textContent = a.name;
     el.querySelector(".about").textContent = a.about || "";
-    const [text, on, down] = describe(a);
+    const [text, on, down, rec] = describe(a);
     el.querySelector(".text").textContent = text;
-    el.querySelector(".dot").className = "dot" + (on ? " on" : "") + (down ? " down" : "");
+    el.className = "app" + (on ? " on" : "") + (down ? " down" : "") + (rec ? " rec" : "");
     any = any || on;
   }
-  $("stopAll").classList.toggle("show", any);
+  $("stopAll").hidden = !any;
 }
 
 async function poll() {
