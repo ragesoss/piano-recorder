@@ -535,7 +535,8 @@ same way).
   chord the playing is on and each chord's length in beats, and for each reading five bars of how
   sure: the chord (its smoothed probability), the bass and the kind (how many of the last 5 frames
   agree), each note (its level against the loudest), the tempo (the pulse's peak), the loop (its
-  rounds, halved after a chord let pass). A new listen starts the tempo and the loop afresh.
+  rounds, halved after a chord let pass). A new listen starts the tempo and the loop afresh. Deployed
+  2026-10-16, about 08:04 (everything idle), with Play one and the old mixer note's removal.
 - **Deployed 2026-10-16, about 07:10** (both recorders idle). The installer added
   `/etc/chord-listener.toml` and the unit; by hand, the peers line of `/etc/practice-recorder.toml` and
   `/etc/exercise-recorder.toml` and the tile in `/etc/room-home.toml` (copies kept as
