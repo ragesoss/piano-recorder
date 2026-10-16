@@ -78,10 +78,15 @@ yet.
     conditioner). Self-noise 15 dB(A) or less. XLR with phantom power: no
     USB mics, no ribbons (low output, fragile).
   - **Models often seen used** (rough used prices, US, 2026; check local
-    listings): Audio-Technica AT4040 (cardioid) $175-250, AT4050
-    (multi-pattern) $350-450; AKG C214 (cardioid) $225-300; Rode NT2-A
-    (multi-pattern) $200-275; AKG C414 XLS/XLII (multi-pattern) $500-750;
-    Neumann TLM 102 $450-600, TLM 103 $700-900.
+    listings): Audio-Technica AT2035 (cardioid, 12 dB(A)) $80-110; Rode
+    NT1-A (cardioid, about 5) $120-170; AT4040 (cardioid, about 12)
+    $175-250; AKG C214 (cardioid, about 13) $225-300; Rode NT2-A
+    (multi-pattern, 7) $200-275, the best fit to all of the above; AT2050
+    (multi-pattern) $120-170 and AT4050 (multi-pattern) $350-450, both
+    about 17 dB(A), just over; AKG C414 XLS/XLII (multi-pattern, about 6)
+    $500-750; Neumann TLM 102 $450-600, TLM 103 $700-900. (Self-noise
+    "about" from the datasheets as remembered, 2026-10-16: check before
+    buying.) Not the MXL 990: cardioid only, listed at 20 dB(A).
   - **Checking a used one:** hear it before paying (no crackle, no hiss,
     steady output when the body is tapped gently); no dents in the grille
     (a drop can damage the capsule); try the pattern, pad and low-cut
