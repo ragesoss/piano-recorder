@@ -477,9 +477,12 @@ same way).
   back). The ambient synth does not list it: it does not use the inputs.
 - Tried on the desktop with `--demo` (chords made by the program in place of the inputs): both views
   at 1180x820 and 390x844, a check and two labels kept, no console errors. On synthesized chords the
-  listener names 33 or more of the 36 (a test). Not deployed yet: `/etc/practice-recorder.toml`,
-  `/etc/exercise-recorder.toml` (peers) and `/etc/room-home.toml` (the tile) need the new lines by
-  hand, as the installer keeps existing configs.
+  listener names 33 or more of the 36 (a test).
+- **Deployed 2026-10-16, about 07:10** (both recorders idle). The installer added
+  `/etc/chord-listener.toml` and the unit; by hand, the peers line of `/etc/practice-recorder.toml` and
+  `/etc/exercise-recorder.toml` and the tile in `/etc/room-home.toml` (copies kept as
+  `*.pre-chords.bak`). Not yet tried on the LIVA: listening to the 18i8, or a recording taking the
+  inputs from it.
 
 ## Open questions
 
