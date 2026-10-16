@@ -54,6 +54,11 @@ class PlayIn(BaseModel):
     start: float = 0.0
 
 
+class HearIn(BaseModel):
+    count_in: bool = True  # the take's bar of count-in first
+    click: bool = True  # and its click on every beat
+
+
 class SettingsIn(BaseModel):
     level_offset_db: float
 
@@ -235,6 +240,19 @@ def create_app(cfg: Config) -> FastAPI:
         """The exercise's instructions (its README in the project), as Markdown."""
         text = guard(exercises.readme, exercise_id)
         return PlainTextResponse(text, media_type="text/markdown; charset=utf-8", headers={"Cache-Control": "no-cache"})
+
+    @app.post("/api/exercises/{exercise_id}/hear")
+    def hear_exercise(exercise_id: str, body: HearIn | None = None):
+        """Hear the exercise's chart over the speakers (its notes, rendered when it was pushed), at
+        its tempo, with the count-in and the click its take gets. It stops when a take starts."""
+        body = body or HearIn()
+        ex = guard(exercises.get, exercise_id)
+        try:
+            path, beat0 = exercises.audio(exercise_id)
+        except ExerciseNotFound:
+            raise HTTPException(404, "this exercise has no audio yet: push it again (tools/push-exercise)")
+        guard(engine.play_chart, ex.id, path, beat0, ex.tempo, ex.beats, count_in=body.count_in, through=body.click)
+        return {"ok": True}
 
     @app.get("/api/backings")
     def list_backings():
