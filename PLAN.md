@@ -433,8 +433,11 @@ on the same screen as the controls, so a take needs little preparation.
     before), kept like the 18i8's three; headless Chromium at 1180x820, 820x1180 and 390x844.
     Every step, a change with a knock-on, an exercise take over its click, a play-along with
     the backing heard first, a free take over a click (lined up again from its beats), and the
-    takes' note and delete. No console errors. Not yet deployed: `/etc/exercise-recorder.toml`
-    needs the `[inputs.N]` tables by hand.
+    takes' note and delete. No console errors.
+  - **Deployed 2026-10-16, about 06:15** (both recorders idle). `/etc/exercise-recorder.toml`
+    got the `[inputs.N]` tables by hand (the installer keeps an existing config; the old one is
+    `/etc/exercise-recorder.toml.pre-inputs.bak`). Not yet tried on the LIVA: the practice
+    recorder recording while the exercise page is open (the inputs handed over on its yield).
 - **Next:** a tool to bring exercise takes into dobro-transcription with
   their `takes.csv` rows (`tools/pull-take` reads only the practice
   recorder's takes; exercise takes need `/etc/exercise-recorder.toml`),
