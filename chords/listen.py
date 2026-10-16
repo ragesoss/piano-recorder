@@ -22,6 +22,10 @@ The clip (every kept channel, from just before the attack) and what was asked, h
 kept in the config's takes_dir, for study on the desktop (`tools/pull-checks`). A label is the same
 from the Listen view: the last `LABEL_S` kept with the chord the player says it was.
 
+The Listen view also follows the playing with no chart: a steady pulse (`livechords.Pulse`: the
+tempo, once the strikes or strums keep time) and a loop of chords (`livechords.LoopFinder`: the
+shortest cycle the last two rounds of changes repeat), with where the playing is in it.
+
 It listens only while a page asks (`listen()`: `LISTEN_S` more each time), and lets the inputs go for
 `YIELD_S` when another program asks (`yield_inputs()`: a recorder about to record).
 """
@@ -265,7 +269,11 @@ class Listener:
         self.post = np.full(len(CHORDS), 1.0 / len(CHORDS))
         self.bass_seen: list[int | None] = []  # the last frames' bass pitch classes
         self.bass_shown: int | None = None
+        self.pulse = L.Pulse(self.rate)
+        self.loops = L.LoopFinder()
         self.kind_seen: list[str | None] = []  # the last frames' kinds (note, pair, chord)
+        self.recent_bass: collections.deque = collections.deque(maxlen=5)  # for each reading's sureness
+        self.recent_kind: collections.deque = collections.deque(maxlen=5)
         self.kind_shown: str | None = None
         self.last_heard: Heard | None = None
         self.now: dict = {"chord": None, "confidence": 0.0, "top": [], "level_dbfs": None, "quiet_dbfs": None}
@@ -293,6 +301,7 @@ class Listener:
                 self.error = "the mixer is not connected"
                 return
             self.stop_ev = threading.Event()
+            self.pulse, self.loops = L.Pulse(self.rate), L.LoopFinder()  # a new listen starts the form afresh
             self.thread = threading.Thread(target=self._run, args=(self.stop_ev,), daemon=True)
             self.thread.start()
 
@@ -365,6 +374,7 @@ class Listener:
         s = L.chord_scores(tr, bs, 0.5, inversions=True, vocab=VOCAB)
         bass_midi, _ = L.bass_note(V)
         frame_kind = hear(V, s).kind
+        self.pulse.hear(mono)
         with self.lock:
             before = list(self.levels)[-3:]
             self.levels.append(block_level)
@@ -380,6 +390,8 @@ class Listener:
             order = np.argsort(s)[::-1][:4]
             pc = bass_midi % 12 if (loud and bass_midi is not None) else None
             self.bass_seen = (self.bass_seen + [pc])[-2:]
+            self.recent_bass.append(pc)
+            self.recent_kind.append(frame_kind if loud else None)
             if len(self.bass_seen) == 2 and self.bass_seen[0] == self.bass_seen[1]:
                 self.bass_shown = pc
             if not loud:
@@ -399,14 +411,27 @@ class Listener:
                 kind = h.kind
             self.last_heard = h if kind else None
             name = h.name if kind else None
+            levels = dict(L.notes_heard(V)) if kind else {}
             self.now = {"chord": name, "kind": kind, "detail": h.detail if kind else None,
                         "notes": [note_name(m) for m in h.notes] if kind else [],
+                        "note_levels": [round(float(levels.get(m, 0.0)), 2) for m in h.notes] if kind else [],
+                        "kind_confidence": round(sum(k == kind for k in self.recent_kind) / 5, 2) if kind else 0.0,
+                        "bass_confidence": round(sum(b == self.bass_shown for b in self.recent_bass) / 5, 2)
+                        if kind and self.bass_shown is not None else 0.0,
                         "bass": NAMES[self.bass_shown] if loud and self.bass_shown is not None else None,
                         "confidence": round(float(self.post[best]), 3) if kind == "chord" else (1.0 if kind else 0.0),
                         "top": [[chord_name(CHORDS[k]), round(float(s[k]), 3)] for k in order] if kind == "chord" else [],
                         "level_dbfs": round(block_level, 1), "quiet_dbfs": round(quiet, 1)}
             if name and self.now["confidence"] >= 0.5 and (not self.history or self.history[-1][1] != name):
                 self.history.append((datetime.now().isoformat(timespec="seconds"), name))
+            self.loops.hear(pos / self.rate, name if self.now["confidence"] >= 0.5 else None)
+            tempo, loop = self.pulse.estimate(), self.loops.state()
+            if loop and tempo:  # each chord's length in beats, at the pulse's tempo
+                beat = 60.0 / tempo["bpm"]
+                loop["beats"] = [round(x / beat) if x else None for x in loop["lengths_s"]]
+            if loop:  # sure with the rounds it has held, less after a chord it let pass
+                loop["confidence"] = round(min(1.0, (loop["rounds"] - 1) / 3) * (0.5 if self.loops.missed else 1.0), 2)
+            self.now["tempo"], self.now["loop"] = tempo, loop
             ck = self.check
             if ck is not None and ck.state == "waiting" and before and loud and \
                     block_level - min(before) >= ATTACK_DB:
@@ -571,7 +596,8 @@ class Listener:
             ck = self.check
             return {
                 "state": "listening" if on else ("waiting" if time.monotonic() < self.wait_until else "idle"),
-                **(self.now if on else {"chord": None, "confidence": 0.0, "top": [], "level_dbfs": None}),
+                **(self.now if on else {"chord": None, "confidence": 0.0, "top": [], "level_dbfs": None,
+                                        "tempo": None, "loop": None}),
                 "history": [{"time": t, "chord": c} for t, c in self.history],
                 "check": ck and {"target": ck.target.name if ck.target else None,
                                  "kind": ck.target.kind if ck.target else None, "state": ck.state,

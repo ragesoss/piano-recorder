@@ -17,7 +17,7 @@
   color-scheme: dark;
   --bg: #121016; --surf2: #1E1A24; --surf: #28232F; --line: #3E3748; --line-soft: #2F2A37;
   --ink: #F2EEF8; --ink2: #CEC7DA; --ink3: #A79FB4; --faint: #7E768B;
-  --purple-fill: #7C3AED; --purple: #8B5CF6; --purple-ink: #B9A0FF; --purple-tint: #33264F;
+  --purple-fill: #7C3AED; --purple: #8B5CF6; --purple-line: #A78BFA; --purple-ink: #B9A0FF; --purple-tint: #33264F;
   --red-ink: #FF8F85; --red-tint: #3E1F24; --green: #4ADE80; --green-tint: #173326; --amber: #E8B93B;
   --display: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
   --text: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -56,8 +56,21 @@ main { flex: 1; display: flex; flex-direction: column; align-items: center; just
 .picks { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .picks .lbl { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); margin-right: 4px; }
 .quality { font-size: 24px; color: var(--ink2); min-height: 1.4em; }
-.conf { width: min(420px, 80vw); height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
-.conf i { display: block; height: 100%; width: 0; background: var(--purple); transition: width .12s linear; }
+/* each reading, with how sure the listener is of it: five bars, like a phone's signal */
+.readings { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; min-height: 44px; max-width: 980px; }
+.reading { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 14px; background: var(--surf2); font-size: 15px; color: var(--ink2); }
+.reading .k { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); }
+.reading b { color: var(--ink); font-size: 17px; }
+.bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 18px; }
+.bars i { width: 4px; border-radius: 1px; background: var(--line); }
+.bars i:nth-child(1) { height: 6px; } .bars i:nth-child(2) { height: 9px; } .bars i:nth-child(3) { height: 12px; }
+.bars i:nth-child(4) { height: 15px; } .bars i:nth-child(5) { height: 18px; }
+.bars i.on { background: var(--purple-line); }
+.bars.weak i.on { background: var(--amber); }
+.loop { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; align-items: center; min-height: 48px; }
+.loop .chord { padding: 8px 14px; border-radius: 12px; border: 1.5px solid var(--line); font-family: var(--display); font-weight: 700; font-size: 22px; }
+.loop .chord.now { border-color: var(--purple); background: var(--purple-tint); color: var(--purple-ink); }
+.loop .chord small { display: block; font-family: var(--text); font-size: 12px; font-weight: 600; color: var(--ink3); text-align: center; }
 .alts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; min-height: 36px; }
 .alt { padding: 6px 12px; border-radius: 12px; background: var(--surf2); font-size: 15px; color: var(--ink2); font-variant-numeric: tabular-nums; }
 .alt b { color: var(--ink); margin-right: 6px; }
@@ -109,7 +122,8 @@ main { flex: 1; display: flex; flex-direction: column; align-items: center; just
     <div class="big none" id="chord">–</div>
     <div class="quality" id="quality">Play a chord, a note or two</div>
     <div class="bassline" id="bassline"></div>
-    <div class="conf" aria-label="How sure"><i id="conf"></i></div>
+    <div class="readings" id="readings" aria-live="off"></div>
+    <div class="loop" id="loop" aria-label="The loop"></div>
     <div class="alts" id="alts"></div>
     <div class="meter" aria-label="Level"><i id="level"></i></div>
     <div class="history" id="history" aria-label="Recently heard"></div>
@@ -196,6 +210,11 @@ function bigHtml(name) {  // the chord big, an inversion's bass smaller; a note'
   if (k === "chord" && name.includes("/")) { const [c, b] = name.split("/"); return `${pretty(c)}<small>/${pretty(b)}</small>`; }
   return pretty(name);
 }
+function bars(conf, label) {  // how sure, as five bars
+  const n = conf > 0 ? Math.max(1, Math.round(conf * 5)) : 0;
+  return `<span class="bars${n && n <= 2 ? " weak" : ""}" role="img" aria-label="${label || "sure"}: ${n} of 5">${[1, 2, 3, 4, 5].map((k) => `<i class="${k <= n ? "on" : ""}"></i>`).join("")}</span>`;
+}
+function reading(k, value, conf) { return `<span class="reading"><span class="k">${k}</span><b>${value}</b>${bars(conf, k)}</span>`; }
 function words(name) {  // a target in words
   const k = kindOf(name);
   if (k === "note") return `${pretty(name)}, one note`;
@@ -274,7 +293,17 @@ function render(s) {
   $("chord").innerHTML = bigHtml(c); $("chord").classList.toggle("none", !c);
   $("quality").textContent = c ? acc(s.detail || "") : on ? "Play a chord, a note or two" : "";
   $("bassline").innerHTML = c && s.kind === "chord" && s.bass ? `<span>${pretty(s.bass)} in the bass</span>` : "";
-  $("conf").style.width = c ? `${Math.round(100 * s.confidence)}%` : "0";
+  const rd = [];
+  if (c) {
+    rd.push(reading({ note: "One note", pair: "Two notes", chord: "Chord" }[s.kind] || "Heard", s.kind === "chord" ? pretty(c) : "", s.kind === "chord" ? s.confidence : s.kind_confidence));
+    if (s.kind === "chord" && s.bass) rd.push(reading("Bass", pretty(s.bass), s.bass_confidence));
+    (s.notes || []).forEach((n, i) => rd.push(reading(i ? "" : "Notes", pretty(n), (s.note_levels || [])[i] || 0)));
+  }
+  if (s.tempo) rd.push(reading("Tempo", `♩ ${Math.round(s.tempo.bpm)}${s.tempo.beats_per_pulse >= 2 ? ` · a strike every ${s.tempo.beats_per_pulse} beats` : ""}`, s.tempo.strength));
+  $("readings").innerHTML = rd.join("");
+  const lp = s.loop;
+  $("loop").innerHTML = lp ? `<span class="reading"><span class="k">Loop</span>round ${lp.rounds}${bars(lp.confidence, "loop")}</span>` + lp.chords.map((ch, i) =>
+    `<span class="chord${i === lp.at ? " now" : ""}">${pretty(ch)}${lp.beats && lp.beats[i] ? `<small>${lp.beats[i]} beat${lp.beats[i] > 1 ? "s" : ""}</small>` : ""}</span>`).join("") : "";
   $("alts").innerHTML = (s.top || []).slice(c ? 1 : 0, 4).map(([n, v]) => `<span class="alt"><b>${pretty(n)}</b>${v.toFixed(2)}</span>`).join("");
   $("level").style.width = s.level_dbfs == null ? "0" : `${Math.max(0, Math.min(100, (s.level_dbfs + 70) / 70 * 100))}%`;
   $("history").innerHTML = (s.history || []).map((h) => `<span>${pretty(h.chord)}</span>`).join("");

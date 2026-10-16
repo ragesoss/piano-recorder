@@ -523,6 +523,19 @@ same way).
   mixed inputs, peaking at -3 dBFS, 16-bit mono: `/api/checks/{id}/audio?mix=1`); a Check's result has
   it too. The answer goes into the clip's sidecar (`/api/checks/{id}/label`: what it was, and whether
   that is what was heard). Listen is a display only now.
+- **Tempo, the loop, and how sure** (2026-10-16, the player: "show tempo if a steady tempo is
+  detected, and show chord form if that is detected as well... cycle between a few chords in
+  reasonable time and have it recognize the loop and display it"; "some indication of confidence for
+  each of the things it detects. maybe a little power meter type thing"). From dobro-transcription's
+  listener: `Pulse` (an onset envelope's autocorrelation over the last 12 s, every 0.5 s; steady when
+  its peak is 0.3 or more three times running within 4%; the period folded into 70-140 bpm: a chord
+  every 2.5 s is 96 bpm, a strike every four beats) and `LoopFinder` (a chord counts once it holds
+  0.5 s; the loop the shortest cycle of 2-8 changes the last two rounds repeat; one wrong chord let
+  pass, a second drops it; 4 s without a chord clears it). Listen shows the tempo, the loop with the
+  chord the playing is on and each chord's length in beats, and for each reading five bars of how
+  sure: the chord (its smoothed probability), the bass and the kind (how many of the last 5 frames
+  agree), each note (its level against the loudest), the tempo (the pulse's peak), the loop (its
+  rounds, halved after a chord let pass). A new listen starts the tempo and the loop afresh.
 - **Deployed 2026-10-16, about 07:10** (both recorders idle). The installer added
   `/etc/chord-listener.toml` and the unit; by hand, the peers line of `/etc/practice-recorder.toml` and
   `/etc/exercise-recorder.toml` and the tile in `/etc/room-home.toml` (copies kept as

@@ -1,4 +1,4 @@
-# Copied from dobro-transcription pipeline/src/transcribe/livechords.py (d0054ee) by tools/sync-livechords.
+# Copied from dobro-transcription pipeline/src/transcribe/livechords.py (2a642fb) by tools/sync-livechords.
 # Change it there and copy it again; do not edit this copy.
 """Chords in the moment, for a band that follows: per beat, what the audio heard so far says the chord
 is, where in a chart the player is, and the key. Causal: every answer at a time t uses only audio
@@ -383,3 +383,152 @@ class ChartFollower:
         nxt = (1 - self.jump - self.stay) * np.roll(post, 1) + self.stay * post
         nxt[self.bar_starts] += self.jump / len(self.bar_starts)
         self.post = nxt / nxt.sum()
+
+
+# --- the pulse and the loop, as heard (no chart) ---------------------------------------------------
+
+
+class Pulse:
+    """A steady pulse in the playing, as it arrives (`hear` each block of mono samples). An onset
+    envelope: each 10 ms frame's log energy over the mean of the three before it, the rises only. Every
+    `every_s`, its autocorrelation over the last `span_s` (the mean taken out, normalised), and the
+    strongest peak between `min_s` and `max_s`: the period, or half of it when the half is nearly as
+    strong (a faster pulse heard in it). Steady once the peak reaches `sure` and the last `hold`
+    estimates agree within 4%. The beat (`estimate`) is the period, doubled or halved into 70-140 bpm:
+    a chord struck every 2.6 s is 92 bpm, four beats a chord."""
+
+    def __init__(self, rate: int, span_s: float = 12.0, every_s: float = 0.5, min_s: float = 0.25,
+                 max_s: float = 4.0, sure: float = 0.3, hold: int = 3):
+        self.rate, self.hop = rate, max(1, rate // 100)
+        self.span = int(span_s * 100)
+        self.every, self.min_k, self.max_k = int(every_s * 100), int(min_s * 100), int(max_s * 100)
+        self.sure, self.hold = sure, hold
+        self.left = np.zeros(0)
+        self.loud: list[float] = []  # each frame's log energy (the last few)
+        self.env: list[float] = []
+        self.since = 0
+        self.periods: list[tuple[float, float]] = []  # (period s, peak), each estimate
+        self.steady: dict | None = None
+
+    def hear(self, x: np.ndarray) -> None:
+        x = np.concatenate([self.left, np.asarray(x, dtype=float)])
+        n = len(x) // self.hop
+        self.left = x[n * self.hop:]
+        for f in x[: n * self.hop].reshape(n, self.hop) if n else []:
+            e = float(np.log(np.mean(f ** 2) + 1e-10))
+            prev = self.loud[-3:]
+            self.env.append(max(0.0, e - (sum(prev) / len(prev) if prev else e)))
+            self.loud = (self.loud + [e])[-3:]
+            self.since += 1
+            if self.since >= self.every:
+                self.since = 0
+                self._estimate()
+        self.env = self.env[-self.span:]
+
+    def _estimate(self) -> None:
+        e = np.array(self.env[-self.span:])
+        if len(e) < 3 * self.min_k or not e.any():
+            return
+        e = e - e.mean()
+        den = float(np.dot(e, e)) or 1.0
+        hi = min(self.max_k, len(e) // 2)
+        if hi <= self.min_k:
+            return
+        r = np.array([float(np.dot(e[:-k], e[k:])) / den for k in range(1, hi + 1)])  # r[k-1]: lag k frames
+        lags = [k for k in range(self.min_k, hi) if r[k - 1] >= r[k - 2] and r[k - 1] >= r[k]]
+        if not lags:
+            return
+        k = max(lags, key=lambda q: r[q - 1])
+        half = k // 2
+        if half >= self.min_k and r[half - 1] >= 0.85 * r[k - 1]:
+            k = half
+        self.periods = (self.periods + [(k / 100.0, float(r[k - 1]))])[-self.hold:]
+        p = [q for q, _ in self.periods]
+        ok = len(p) == self.hold and all(h >= self.sure for _, h in self.periods) and max(p) <= 1.04 * min(p)
+        if ok:
+            period = float(np.mean(p))
+            bpm, per = 60.0 / period, 1.0
+            while bpm < 70:
+                bpm, per = bpm * 2, per * 2
+            while bpm >= 140:
+                bpm, per = bpm / 2, per / 2
+            self.steady = {"bpm": round(bpm, 1), "period_s": round(period, 3), "beats_per_pulse": per,
+                           "strength": round(float(np.mean([h for _, h in self.periods])), 3)}
+        elif self.periods and self.periods[-1][1] < self.sure:
+            self.steady = None
+
+    def estimate(self) -> dict | None:
+        """{"bpm", "period_s", "beats_per_pulse", "strength"} while the pulse is steady, else None."""
+        return self.steady
+
+
+class LoopFinder:
+    """A loop of chords from the chord heard over time (`hear(t, chord)` a few times a second, a name or
+    None). A chord counts as a change once it has held `min_s`, so a passing misreading is not one; the
+    loop is the shortest cycle of 2 to `max_len` changes that the last two rounds repeat exactly. It
+    holds while the next changes match it (`misses` wrong in a row are let pass), and goes after
+    `quiet_s` without a chord. `state()`: the loop, the chord the playing is on, the rounds heard and
+    each chord's mean length."""
+
+    def __init__(self, min_s: float = 0.5, max_len: int = 8, misses: int = 1, quiet_s: float = 4.0):
+        self.min_s, self.max_len, self.misses_ok, self.quiet_s = min_s, max_len, misses, quiet_s
+        self.cur: list | None = None  # [chord, start, last seen]
+        self.changes: list[tuple[str, float]] = []  # (chord, start)
+        self.loop: list[str] | None = None
+        self.pos = 0  # the loop's chord the playing is on
+        self.rounds = 0
+        self.missed = 0
+        self.last_chord_t: float | None = None
+
+    def hear(self, t: float, chord: str | None) -> None:
+        if chord is None:
+            if self.last_chord_t is not None and t - self.last_chord_t > self.quiet_s:
+                self.changes, self.loop, self.cur = [], None, None
+            return
+        self.last_chord_t = t
+        if self.cur is None or self.cur[0] != chord:
+            self.cur = [chord, t, t]
+        else:
+            self.cur[2] = t
+        c, start, seen = self.cur
+        if seen - start >= self.min_s and (not self.changes or self.changes[-1][0] != c or self.changes[-1][1] != start):
+            if self.changes and self.changes[-1][0] == c:
+                return  # the same chord again after a passing misreading: not a change
+            self.changes = (self.changes + [(c, start)])[-4 * self.max_len:]
+            self._next(c)
+
+    def _next(self, c: str) -> None:
+        if self.loop is not None:
+            want = self.loop[(self.pos + 1) % len(self.loop)]
+            if c == want:
+                self.pos = (self.pos + 1) % len(self.loop)
+                self.missed = 0
+                if self.pos == 0:
+                    self.rounds += 1
+                return
+            self.missed += 1
+            if self.missed <= self.misses_ok:
+                return
+            self.loop = None
+        names = [n for n, _ in self.changes]
+        for p in range(2, self.max_len + 1):
+            if len(names) >= 2 * p and names[-p:] == names[-2 * p:-p] and len(set(names[-p:])) > 1:
+                self.loop, self.pos, self.missed = names[-p:], p - 1, 0
+                r = 2
+                while len(names) >= (r + 1) * p and names[-(r + 1) * p:-r * p] == self.loop:
+                    r += 1
+                self.rounds = r
+                return
+
+    def state(self) -> dict | None:
+        if self.loop is None:
+            return None
+        p = len(self.loop)
+        lengths = [[] for _ in range(p)]
+        starts = [s for _, s in self.changes]
+        for i in range(len(self.changes) - 1):
+            k = (self.pos - (len(self.changes) - 1 - i)) % p  # the loop slot of change i
+            if self.changes[i][0] == self.loop[k]:
+                lengths[k].append(starts[i + 1] - starts[i])
+        return {"chords": list(self.loop), "at": self.pos, "rounds": self.rounds,
+                "lengths_s": [round(float(np.mean(v)), 2) if v else None for v in lengths]}

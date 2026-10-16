@@ -153,12 +153,13 @@ def create_app(cfg: Config, source=None) -> FastAPI:
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--demo", action="store_true", help="chords played by the program, in place of the inputs")
+    p.add_argument("--demo", nargs="?", const="-,G,C/E,D7,-,A3,C+G,Bdim,Cdim7/Eb", metavar="CHORDS",
+                   help="chords played by the program in place of the inputs, a new one every 2.5 s (comma-separated)")
     a = p.parse_args()
     cfg = load_config(Path(os.environ.get("CHORD_LISTENER_CONFIG", SYSTEM_CONFIG)))
     source = None
     if a.demo:
-        chords = ["-", "G", "C/E", "D7", "-", "A3", "C+G", "Bdim", "Cdim7/Eb"]
+        chords = a.demo.split(",")
         source = lambda: DemoSource(chords, len(cfg.inputs), cfg.capture.capture.rate)  # noqa: E731
     uvicorn.run(create_app(cfg, source), host=cfg.web_host, port=cfg.web_port, log_level="warning")
 
