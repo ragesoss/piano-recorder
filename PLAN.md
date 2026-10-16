@@ -621,7 +621,11 @@ same way).
   desktop; `window_salience` 7 ms), nearly the whole 100 ms a frame has: so the Listen view runs it only
   as often as costs `PIANO_BUDGET_MS` (35 ms) a frame, what it last heard in between (every third frame
   on the LIVA; afresh the frame after a strike), redeployed at 10:24. `/api/status` reports
-  `frame_ms` and `piano_ms`. A check (judged once) takes the detector's full cost once.
+  `frame_ms` and `piano_ms`. A check (judged once) takes the detector's full cost once. The detector
+  made 3-5 times faster in dobro-transcription (the same results to the bit), deployed 2026-10-16
+  evening: on the LIVA (Celeron N2807) 15.2 ms a frame over three chords (median 13.9, slowest 22.6)
+  against 135 ms before (`pipeline/tools/piano_cost.py`, the same notes heard), under the budget, so
+  the Listen view runs it every frame there now.
 - **Deployed 2026-10-16, about 07:10** (both recorders idle). The installer added
   `/etc/chord-listener.toml` and the unit; by hand, the peers line of `/etc/practice-recorder.toml` and
   `/etc/exercise-recorder.toml` and the tile in `/etc/room-home.toml` (copies kept as
