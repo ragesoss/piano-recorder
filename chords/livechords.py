@@ -1,4 +1,4 @@
-# Copied from dobro-transcription pipeline/src/transcribe/livechords.py (616e8d5) by tools/sync-livechords.
+# Copied from dobro-transcription pipeline/src/transcribe/livechords.py (c6f263f) by tools/sync-livechords.
 # Change it there and copy it again; do not edit this copy.
 """Chords in the moment, for a band that follows: per beat, what the audio heard so far says the chord
 is, where in a chart the player is, and the key. Causal: every answer at a time t uses only audio
@@ -166,6 +166,292 @@ def notes_heard(V: np.ndarray, share: float = NOTE_SHARE, max_notes: int = 6,
             if j < len(R):
                 R[j] = max(0.0, R[j] - f / h)
     return sorted((m, round(f / loudest, 3)) for m, f in found)
+
+
+# --- a piano's notes, A0 to C8, and the chord they make --------------------------------------------
+# For the chord app (2026-10-16; `exercises/observations/piano-triads-2026-10-16`, `tools/piano_study.py`).
+# The notes are the set that best explains the window's spectral peaks, each note's partials where a
+# piano's are (its tuning stretched, its partials sharp: n f0 sqrt(1 + B n^2)); the chord is named from
+# those notes and its bass is the lowest of them. On the triads take, judged as the app judges a check:
+# notes 142 of 144 with 11 extra (`notes_heard`: 99, 85 extra), chords 47 of 48 (the raw spectrum's
+# scores: 22). numpy only; causal (a window's own audio, and the room as heard before it).
+
+PIANO_RANGE = (21, 108)  # A0 to C8
+
+
+def window_peaks(y: np.ndarray, sr: int, a: float, b: float, min_fft: int = 16384, floor_db: float = 50.0,
+                 snr_db: float = 10.0, background=None, near_hz: float = 1.5, near_rel: float = 0.004,
+                 rise_db: float = 6.0, ringing=None, ringing_rise_db: float = 3.0) -> tuple[np.ndarray, np.ndarray]:
+    """The spectrum's peaks in y between a and b seconds (one Hann-windowed segment), as (frequencies
+    in Hz, amplitudes): each where a parabola through its log magnitude and its neighbours' puts it, its
+    amplitude a sinusoid's (so a steady tone reads the same in any window). Kept: peaks `snr_db` over
+    the median of their sixth of an octave, and within `floor_db` of the loudest kept. `background`:
+    the room's peaks (`quiet_peaks`); a peak within `near_hz` (or `near_rel` of its frequency) of one of
+    them and not `rise_db` louder is the room's, not the playing's (a click's level moves 3 dB with
+    where it falls in the window). `ringing`: what rang just before the attack (`quiet_peaks` of the
+    0.28 s before it), whose peaks go on decaying: likewise, not `ringing_rise_db` louder."""
+    i, j = int(round(a * sr)), int(round(b * sr))
+    seg = np.asarray(y[max(0, i): max(i + 16, j)], dtype=float)
+    n = max(min_fft, 1 << int(np.ceil(np.log2(max(len(seg), 2)))))
+    win = np.hanning(len(seg))
+    L = np.log(np.abs(np.fft.rfft(seg * win, n)) * 2 / max(win.sum(), 1e-12) + 1e-15)
+    l, c, r = L[:-2], L[1:-1], L[2:]
+    k = np.nonzero((c > l) & (c >= r))[0]
+    den = l[k] - 2 * c[k] + r[k]
+    p = np.where(np.abs(den) > 1e-12, 0.5 * (l[k] - r[k]) / den, 0.0)
+    lmag = c[k] - 0.25 * (l[k] - r[k]) * p
+    f = (k + 1 + p) * sr / n
+    # the floor: the median log magnitude of each sixth of an octave from 20 Hz
+    edges = 20.0 * 2 ** (np.arange(0, 6 * np.log2(sr / 2 / 20.0) + 1) / 6)
+    cen, med = [], []
+    for e0, e1 in zip(edges[:-1], edges[1:]):
+        b0, b1 = int(e0 * n / sr), int(e1 * n / sr)
+        if b1 - b0 >= 3:
+            cen.append(np.log(np.sqrt(e0 * e1)))
+            med.append(float(np.median(L[b0:b1])))
+    keep = f > 20.0
+    if cen:
+        keep &= lmag > np.interp(np.log(np.maximum(f, 1.0)), cen, med) + snr_db / 20 * np.log(10)
+    for bg, rise in ((background, rise_db), (ringing, ringing_rise_db)):
+        if bg is None or not len(bg[0]):
+            continue
+        o = np.argsort(bg[0])
+        fb, lb = np.asarray(bg[0])[o], np.log(np.asarray(bg[1])[o] + 1e-15)
+        q = np.clip(np.searchsorted(fb, f), 1, max(1, len(fb) - 1))
+        for qq in (q - 1, np.minimum(q, len(fb) - 1)):
+            near = np.abs(f - fb[qq]) < np.maximum(near_hz, near_rel * f)
+            keep &= ~(near & (lmag < lb[qq] + rise / 20 * np.log(10)))
+    if not keep.any():
+        return f[:0], f[:0]
+    keep &= lmag > lmag[keep].max() - floor_db / 20 * np.log(10)
+    return f[keep], np.exp(lmag[keep])
+
+
+def quiet_peaks(y: np.ndarray, sr: int, a: float, b: float, min_fft: int = 16384) -> tuple[np.ndarray, np.ndarray]:
+    """The room's peaks, for `window_peaks(..., background=)`: those of a quiet stretch of y (or of the
+    second before an attack), down to 60 dB under its loudest and 6 dB over the floor. Several stretches'
+    peaks can be put together (concatenated), as a click or a hum is heard in each."""
+    return window_peaks(y, sr, a, b, min_fft, floor_db=60.0, snr_db=6.0)
+
+
+@dataclass(frozen=True)
+class PianoModel:
+    """A piano's tuning (cents from equal temperament at A440, by MIDI note; a line between the points)
+    and its strings' inharmonicity B (partial n at n f0 sqrt(1 + B n^2); a line in log B between the
+    points). The defaults: the player's piano, measured on the triads take (2026-10-16): A4 at 443 Hz,
+    the middle 6-16 cents sharp, the treble stretched to +45 at C8, the bottom octave flat (A0 about
+    -40, D1 -20); B from about 1.2e-4 (C2-C3) to 6.5e-3 (C7)."""
+    tuning: tuple = ((21, -35.0), (24, -25.0), (27, -15.0), (31, 0.0), (36, 2.0), (48, 11.0), (84, 11.0), (108, 45.0))
+    inharmonicity: tuple = ((21, 3e-4), (36, 1.2e-4), (48, 1.2e-4), (60, 3e-4), (72, 8e-4), (84, 2.7e-3),
+                            (96, 6.5e-3), (108, 1.5e-2))
+
+    def cents(self, m):
+        x, v = zip(*self.tuning)
+        return np.interp(m, x, v)
+
+    def B(self, m):
+        x, v = zip(*self.inharmonicity)
+        return np.exp(np.interp(m, x, np.log(v)))
+
+
+PIANO = PianoModel()
+
+
+@dataclass(frozen=True)
+class NoteSearch:
+    """The settings of `piano_notes` (`docs/ledger.md`, "Piano notes")."""
+    partials: int = 16  # a note's partials looked for, at most...
+    explain_hz: float = 9000.0  # ...and none over this
+    expect_hz: float = 5000.0  # a note's partials up to here are expected to be there...
+    expect_always: int = 2  # ...and its first two wherever they fall
+    low_hz: float = 60.0  # a partial under this is expected at half weight (the room mic's faint low end)
+    offsets: tuple = (-30, -20, -10, 0, 10, 20, 30)  # cents around the piano's tuning tried for each note
+    tol_cents: float = 15.0  # a partial is the loudest peak within this many cents of its place...
+    stretch_tol: float = 0.15  # ...widened by this share of its stretch
+    gamma: float = 1 / 3  # a peak's weight: its amplitude over the window's loudest, to this power
+    per_note: float = 0.3  # each note costs this...
+    miss: float = 0.3  # ...and this times its level for each expected partial not there...
+    chance: float = 1.0  # ...and what its partials would catch by chance, at the local density of peaks
+    fund_hz: float = 100.0  # a note over this needs its fundamental at least `fund_share` of its loudest partial
+    fund_share: float = 0.5
+    fund_low_hz: float = 60.0  # a note over this needs its fundamental there at all
+    beam: int = 4  # sets of notes kept at each step of the search
+    max_notes: int = 8
+    claim_cap: float = 1.0  # a note claims of a peak above its fundamental no more than this times its
+    # neighbouring partials' amplitude (0: the whole peak)
+
+
+_PARTIAL_TABLES: dict = {}
+
+
+def _partial_table(search: NoteSearch, piano: PianoModel):
+    """Every candidate note's partials (notes, tuning offsets, partials): their frequencies, tolerances
+    (as ratios), whether each may explain a peak and how much each is expected."""
+    key = (search, piano)
+    if key not in _PARTIAL_TABLES:
+        ms = np.arange(PIANO_RANGE[0], PIANO_RANGE[1] + 1)
+        h = np.arange(1, search.partials + 1)
+        B = piano.B(ms)[:, None, None]
+        cents = piano.cents(ms)[:, None, None] + np.asarray(search.offsets, dtype=float)[None, :, None]
+        f = 440.0 * 2 ** ((ms[:, None, None] - 69) / 12 + cents / 1200) * h * np.sqrt(1 + B * h ** 2)
+        stretch = 1200 * np.log2(np.sqrt(1 + B * h ** 2))
+        tol = np.broadcast_to(2 ** ((search.tol_cents + search.stretch_tol * stretch) / 1200), f.shape)
+        explain = f <= search.explain_hz
+        expect = (((f <= search.expect_hz) | (h <= search.expect_always)) & explain) * np.where(
+            f < search.low_hz, 0.5, 1.0)
+        f0 = 440.0 * 2 ** ((ms - 69) / 12)
+        fund = np.where(f0 >= search.fund_hz, search.fund_share, np.where(f0 >= search.fund_low_hz, 1e-9, 0.0))
+        _PARTIAL_TABLES[key] = (ms, f, tol, explain, expect, fund)
+    return _PARTIAL_TABLES[key]
+
+
+def _loudest_within(fs: np.ndarray, ws: np.ndarray, f: np.ndarray, tol: np.ndarray):
+    """For each frequency in f: the loudest of (at most three) peaks within its tolerance, as an index
+    into the sorted peaks fs (-1: none), and its weight."""
+    lo, hi = np.searchsorted(fs, f / tol), np.searchsorted(fs, f * tol)
+    best, bw = np.full(f.shape, -1), np.zeros(f.shape)
+    for d in range(3):
+        idx = np.minimum(lo + d, len(fs) - 1)
+        w = np.where(lo + d < hi, ws[idx], 0.0)
+        better = w > bw
+        best, bw = np.where(better, idx, best), np.where(better, w, bw)
+    return best, bw
+
+
+def piano_notes(peaks: tuple[np.ndarray, np.ndarray], search: NoteSearch = NoteSearch(),
+                piano: PianoModel = PIANO) -> list[tuple[int, float]]:
+    """The piano notes sounding (A0 to C8), low to high, as (MIDI, level against the loudest found),
+    from a window's peaks (`window_peaks`). Each peak weighs its amplitude over the loudest's, to the
+    power `gamma`. Each candidate note claims, per partial, the loudest peak near where the piano puts
+    it (`piano`'s tuning and stretch, tried at a few offsets), and costs `per_note`, `miss` times its
+    level for each partial it should have but lacks, and what its partials would catch by chance where
+    peaks are dense (the bottom octave's partials lie a few hertz apart). The notes are the set whose
+    claimed peaks, each counted once, weigh most over their costs: a beam search adding a note at a time,
+    then dropping any note the set is better without. So a note's own partials are not notes, a note
+    an octave or a twelfth below a chord (whose partials the chord's notes are) lacks the partials in
+    between, and a low note is judged by its partials, its fundamental faint at a room mic."""
+    f, amp = peaks
+    if len(f) == 0:
+        return []
+    o = np.argsort(f)
+    fs, w = np.asarray(f, dtype=float)[o], (np.asarray(amp, dtype=float)[o] / np.max(amp)) ** search.gamma
+    ms, fp, tol, explain, expect, fund = _partial_table(search, piano)
+    best, bw = _loudest_within(fs, w, fp, tol)
+    best = np.where(explain, best, -1)
+    rows = np.arange(len(ms))
+    j = np.where(best >= 0, bw, 0.0).sum(-1).argmax(1)  # each note's best offset
+    match, fsel, tsel = best[rows, j], fp[rows, j], tol[rows, j]
+    # chance: at the local density of peaks (a sixth of an octave either side), what a window this wide catches
+    cs = np.concatenate([[0.0], np.cumsum(w)])
+    lo, hi = np.searchsorted(fs, fsel / 2 ** (1 / 6)), np.searchsorted(fs, fsel * 2 ** (1 / 6))
+    mean_w = np.where(hi > lo, (cs[hi] - cs[lo]) / np.maximum(hi - lo, 1), 0.0)
+    expected_hits = np.maximum(hi - lo - 1, 0) * (2 * 1200 * np.log2(tsel)) / 400.0
+    chance = np.where(explain[rows, j], (1 - np.exp(-expected_hits)) * mean_w, 0.0).sum(1)
+    present = match >= 0
+    idx = np.where(present, match, len(w))  # len(w): no peak
+    wpad = np.append(w, 0.0)
+    pw = wpad[idx]
+    level = np.sort(pw, 1)[:, -3:].mean(1)
+    cost = search.per_note + search.miss * level * (expect[rows, j] * ~present).sum(1) + search.chance * chance
+    cost = np.where(pw[:, 0] < fund * pw.max(1), 1e9, cost)
+    # what each note claims of its peaks (linear amplitude): above its fundamental, no more than
+    # `claim_cap` times its neighbouring partials' (the rest, a louder peak, is another note's too)
+    apad = np.append(w ** (1 / search.gamma), 0.0)
+    A = apad[idx]
+    claim = A
+    if search.claim_cap:
+        nbr = np.maximum(np.pad(A[:, 1:], ((0, 0), (0, 1))), np.pad(A[:, :-1], ((0, 0), (1, 0))))
+        claim = np.minimum(A, search.claim_cap * nbr)
+        claim[:, 0] = A[:, 0]
+    g = search.gamma
+
+    def explained(ns):
+        e = np.zeros(len(apad))
+        for i in ns:
+            np.add.at(e, idx[i], claim[i])
+        e[-1] = 0.0
+        return np.minimum(e, apad)
+
+    # the beam search over sets of notes: a set's score is what its notes explain (each peak's explained
+    # amplitude to the power gamma) less their costs
+    beams = [(0.0, frozenset(), np.zeros(len(apad)))]
+    best_set = beams[0]
+    seen = set()
+    for _ in range(search.max_notes):
+        grown = []
+        for score, notes, e in beams:
+            ei = e[idx]
+            gain = (np.minimum(A, ei + claim) ** g - ei ** g).sum(1) - cost
+            for i in np.argsort(gain)[::-1][: 2 * search.beam]:
+                i = int(i)
+                if gain[i] <= 0:
+                    break
+                if i in notes or notes | {i} in seen:
+                    continue
+                seen.add(notes | {i})
+                e2 = e.copy()
+                np.add.at(e2, idx[i], claim[i])
+                e2 = np.minimum(e2, apad)
+                e2[-1] = 0.0
+                grown.append((score + float(gain[i]), notes | {i}, e2))
+        if not grown:
+            break
+        grown.sort(key=lambda s: -s[0])
+        beams = grown[: search.beam]
+        if beams[0][0] > best_set[0]:
+            best_set = beams[0]
+
+    def total(ns):
+        return float((explained(ns) ** g).sum() - sum(cost[i] for i in ns))
+
+    notes = set(best_set[1])
+    while notes:
+        base = total(notes)
+        drop = next((i for i in sorted(notes) if total(notes - {i}) > base), None)
+        if drop is None:
+            break
+        notes.discard(drop)
+    if not notes:
+        return []
+    top = max(float(pw[i].max()) for i in notes)
+    return sorted((int(ms[i]), round(float(pw[i].max()) / top, 3)) for i in notes)
+
+
+def chord_of_notes(notes: list[tuple[int, float]], vocab: Vocabulary | None = None, root_bass: float = 0.05,
+                   outside_bass: float = 0.1):
+    """The chord the notes make (as `piano_notes` gives them): of the vocabulary's chords (`vocab`, or the
+    band's CHORDS), the one whose tones the notes' pitch classes match best (the cosine), `root_bass`
+    more when the lowest note is its root, `outside_bass` less when the lowest note is none of its tones.
+    (chord, the bass's pitch class, the scores over the vocabulary); (None, None, None) with no notes."""
+    if not notes:
+        return None, None, None
+    chords, T = (CHORDS, TEMPLATES) if vocab is None else (vocab.chords, vocab.templates)
+    pcs = np.zeros(12)
+    for m, _ in notes:
+        pcs[m % 12] = 1.0
+    bass = min(m for m, _ in notes) % 12
+    s = T @ pcs / np.linalg.norm(pcs)
+    s = s + root_bass * (np.array([r for r, _ in chords]) == bass) - outside_bass * (T[:, bass] <= 0)
+    return chords[int(np.argmax(s))], bass, s
+
+
+@dataclass(frozen=True)
+class PianoHeard:
+    """What a window of piano holds (`hear_piano`)."""
+    notes: list  # (MIDI, level), low to high
+    chord: tuple | None  # (root, quality) of the vocabulary, None with no notes
+    bass: int | None  # the lowest note (MIDI)
+    scores: np.ndarray | None  # each of the vocabulary's chords, from the notes
+
+
+def hear_piano(y: np.ndarray, sr: int, a: float, b: float, vocab: Vocabulary | None = None, rang=None, room=None,
+               search: NoteSearch = NoteSearch(), piano: PianoModel = PIANO, min_fft: int = 16384) -> PianoHeard:
+    """The notes in y between a and b seconds, the chord they make and its bass: `window_peaks` (less what
+    `rang` just before the attack, `quiet_peaks` of the 0.28 s before it, and the `room`'s peaks, if
+    learned from a quiet stretch), `piano_notes`, `chord_of_notes`."""
+    notes = piano_notes(window_peaks(y, sr, a, b, min_fft, background=room, ringing=rang), search, piano)
+    chord, _, s = chord_of_notes(notes, vocab)
+    return PianoHeard(notes, chord, notes[0][0] if notes else None, s)
 
 
 def fold(V: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
