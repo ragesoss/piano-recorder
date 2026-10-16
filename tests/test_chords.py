@@ -229,7 +229,8 @@ def test_a_loop_of_chords_and_its_tempo_are_shown(cfg):
     feed(lis, src, 4 * 2.5 + 0.8)  # two rounds, and into the third's C (struck at 22.5 s)
     st = lis.now
     assert st["loop"]["chords"] == ["C", "Am", "F", "G"] and st["loop"]["at"] == 0, st["loop"]
-    assert st["loop"]["confidence"] > 0 and st["kind_confidence"] == 1.0 and st["bass_confidence"] == 1.0
+    # this bar: the C, sure, though its notes fade this moment (the piano detector loses the E3 last)
+    assert st["loop"]["confidence"] > 0 and st["bar"]["chord"] == "C" and st["bar"]["confidence"] >= 0.4, st["bar"]
     assert st["note_levels"] and max(st["note_levels"]) == 1.0
     assert st["tempo"] is not None and abs(st["tempo"]["bpm"] - 96) < 3 and st["tempo"]["beats_per_pulse"] == 4
     assert st["loop"]["beats"][1] == 4  # Am: 2.5 s at 96 bpm

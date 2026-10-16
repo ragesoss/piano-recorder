@@ -82,6 +82,7 @@ ROOM_S = 1.0  # the room: what was heard up to this long before the attack
 CLIP_S = (ROOM_S, 1.6)  # a check's clip: this long before the attack, and after it
 CHECK_BASS = (L.BASS_NOTE_RANGE[0], L.HI)  # a check's bass: looked for from E1 to the top of the pitch axis
 LABEL_S = 2.0
+STRUCK_DB = 6.0  # the Listen view skips the piano detector in a block this much louder than the one before
 ROOM_LEARN_S = 1.0  # the Listen view learns the room from this long of quiet (the piano detector's background):
 ROOM_DB = 4.0  # within this of the quietest of the last 10 s (itself under QUIET_CEIL_DBFS), not a chord's tail
 MIN_FFT = 16384  # at 48 kHz, bins of 2.9 Hz: the bass's semitones apart (2.4 Hz at E1)
@@ -472,7 +473,14 @@ class Listener:
         tr, bs = L.fold(V)
         s = L.chord_scores(tr, bs, 0.5, inversions=True, vocab=VOCAB)
         piano = self.instrument == "piano"
-        if piano:  # the piano detector: the notes that best explain the window's peaks, less the room's
+        # a note struck in this block, at the window's very end: its partials are there before its fundamental
+        # stands out, and the piano detector names them as notes (G3's D5 G5 B5 F6...): skip the frame
+        struck = bool(self.levels) and block_level - self.levels[-1] >= STRUCK_DB
+        if piano and struck:
+            pn, pc_chord, pc_bass, ps_scores = [], None, None, np.zeros(len(CHORDS))
+            ph = heard_of((), None, None)
+            bass_midi, frame_kind = None, None
+        elif piano:  # the piano detector: the notes that best explain the window's peaks, less the room's
             pn = L.piano_notes(L.window_peaks(win, self.rate, 0.0, len(win) / self.rate, MIN_FFT, background=self.room))
             pc_chord, pc_bass, ps_scores = L.chord_of_notes(pn, VOCAB)
             ps_scores = np.zeros(len(CHORDS)) if ps_scores is None else ps_scores
@@ -566,8 +574,8 @@ class Listener:
             judge = ck is not None and ck.state == "hearing" and pos >= ck.attack + int(CHECK_S * self.rate)
         if piano and self.quiet_run and self.quiet_run % int(ROOM_LEARN_S / BLOCK_S) == 0:
             # each quiet second: the room's hum and noise, to take out of the notes
-            self.room = L.quiet_peaks(self._between(pos - int(ROOM_LEARN_S * self.rate), pos), self.rate, 0.0,
-                                      ROOM_LEARN_S, MIN_FFT)
+            self.room = L.window_peaks(self._between(pos - int(ROOM_LEARN_S * self.rate), pos), self.rate, 0.0,
+                                       ROOM_LEARN_S, MIN_FFT, floor_db=60.0, snr_db=6.0)  # as livechords.quiet_peaks
         if judge:
             self._judge(ck)
         if ck is not None and ck.state == "done" and ck.id is None and pos >= ck.attack + int(CLIP_S[1] * self.rate):
