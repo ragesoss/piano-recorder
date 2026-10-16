@@ -559,7 +559,7 @@ same way).
   started since it began, so an arpeggio's first note is the bass, and the chord before's late bass is
   not. The loop gives way to another found the same way, and goes once two chords in its last two
   rounds are not its own. Before, an Am-G loop held on through C-Am-F-G. The home tile shows the bar's
-  chord once it is sure. Not yet deployed.
+  chord once it is sure. Deployed 2026-10-16, about 08:50 (everything idle).
 - **Deployed 2026-10-16, about 07:10** (both recorders idle). The installer added
   `/etc/chord-listener.toml` and the unit; by hand, the peers line of `/etc/practice-recorder.toml` and
   `/etc/exercise-recorder.toml` and the tile in `/etc/room-home.toml` (copies kept as
