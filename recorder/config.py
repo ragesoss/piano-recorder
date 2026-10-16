@@ -7,7 +7,7 @@ only code that knows card ids, control names and formats.
 
 import os
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -147,6 +147,12 @@ def load_config(path: Path | None = None) -> Config:
         raise ConfigError(f"profile {capture.name!r} has no [capture]")
     if playback.playback is None:
         raise ConfigError(f"profile {playback.name!r} has no [playback]")
+    if "keep_channels" in raw:
+        # the inputs this program keeps, in place of the profile's (the exercise app keeps a third)
+        stream = replace(capture.capture, keep_channels=tuple(int(c) for c in raw["keep_channels"]))
+        if not stream.keep_channels or any(c < 0 or c >= stream.channels for c in stream.keep_channels):
+            raise ConfigError(f"{path}: keep_channels outside 0-{stream.channels - 1}")
+        capture = replace(capture, capture=stream)
     def place(value: str) -> Path:
         d = Path(value).expanduser()
         return d if d.is_absolute() else REPO / d

@@ -129,3 +129,15 @@ def test_dc_remover_takes_out_a_constant_offset():
     block = np.full((4800, 1), -4, dtype=np.int16) + (np.arange(4800) % 3 - 1).astype(np.int16)[:, None]
     out = [dcr.process(block) for _ in range(20)][-1]
     assert abs(out.mean()) < 0.1
+
+
+def test_a_config_keeps_its_own_channels(tmp_path):
+    # the exercise app keeps input 1 too (the piezo's DI), in place of the profile's inputs 3 and 4
+    from recorder.config import ConfigError, load_config
+    cfg = tmp_path / "app.toml"
+    cfg.write_text('capture = "scarlett-18i8-gen3"\nplayback = "scarlett-18i8-gen3"\nkeep_channels = [2, 3, 0]\n'
+                   'takes_dir = "%s"\n' % (tmp_path / "takes"))
+    assert load_config(cfg).capture.capture.keep_channels == (2, 3, 0)
+    cfg.write_text(cfg.read_text().replace("[2, 3, 0]", "[2, 30]"))
+    with pytest.raises(ConfigError):
+        load_config(cfg)

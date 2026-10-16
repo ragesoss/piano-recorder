@@ -4,6 +4,11 @@
 
 capture = "scarlett-18i8-gen3"
 playback = "scarlett-18i8-gen3"
+# The inputs this app keeps, in place of the profile's (inputs 3 and 4): input 3 (the Nadine), input
+# 4 (the condenser), and input 1 (phantom off) for the bass's Fishman Full Circle piezo through its
+# Fishman Pro-EQ Platinum DI (2026-10-15). A take's channels are in this order: 0 the Nadine, 1 the
+# condenser, 2 input 1. The channels are the inputs' numbers less one.
+keep_channels = [2, 3, 0]
 # "~" is the home of the user the service runs as.
 takes_dir = "~/exercise-takes"
 exercises_dir = "~/exercises"
