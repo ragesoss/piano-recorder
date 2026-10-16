@@ -2,25 +2,35 @@
 """Put an exercise (a MusicXML score) on the control unit for the exercise app.
 
     tools/push-exercise SCORE.musicxml [--id bass-001-walks] [--title TEXT] [--instrument bass]
-        [--readme README.md | --no-readme] [--mscore PATH] [--host practice | --to exercises-dev]
+        [--readme README.md | --no-readme] [--no-audio] [--mscore PATH] [--host practice | --to exercises-dev]
+    tools/push-exercise --audio-only [ID ...] [--host practice | --to exercises-dev]
 
 The score is rendered to SVG pages by MuseScore here on the desktop (landscape, larger
 staves, trimmed: tools/exercise-page.mss), and its tempo, meter, pickup and length are read
-from the MusicXML (repeats played out), for the click. The pages, the score, the exercise's
-README (README.md beside the score, unless --readme or --no-readme says otherwise: the page
-shows it above the score) and exercise.json go to the exercises_dir of the exercise app's
-config on the control unit.
+from the MusicXML (repeats played out), for the click. Its notes are rendered to audio here
+too (exercises/chart.py: FluidSynth, with the instrument's SoundFont), for the app to play
+with the click before a take; without FluidSynth or the SoundFont it goes without (a warning),
+and --no-audio skips it. The pages, the audio (chart.wav), the score, the exercise's README
+(README.md beside the score, unless --readme or --no-readme says otherwise: the page shows it
+above the score) and exercise.json go to the exercises_dir of the exercise app's config on the
+control unit.
+
+--audio-only renders the audio again for exercises already there (the IDs given, or all of
+them), from the score that was pushed with each, and puts it beside its pages: nothing else
+changes.
 MuseScore: --mscore, else $MSCORE, else mscore4portable or mscore on the PATH.
 """
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -30,37 +40,11 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,79}$")  # as exercises/store.py
 HERE = Path(__file__).resolve().parent
 STYLE = HERE / "exercise-page.mss"
 REMOTE_CONFIG = "/etc/exercise-recorder.toml"
+AUDIO = "chart.wav"
 
-
-def play_order(measures):
-    """The measures as played: a backward repeat returns to the last forward repeat (or the
-    bar after the previous backward repeat, or the start), once; a volta ending only on its
-    pass. (As dobro-transcription's score reader.)"""
-    endings, active = [], None
-    for m in measures:
-        for e in m.findall("barline/ending"):
-            if e.get("type") == "start":
-                active = {int(x) for x in e.get("number").replace(" ", "").split(",")}
-        endings.append(active)
-        if any(e.get("type") in ("stop", "discontinue") for e in m.findall("barline/ending")):
-            active = None
-    order, i, start, pass_no, done = [], 0, 0, 1, set()
-    while i < len(measures):
-        m = measures[i]
-        if m.find("barline/repeat[@direction='forward']") is not None and i != start:
-            start, pass_no = i, 1
-        if endings[i] is not None and pass_no not in endings[i]:
-            i += 1
-            continue
-        order.append(m)
-        if m.find("barline/repeat[@direction='backward']") is not None:
-            if i not in done:
-                done.add(i)
-                i, pass_no = start, pass_no + 1
-                continue
-            start, pass_no = i + 1, 1
-        i += 1
-    return order
+sys.path.insert(0, str(HERE.parent))
+from exercises import chart  # noqa: E402  (the play order the click counts, and the audio)
+from exercises.chart import measure_lengths, play_order  # noqa: E402
 
 
 def read_score(path: Path) -> dict:
@@ -70,7 +54,6 @@ def read_score(path: Path) -> dict:
     part = root.find("part")
     measures = part.findall("measure")
     divisions, bpm, beats_per_bar = None, None, None
-    lengths = []
     for m in measures:
         for att in m.findall("attributes"):
             if att.findtext("divisions"):
@@ -82,16 +65,7 @@ def read_score(path: Path) -> dict:
             s = m.find(".//sound[@tempo]")
             if s is not None:
                 bpm = float(s.get("tempo"))
-        cursor = end = 0
-        for el in m:
-            if el.tag == "backup":
-                cursor -= int(el.findtext("duration"))
-            elif el.tag == "forward":
-                cursor += int(el.findtext("duration"))
-            elif el.tag == "note" and el.find("chord") is None and el.find("grace") is None:
-                cursor += int(el.findtext("duration") or 0)
-            end = max(end, cursor)
-        lengths.append(end)
+    lengths = measure_lengths(measures)
     if not divisions or not bpm:
         sys.exit(f"{path}: no divisions or no tempo marking (<sound tempo=...>)")
     beats_per_bar = beats_per_bar or 4
@@ -126,51 +100,146 @@ def source_name(path: Path) -> str:
         return str(path.resolve())
 
 
+def render_audio(score: Path, folder: Path, instrument: str) -> dict | None:
+    """The chart's audio in `folder` (AUDIO), and what exercise.json says of it; None (with a
+    warning) if it cannot be made: the exercise goes without."""
+    try:
+        info = chart.render(score, folder / AUDIO, instrument)
+    except (RuntimeError, ValueError, OSError, subprocess.TimeoutExpired) as e:
+        print(f"warning: no audio for {folder.name}: {e}", file=sys.stderr)
+        return None
+    return {"file": AUDIO, "beat0_s": info["beat0_s"], "seconds": info["seconds"], "sound": info["sound"],
+            "rendered": datetime.now().isoformat(timespec="seconds")}
+
+
+def remote_exercises_dir(host: str) -> str:
+    r = subprocess.run(
+        ["ssh", host, "cd practice-recorder && .venv/bin/python -c "
+         f"'from recorder.config import load_config; print(load_config(\"{REMOTE_CONFIG}\").exercises_dir)'"],
+        capture_output=True, text=True)
+    if r.returncode or not r.stdout.strip():
+        sys.exit(f"the exercise app is not set up on {host} ({REMOTE_CONFIG}): {r.stderr.strip()[-300:]}")
+    return r.stdout.strip()
+
+
+def audio_only(ids: list[str], a) -> None:
+    """The audio again for exercises already pushed (`ids`, or all), from the score pushed with each;
+    the audio and exercise.json put back in place one file at a time (a rename each)."""
+    bad = [i for i in ids if not ID_RE.match(i)]
+    if bad:
+        sys.exit(f"bad id {bad[0]!r}: lower-case letters, digits and hyphens")
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp) / "x"
+        work.mkdir()
+        if a.to:
+            for d in sorted(a.to.iterdir()):
+                if d.is_dir() and ID_RE.match(d.name) and (not ids or d.name in ids) and (d / "score.musicxml").is_file() \
+                        and (d / "exercise.json").is_file():
+                    (work / d.name).mkdir()
+                    for f in ("exercise.json", "score.musicxml"):
+                        shutil.copy(d / f, work / d.name / f)
+        else:
+            remote_dir = remote_exercises_dir(a.host)
+            files = " ".join(f"{i}/exercise.json {i}/score.musicxml" for i in ids) or "*/exercise.json */score.musicxml"
+            r = subprocess.run(["ssh", a.host, f"cd {remote_dir} && tar cf - --ignore-failed-read {files}"],
+                               capture_output=True, timeout=300)
+            if not r.stdout:
+                sys.exit(f"nothing to fetch from {a.host}:{remote_dir}: {r.stderr.decode()[-300:]}")
+            with tarfile.open(fileobj=io.BytesIO(r.stdout)) as tf:
+                tf.extractall(work, filter="data")
+        done = []
+        for d in sorted(work.iterdir()):
+            if not ((d / "exercise.json").is_file() and (d / "score.musicxml").is_file()):
+                continue
+            meta = json.loads((d / "exercise.json").read_text())
+            audio = render_audio(d / "score.musicxml", d, meta.get("instrument", ""))
+            if audio is None:
+                continue
+            meta["audio"] = audio
+            (d / "exercise.json").write_text(json.dumps(meta, indent=1))
+            done.append(d.name)
+            print(f"{d.name}: {audio['seconds']:g} s, {audio['sound']}")
+        missing = sorted(set(ids) - {d.name for d in work.iterdir()})
+        if missing:
+            print(f"not there (push them first): {', '.join(missing)}", file=sys.stderr)
+        if a.dry_run or not done:
+            return
+        if a.to:
+            for n in done:  # the audio first, then the exercise.json that names it
+                for f in (AUDIO, "exercise.json"):
+                    shutil.copy(work / n / f, a.to / n / f"{f}.new")
+                    os.replace(a.to / n / f"{f}.new", a.to / n / f)
+            print(f"{len(done)} in {a.to}")
+            return
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as tf:
+            for n in done:
+                for f in (AUDIO, "exercise.json"):
+                    tf.add(work / n / f, arcname=f"{n}/{f}")
+        put = (f"cd {remote_dir} && rm -rf .audio-new && mkdir .audio-new && tar xf - -C .audio-new && "
+               f"for d in .audio-new/*/; do n=$(basename $d); if [ -d $n ]; then "
+               f"mv ${{d}}{AUDIO} $n/{AUDIO} && mv ${{d}}exercise.json $n/exercise.json; fi; done; rm -rf .audio-new")
+        subprocess.run(["ssh", a.host, put], input=buf.getvalue(), check=True, timeout=600)
+        print(f"{len(done)} on {a.host} in {remote_dir}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("score", type=Path)
+    ap.add_argument("score", nargs="*", metavar="SCORE|ID", help="the score (with --audio-only: exercise ids, or none for all)")
     ap.add_argument("--id", help="lower-case letters, digits and hyphens (default: from the file name)")
     ap.add_argument("--title")
     ap.add_argument("--instrument", help="default: from the part's name (bass, dobro)")
     ap.add_argument("--note", default="")
     ap.add_argument("--readme", type=Path, help="the instructions to show with the score (default: README.md beside it)")
     ap.add_argument("--no-readme", action="store_true", help="send no instructions (a tune's README is about its recording)")
+    ap.add_argument("--no-audio", action="store_true", help="send no audio of the notes")
+    ap.add_argument("--audio-only", action="store_true", help="render the audio again for exercises already pushed")
     ap.add_argument("--mscore")
     ap.add_argument("--host", default="practice", help="the control unit's ssh host")
     ap.add_argument("--dry-run", action="store_true", help="render and print, copy nothing")
     ap.add_argument("--to", type=Path, help="put it in this local exercises folder instead (development)")
     a = ap.parse_args()
-    if not a.score.exists():
-        sys.exit(f"no such file: {a.score}")
-    readme = None if a.no_readme else a.readme or a.score.parent / "README.md"
+    if a.audio_only:
+        audio_only(a.score, a)
+        return
+    if len(a.score) != 1:
+        ap.error("one score")
+    score = Path(a.score[0])
+    if not score.exists():
+        sys.exit(f"no such file: {score}")
+    readme = None if a.no_readme else a.readme or score.parent / "README.md"
     if a.readme and not a.readme.exists():
         sys.exit(f"no such file: {a.readme}")
     if readme is not None and not readme.exists():
         readme = None
-    ex_id = a.id or re.sub(r"[^a-z0-9-]+", "-", a.score.stem.lower()).strip("-")
+    ex_id = a.id or re.sub(r"[^a-z0-9-]+", "-", score.stem.lower()).strip("-")
     if not ID_RE.match(ex_id):
         sys.exit(f"bad id {ex_id!r}: lower-case letters, digits and hyphens")
-    info = read_score(a.score)
+    info = read_score(score)
     part = info.pop("part").lower()
     instrument = a.instrument or ("bass" if "bass" in part else "dobro" if "dobro" in part else part or "unknown")
     mscore = find_mscore(a.mscore)
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / ex_id
         out.mkdir()
-        r = subprocess.run([mscore, "-S", str(STYLE), "-T", "30", "-o", str(out / "page.svg"), str(a.score)],
+        r = subprocess.run([mscore, "-S", str(STYLE), "-T", "30", "-o", str(out / "page.svg"), str(score)],
                            capture_output=True, text=True, env={**os.environ, "QT_QPA_PLATFORM": "offscreen"}, timeout=300)
         pages = sorted((p.name for p in out.glob("page-*.svg")), key=lambda n: int(n[5:-4]))
         if not pages:
             sys.exit(f"MuseScore rendered nothing ({r.returncode}): {r.stderr[-400:]}")
-        shutil.copy(a.score, out / "score.musicxml")
+        shutil.copy(score, out / "score.musicxml")
         if readme is not None:
             (out / "readme.md").write_text(readme.read_text(encoding="utf-8"), encoding="utf-8")
+        audio = None if a.no_audio else render_audio(score, out, instrument)
         meta = {"title": a.title or info["title"], "instrument": instrument, **{k: info[k] for k in ("tempo", "beats", "bars")},
-                "pages": pages, "readme": "readme.md" if readme is not None else "", "note": a.note, "source": source_name(a.score),
-                "source_sha256": hashlib.sha256(a.score.read_bytes()).hexdigest(),
+                "pages": pages, "readme": "readme.md" if readme is not None else "", "note": a.note, "source": source_name(score),
+                "source_sha256": hashlib.sha256(score.read_bytes()).hexdigest(),
                 "added": datetime.now().isoformat(timespec="seconds")}
+        if audio:
+            meta["audio"] = audio
         (out / "exercise.json").write_text(json.dumps(meta, indent=1))
-        print(json.dumps({k: meta[k] for k in ("title", "instrument", "tempo", "beats", "bars", "pages", "readme")}))
+        print(json.dumps({k: meta[k] for k in ("title", "instrument", "tempo", "beats", "bars", "pages", "readme")}
+                         | {"audio": audio and f"{audio['seconds']:g} s, {audio['sound']}"}))
         if a.dry_run:
             return
         if a.to:
@@ -179,13 +248,7 @@ def main() -> None:
             shutil.copytree(out, dest)
             print(f"{ex_id}: in {a.to}")
             return
-        remote_dir = subprocess.run(
-            ["ssh", a.host, "cd practice-recorder && .venv/bin/python -c "
-             f"'from recorder.config import load_config; print(load_config(\"{REMOTE_CONFIG}\").exercises_dir)'"],
-            capture_output=True, text=True)
-        if remote_dir.returncode or not remote_dir.stdout.strip():
-            sys.exit(f"the exercise app is not set up on {a.host} ({REMOTE_CONFIG}): {remote_dir.stderr.strip()[-300:]}")
-        remote_dir = remote_dir.stdout.strip()
+        remote_dir = remote_exercises_dir(a.host)
         subprocess.run(["ssh", a.host, f"mkdir -p {remote_dir} && rm -rf {remote_dir}/{ex_id}.new"], check=True)
         subprocess.run(["scp", "-q", "-r", str(out), f"{a.host}:{remote_dir}/{ex_id}.new"], check=True)
         # replace the old folder in one step, so the app never sees half an exercise
