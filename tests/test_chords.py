@@ -222,10 +222,26 @@ def test_a_loop_of_chords_and_its_tempo_are_shown(cfg):
     feed(lis, src, 2.5)
     feed(lis, src, 4 * 2.5 + 1.0)  # one round: no loop yet
     assert lis.now["loop"] is None
-    feed(lis, src, 4 * 2.5)  # two rounds, and the third's C (struck at 22.5 s)
+    feed(lis, src, 4 * 2.5 + 0.8)  # two rounds, and into the third's C (struck at 22.5 s)
     st = lis.now
     assert st["loop"]["chords"] == ["C", "Am", "F", "G"] and st["loop"]["at"] == 0, st["loop"]
     assert st["loop"]["confidence"] > 0 and st["kind_confidence"] == 1.0 and st["bass_confidence"] == 1.0
     assert st["note_levels"] and max(st["note_levels"]) == 1.0
     assert st["tempo"] is not None and abs(st["tempo"]["bpm"] - 96) < 3 and st["tempo"]["beats_per_pulse"] == 4
     assert st["loop"]["beats"][1] == 4  # Am: 2.5 s at 96 bpm
+
+
+def test_an_arpeggio_reads_note_by_note_this_moment_and_as_its_chord_this_bar(cfg):
+    lis = Listener(cfg, cfg.takes_dir)
+    src = demo(["-"] + ["~Am", "~G"] * 4, cfg)  # each chord's notes one at a time, 2.5 s a chord
+    feed(lis, src, 2.5)
+    moments, bars = set(), []
+    for k in range(8):
+        for _ in range(25):
+            feed(lis, src, 0.1)
+            moments.update(lis.now["notes"])  # the notes as they sound (a piano's ring on together)
+        bars.append(lis.now["bar"]["chord"])
+    assert {"A3", "C4", "E4"} <= moments, moments  # this moment: the notes as they sound
+    assert bars[2:] == ["Am", "G"] * 3, bars  # this bar: the chord
+    loop = lis.now["loop"]
+    assert loop["chords"] == ["Am", "G"] and loop["next"] == loop["chords"][(loop["at"] + 1) % 2]

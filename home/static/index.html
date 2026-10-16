@@ -109,7 +109,9 @@ function describe(a) {
     return ["Stopped", false];
   }
   if (a.id === "chords") {
-    if (s.state === "listening") return [s.chord ? `Hearing ${s.chord}` : "Listening", true];
+    // the chord over the bar once it is sure (it holds still), else this moment's
+    const heard = s.bar && s.bar.chord && s.bar.confidence >= 0.4 ? s.bar.chord : s.chord;
+    if (s.state === "listening") return [heard ? `Hearing ${heard}` : "Listening", true];
     if (s.state === "waiting") return ["Letting a recorder have the inputs", false];
     return ["Ready", false];
   }

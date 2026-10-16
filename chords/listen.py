@@ -22,9 +22,12 @@ The clip (every kept channel, from just before the attack) and what was asked, h
 kept in the config's takes_dir, for study on the desktop (`tools/pull-checks`). A label is the same
 from the Listen view: the last `LABEL_S` kept with the chord the player says it was.
 
-The Listen view also follows the playing with no chart: a steady pulse (`livechords.Pulse`: the
-tempo, once the strikes or strums keep time) and a loop of chords (`livechords.LoopFinder`: the
-shortest cycle the last two rounds of changes repeat), with where the playing is in it.
+The Listen view follows the playing on three time scales (the player: "this instant, this bar, and
+overall orientation"): the notes this moment (each frame's); the chord this bar (`livechords.ChordPool`:
+the notes pooled by pitch over about half a bar, so an arpeggio reads as its chord) with the tempo
+(`livechords.Pulse`, once the playing keeps time, and where its beats fall); and where the playing is
+in a loop of those bar chords (`livechords.LoopFinder`), the next chord predicted. Each comes with how
+sure it is, and says nothing until it holds.
 
 It listens only while a page asks (`listen()`: `LISTEN_S` more each time), and lets the inputs go for
 `YIELD_S` when another program asks (`yield_inputs()`: a recorder about to record).
@@ -271,6 +274,7 @@ class Listener:
         self.bass_shown: int | None = None
         self.pulse = L.Pulse(self.rate)
         self.loops = L.LoopFinder()
+        self.pool = L.ChordPool(VOCAB)
         self.kind_seen: list[str | None] = []  # the last frames' kinds (note, pair, chord)
         self.recent_bass: collections.deque = collections.deque(maxlen=5)  # for each reading's sureness
         self.recent_kind: collections.deque = collections.deque(maxlen=5)
@@ -301,7 +305,7 @@ class Listener:
                 self.error = "the mixer is not connected"
                 return
             self.stop_ev = threading.Event()
-            self.pulse, self.loops = L.Pulse(self.rate), L.LoopFinder()  # a new listen starts the form afresh
+            self.pulse, self.loops, self.pool = L.Pulse(self.rate), L.LoopFinder(), L.ChordPool(VOCAB)  # afresh
             self.thread = threading.Thread(target=self._run, args=(self.stop_ev,), daemon=True)
             self.thread.start()
 
@@ -424,14 +428,27 @@ class Listener:
                         "level_dbfs": round(block_level, 1), "quiet_dbfs": round(quiet, 1)}
             if name and self.now["confidence"] >= 0.5 and (not self.history or self.history[-1][1] != name):
                 self.history.append((datetime.now().isoformat(timespec="seconds"), name))
-            self.loops.hear(pos / self.rate, name if self.now["confidence"] >= 0.5 else None)
-            tempo, loop = self.pulse.estimate(), self.loops.state()
+            # this bar: the notes pooled over about half a bar (once the tempo is known), and the loop of those
+            tempo = self.pulse.estimate()
+            self.pool.set_tau(2 * tempo["beat_s"] if tempo else 0.8)
+            heard = L.notes_heard(V) if loud else []
+            self.pool.hear(pos / self.rate, heard, n / self.rate)
+            ps = self.pool.state()
+            bar_name = chord_name(named(ps["chord"], ps["bass"]), ps["bass"]) if ps else None
+            self.loops.hear(pos / self.rate, bar_name if ps and ps["confidence"] >= 0.4 else None)
+            loop = self.loops.state()
             if loop and tempo:  # each chord's length in beats, at the pulse's tempo
                 beat = 60.0 / tempo["bpm"]
                 loop["beats"] = [round(x / beat) if x else None for x in loop["lengths_s"]]
-            if loop:  # sure with the rounds it has held, less after a chord it let pass
+            if loop:  # sure with the rounds it has held, less after a chord it let pass; the next one predicted
                 loop["confidence"] = round(min(1.0, (loop["rounds"] - 1) / 3) * (0.5 if self.loops.missed else 1.0), 2)
+                loop["next"] = loop["chords"][(loop["at"] + 1) % len(loop["chords"])]
+            beat = tempo and {"period_s": tempo["beat_s"],
+                              "since_s": round((self.pulse.now_s() - tempo["last_strike_s"]) % tempo["beat_s"], 3)}
             self.now["tempo"], self.now["loop"] = tempo, loop
+            self.now["bar"] = {"chord": bar_name, "bass": NAMES[ps["bass"]] if ps and ps["bass"] is not None else None,
+                               "detail": (f"{NAMES[ps['chord'][0]]} {QUALITY_WORDS[ps['chord'][1]]}" if ps else None),
+                               "confidence": ps["confidence"] if ps else 0.0, "beat": beat}
             ck = self.check
             if ck is not None and ck.state == "waiting" and before and loud and \
                     block_level - min(before) >= ATTACK_DB:
@@ -597,7 +614,7 @@ class Listener:
             return {
                 "state": "listening" if on else ("waiting" if time.monotonic() < self.wait_until else "idle"),
                 **(self.now if on else {"chord": None, "confidence": 0.0, "top": [], "level_dbfs": None,
-                                        "tempo": None, "loop": None}),
+                                        "tempo": None, "loop": None, "bar": None}),
                 "history": [{"time": t, "chord": c} for t, c in self.history],
                 "check": ck and {"target": ck.target.name if ck.target else None,
                                  "kind": ck.target.kind if ck.target else None, "state": ck.state,
@@ -621,7 +638,9 @@ class DemoSource:
 
     def __init__(self, chords: list[str], channels: int, rate: int = 48000, every_s: float = 2.5,
                  gap_s: float = 0.3, realtime: bool = True, decay: float = 1.2):
-        self.chords = [None if c == "-" else parse_target(c) for c in chords]  # "-": a rest
+        # "-": a rest; "~Am": its notes one at a time (an arpeggio, the octave on top)
+        self.chords = [None if c == "-" else ("arp", parse_target(c[1:])) if c.startswith("~") else parse_target(c)
+                       for c in chords]
         self.channels, self.rate, self.every, self.gap, self.realtime = channels, rate, every_s, gap_s, realtime
         self.decay = decay  # per second, of each chord's tones
         self.dtype = np.dtype("<i4")
@@ -648,6 +667,17 @@ class DemoSource:
             m = k == idx
             t = self.chords[int(idx) % len(self.chords)]
             if t is None:
+                continue
+            if isinstance(t, tuple):  # an arpeggio: root, third, fifth, octave, each a quarter of the time
+                root, q = t[1].chord
+                arp = [48 + root + d for d in L.ALL_QUALITIES[q][:3]] + [60 + root]
+                quarter = (self.every - self.gap) / 4
+                for j, tone in enumerate(arp):
+                    mm = m & (since >= j * quarter) & (since < self.every - self.gap)
+                    s0 = since[mm] - j * quarter
+                    f0 = 440 * 2 ** ((tone - 69) / 12)
+                    for h in range(1, 6):
+                        x[mm] += 0.08 * np.exp(-1.5 * s0) * np.sin(2 * math.pi * f0 * h * s0) / h ** 1.5
                 continue
             if t.kind == "note":
                 notes = [t.midi]

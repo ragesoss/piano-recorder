@@ -1,4 +1,4 @@
-# Copied from dobro-transcription pipeline/src/transcribe/livechords.py (2a642fb) by tools/sync-livechords.
+# Copied from dobro-transcription pipeline/src/transcribe/livechords.py (616e8d5) by tools/sync-livechords.
 # Change it there and copy it again; do not edit this copy.
 """Chords in the moment, for a band that follows: per beat, what the audio heard so far says the chord
 is, where in a chart the player is, and the key. Causal: every answer at a time t uses only audio
@@ -62,8 +62,9 @@ def majmin(q: str) -> str:
 
 
 def tones(chord: tuple[int, str]) -> set[int]:
+    """A chord's pitch classes."""
     r, q = chord
-    return {(r + d) % 12 for d in QUALITIES[q]}
+    return {(r + d) % 12 for d in ALL_QUALITIES[q]}
 
 
 # --- the front end ---------------------------------------------------------------------------------
@@ -409,6 +410,7 @@ class Pulse:
         self.since = 0
         self.periods: list[tuple[float, float]] = []  # (period s, peak), each estimate
         self.steady: dict | None = None
+        self.frames = 0  # frames heard, all told: the envelope's clock
 
     def hear(self, x: np.ndarray) -> None:
         x = np.concatenate([self.left, np.asarray(x, dtype=float)])
@@ -419,6 +421,7 @@ class Pulse:
             prev = self.loud[-3:]
             self.env.append(max(0.0, e - (sum(prev) / len(prev) if prev else e)))
             self.loud = (self.loud + [e])[-3:]
+            self.frames += 1
             self.since += 1
             if self.since >= self.every:
                 self.since = 0
@@ -452,22 +455,35 @@ class Pulse:
                 bpm, per = bpm * 2, per * 2
             while bpm >= 140:
                 bpm, per = bpm / 2, per / 2
+            # where the pulse's strikes fall: the offset whose every period back holds the most onset
+            kp = int(round(period * 100))
+            n = len(self.env)
+            env = np.array(self.env)
+            best = max(range(kp), key=lambda o: float(env[n - 1 - o::-kp].sum()))
+            last_s = (self.frames - 1 - best) / 100.0  # the last strike, on the envelope's clock
+            beat = period / per
             self.steady = {"bpm": round(bpm, 1), "period_s": round(period, 3), "beats_per_pulse": per,
-                           "strength": round(float(np.mean([h for _, h in self.periods])), 3)}
+                           "strength": round(float(np.mean([h for _, h in self.periods])), 3),
+                           "beat_s": round(beat, 4), "last_strike_s": round(last_s, 2)}
         elif self.periods and self.periods[-1][1] < self.sure:
             self.steady = None
 
     def estimate(self) -> dict | None:
-        """{"bpm", "period_s", "beats_per_pulse", "strength"} while the pulse is steady, else None."""
+        """{"bpm", "period_s", "beats_per_pulse", "strength", "beat_s", "last_strike_s"} while the pulse
+        is steady, else None. `last_strike_s` is on the clock of the audio heard (its first sample 0)."""
         return self.steady
+
+    def now_s(self) -> float:
+        """The time of the audio heard so far, on the same clock."""
+        return self.frames / 100.0
 
 
 class LoopFinder:
     """A loop of chords from the chord heard over time (`hear(t, chord)` a few times a second, a name or
     None). A chord counts as a change once it has held `min_s`, so a passing misreading is not one; the
     loop is the shortest cycle of 2 to `max_len` changes that the last two rounds repeat exactly. It
-    holds while the next changes match it (`misses` wrong in a row are let pass), and goes after
-    `quiet_s` without a chord. `state()`: the loop, the chord the playing is on, the rounds heard and
+    holds while the next changes match it (`misses` wrong in its last two rounds are let pass), till
+    another loop is found the same way, and goes after `quiet_s` without a chord. `state()`: the loop, the chord the playing is on, the rounds heard and
     each chord's mean length."""
 
     def __init__(self, min_s: float = 0.5, max_len: int = 8, misses: int = 1, quiet_s: float = 4.0):
@@ -478,6 +494,7 @@ class LoopFinder:
         self.pos = 0  # the loop's chord the playing is on
         self.rounds = 0
         self.missed = 0
+        self.recent: list[bool] = []  # whether each change lately was the one the loop had next
         self.last_chord_t: float | None = None
 
     def hear(self, t: float, chord: str | None) -> None:
@@ -500,25 +517,38 @@ class LoopFinder:
     def _next(self, c: str) -> None:
         if self.loop is not None:
             want = self.loop[(self.pos + 1) % len(self.loop)]
+            self.recent = (self.recent + [c == want])[-2 * len(self.loop):]
             if c == want:
                 self.pos = (self.pos + 1) % len(self.loop)
                 self.missed = 0
                 if self.pos == 0:
                     self.rounds += 1
-                return
-            self.missed += 1
-            if self.missed <= self.misses_ok:
-                return
-            self.loop = None
+            else:
+                self.missed += 1
+            if self.missed <= self.misses_ok and self.recent.count(False) <= self.misses_ok:
+                found = self._find()
+                if found is None or self._same(found[0]):
+                    return
+            self.loop = None  # it has gone (another chord too often in two rounds), or another has come
+        found = self._find()
+        if found is not None:
+            self.loop, self.pos, self.rounds = found
+            self.missed, self.recent = 0, []
+
+    def _find(self) -> tuple[list[str], int, int] | None:
+        """The shortest loop the last two rounds of changes repeat exactly: (it, the chord on, rounds)."""
         names = [n for n, _ in self.changes]
         for p in range(2, self.max_len + 1):
             if len(names) >= 2 * p and names[-p:] == names[-2 * p:-p] and len(set(names[-p:])) > 1:
-                self.loop, self.pos, self.missed = names[-p:], p - 1, 0
                 r = 2
-                while len(names) >= (r + 1) * p and names[-(r + 1) * p:-r * p] == self.loop:
+                while len(names) >= (r + 1) * p and names[-(r + 1) * p:-r * p] == names[-p:]:
                     r += 1
-                self.rounds = r
-                return
+                return names[-p:], p - 1, r
+        return None
+
+    def _same(self, other: list[str]) -> bool:
+        p = len(self.loop)
+        return len(other) == p and any(other == self.loop[i:] + self.loop[:i] for i in range(p))
 
     def state(self) -> dict | None:
         if self.loop is None:
@@ -532,3 +562,167 @@ class LoopFinder:
                 lengths[k].append(starts[i + 1] - starts[i])
         return {"chords": list(self.loop), "at": self.pos, "rounds": self.rounds,
                 "lengths_s": [round(float(np.mean(v)), 2) if v else None for v in lengths]}
+
+
+def chord_from_weights(w: np.ndarray, bass, vocab: Vocabulary, allowed=None) -> tuple[tuple[int, str], float]:
+    """The vocabulary's chord that best fits pooled pitch-class weights `w` (12): the share of the weight on
+    its tones, less half the share off them and a quarter for each of its tones hardly there; a little
+    for its root in the bass (`bass`: a pitch class, None, or a function of the chord giving its bass).
+    Only chords `allowed` (a function of the chord) if given. (chord, that fit, 0-1)."""
+    total = float(w.sum())
+    if total <= 0:
+        return vocab.chords[0], 0.0
+    top = float(w.max())
+    best, best_s = vocab.chords[0], -9.0
+    for c in vocab.chords:
+        if allowed is not None and not allowed(c):
+            continue
+        t = {(c[0] + d) % 12 for d in ALL_QUALITIES[c[1]]}
+        on = float(sum(w[k] for k in t))
+        missing = sum(1 for k in t if w[k] < 0.15 * top)
+        b = bass(c) if callable(bass) else bass
+        sc = on / total - 0.5 * (total - on) / total - 0.25 * missing / len(t) + (0.05 if b == c[0] else 0.0)
+        if sc > best_s:
+            best, best_s = c, sc
+    return best, max(0.0, min(1.0, best_s))
+
+
+class ChordPool:
+    """The chord over the last while (about a bar), from the notes heard moment by moment (`hear` each
+    frame with `notes_heard`'s (MIDI, level)): each note's level times the frame's length, pooled by pitch,
+    fading with time constant `tau_s` (`set_tau`: half a bar once the tempo is known).
+    A note outside the chord shown, as it starts (`fresh_level` or louder, and not heard the frame
+    before, or then faint and since risen half again: an attack), starts a new chord. From then until a
+    chord has been named, or such a note last started, `settle_s` before:
+    - what was pooled before it and is no longer heard fades fast (`fade_s`; and drops to `fresh` as the
+      note starts), so the chord before does not linger in the new one (F's residue making G a G7),
+      while what still rings (the pedal down) stays, and what has started since (an arpeggio's notes,
+      each starting anew) is pooled;
+    - a chord other than the one shown is taken only with two of its notes started since, or what it
+      adds to the one shown started and the rest of it sounding (Am to F, A and C held; C to C7), so an
+      arpeggio's first note, over what is left of the chord before, does not name a third chord (G3
+      over Am's last as A7, or C/G).
+    The chord is the vocabulary's that best fits the pitch classes (`chord_from_weights`). It names a
+    new chord only once that has led for `hold_s`. Its bass: the lowest of its notes started since it
+    began, in the `bass_s` up to the last of them started (so a chord held keeps its bass), where it
+    began being where the run of notes started that all belong to it goes back to as it is named, but
+    not before the note that started the change: an arpeggio's first, lowest note, though it has faded,
+    and not the chord before's (its bass, a moment late, belonging to the new chord as well).
+    `state()`: the chord, its bass, and how sure (its fit, times how much has been heard, `enough`
+    level-seconds for all of it, times the share of its tones there: one note of a triad, a third);
+    None before anything is heard."""
+
+    def __init__(self, vocab: Vocabulary, tau_s: float = 0.8, hold_s: float = 0.4, enough: float = 0.6,
+                 fresh: float = 0.3, fresh_level: float = 0.3, fade_s: float = 0.25, settle_s: float = 1.0,
+                 bass_s: float = 4.0):
+        self.vocab, self.tau, self.hold, self.enough = vocab, tau_s, hold_s, enough
+        self.fresh, self.fresh_level, self.fade, self.settle, self.bass_s = fresh, fresh_level, fade_s, settle_s, bass_s
+        self.wm: dict[int, float] = {}  # MIDI -> pooled weight
+        self.starts: list[tuple[float, int]] = []  # (time, MIDI): the notes started, lately
+        self.last: dict[int, float] = {}  # the notes of the frame before, and their levels
+        self.t = 0.0
+        self.shown: tuple[int, str] | None = None
+        self.since = 0.0  # when the chord shown began
+        self.named = 0.0  # when it was named
+        self.mine: list[tuple[float, int]] = []  # (time, MIDI): its notes started since
+        self.first_fresh: float | None = None  # when a note first started a new chord, till one settles
+        self.last_fresh = 0.0  # and when one last did
+        self.lead: tuple[tuple[int, str], float] | None = None  # a chord leading, since when
+        self.fit = 0.0
+
+    def set_tau(self, tau_s: float) -> None:
+        self.tau = max(0.3, float(tau_s))
+
+    def weights(self) -> np.ndarray:
+        w = np.zeros(12)
+        for m, x in self.wm.items():
+            w[m % 12] += x
+        return w
+
+    def hear(self, t: float, notes: list[tuple[int, float]], frame_s: float = 0.1) -> None:
+        k = np.exp(-frame_s / self.tau)
+        level = dict(notes)
+        sounding = {m for m, x in notes if x >= self.fresh_level}
+        started = sorted(m for m in sounding if m not in self.last or (
+            self.last[m] < self.fresh_level and level[m] >= 1.5 * self.last[m]))
+        fresh = any(self.shown is None or m % 12 not in tones(self.shown) for m in started)
+        if self.first_fresh is not None and t - max(self.last_fresh, self.named) >= self.settle:
+            self.first_fresh = None  # a chord has settled
+        if fresh:
+            if self.first_fresh is None or self.first_fresh < self.named:
+                self.first_fresh = t  # since the chord shown was named: a new change
+            self.last_fresh = t
+        if self.first_fresh is not None:  # a new chord: what was before it, no longer heard, fades fast
+            since = {m for a, m in self.starts if a >= self.first_fresh} | set(started)
+            gone = {m for m in self.wm if m not in level and m not in since}
+            drop = np.exp(-frame_s / self.fade)
+            self.wm = {m: x * (drop * (self.fresh if fresh else 1.0) if m in gone else 1.0) for m, x in self.wm.items()}
+        self.wm = {m: x * k for m, x in self.wm.items() if x * k > 1e-4}
+        for m, x in notes:
+            self.wm[m] = self.wm.get(m, 0.0) + x * frame_s
+        self.t, self.last = t, level
+        self.starts = [(a, m) for a, m in self.starts if t - a <= self.bass_s] + [(t, m) for m in started]
+        w = self.weights()
+        if w.sum() < 0.05 * self.enough:  # hardly anything heard lately: no chord, and if quiet, none before
+            self.shown, self.lead, self.since, self.mine, self.first_fresh = None, None, t, [], None
+            if not notes:
+                self.wm = {}
+            return
+        bound = self.since if self.first_fresh is None else self.first_fresh
+
+        def low(c):
+            if c == self.shown:
+                return self.bass()
+            since = self.began(c, bound)
+            ms = [m for a, m in self.starts if a >= since and m % 12 in tones(c)]
+            return min(ms) % 12 if ms else None
+
+        allowed = None
+        if self.first_fresh is not None and self.shown is not None:
+            # a new chord only with two of its notes started since one began, or what it adds to the chord
+            # shown started and the rest sounding
+            new = {m % 12 for a, m in self.starts if a >= self.first_fresh}
+            was, now = tones(self.shown), {m % 12 for m in sounding}
+
+            def allowed(c):
+                adds = tones(c) - was
+                return (c == self.shown or len(tones(c) & new) >= 2
+                        or (bool(adds) and adds <= new and tones(c) - adds <= new | now))
+
+        c, self.fit = chord_from_weights(w, low, self.vocab, allowed)
+        if c == self.shown:
+            self.lead = None
+            if not fresh:
+                self.mine = (self.mine + [(t, m) for m in started if m % 12 in tones(c)])[-64:]
+        elif self.shown is None or (self.lead is not None and self.lead[0] == c and t - self.lead[1] >= self.hold):
+            self.shown, self.lead, self.named = c, None, t
+            self.since = self.began(c, bound)
+            self.mine = [(a, m) for a, m in self.starts if a >= self.since and m % 12 in tones(c)]
+            if not self.mine:  # none of its notes started lately: the lowest of them sounding
+                self.mine = [(t, m) for m in sorted(sounding) if m % 12 in tones(c)][:1]
+        elif self.lead is None or self.lead[0] != c:
+            self.lead = (c, t)
+
+    def began(self, chord: tuple[int, str], bound: float) -> float:
+        """Where the run of notes started lately that all belong to `chord` goes back to, not before `bound`."""
+        inside, since = tones(chord), self.t
+        for a, m in reversed(self.starts):
+            if a < bound or m % 12 not in inside:
+                break
+            since = a
+        return since
+
+    def bass(self) -> int | None:
+        if not self.mine:
+            return None
+        latest = self.mine[-1][0]  # held, it stays; played on, the notes of the last `bass_s`
+        return min(m for a, m in self.mine if latest - a <= self.bass_s) % 12
+
+    def state(self) -> dict | None:
+        if self.shown is None:
+            return None
+        heard = min(1.0, float(sum(self.wm.values())) / self.enough)
+        w = self.weights()
+        t = tones(self.shown)
+        there = sum(1 for k in t if w[k] >= 0.15 * w.max()) / len(t) if w.max() > 0 else 0.0
+        return {"chord": self.shown, "bass": self.bass(), "confidence": round(self.fit * heard * there, 3)}

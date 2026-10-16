@@ -537,6 +537,29 @@ same way).
   agree), each note (its level against the loudest), the tempo (the pulse's peak), the loop (its
   rounds, halved after a chord let pass). A new listen starts the tempo and the loop afresh. Deployed
   2026-10-16, about 08:04 (everything idle), with Play one and the old mixer note's removal.
+- **Listen on three time scales** (2026-10-16, the player: "it's pretty frenetic... if I'm playing an
+  arpeggio of Am then G, back and forth, i see the notes moment by moment, the chord and tempo bar by
+  bar, and the current spot in the chord cycle (so three zone: this instant, this bar, and overall
+  orientation). the non-instant ones are blank or just show a low confidence meter until they have
+  enough tracking to show something"). Listen is now three panels:
+  - **This moment:** the notes sounding, each with its level, what they make (small), and the input
+    level.
+  - **This bar:** the chord over about half a bar (`livechords.ChordPool`: the notes heard, pooled by
+    pitch, fading over two beats once there is a tempo, else 0.8 s), large, with its bass. It is shown
+    from 0.4 sure: the fit, times how much has been heard, times the share of its tones there, so one
+    note of an arpeggio is not yet a chord. Below it, the tempo, with a dot lit on each beat (the page
+    keeps the beat between polls, from the pulse's period and the time since a strike).
+  - **Where you are:** the loop of those bar chords, the one the playing is on lit, the next one
+    marked, the rounds; until there is one, what it needs.
+
+  Each panel has its five bars. The runners-up and the recent chords are gone from Listen. The pool
+  keeps the chord before from lingering: when a note outside the chord starts, what was pooled and has
+  stopped sounding fades fast, so F's residue does not make G a G7. A new chord needs two of its notes
+  started, or what it adds to the one shown (Am to F; C to C7). Its bass is the lowest of its own notes
+  started since it began, so an arpeggio's first note is the bass, and the chord before's late bass is
+  not. The loop gives way to another found the same way, and goes once two chords in its last two
+  rounds are not its own. Before, an Am-G loop held on through C-Am-F-G. The home tile shows the bar's
+  chord once it is sure. Not yet deployed.
 - **Deployed 2026-10-16, about 07:10** (both recorders idle). The installer added
   `/etc/chord-listener.toml` and the unit; by hand, the peers line of `/etc/practice-recorder.toml` and
   `/etc/exercise-recorder.toml` and the tile in `/etc/room-home.toml` (copies kept as
