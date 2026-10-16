@@ -363,6 +363,11 @@ yet.
     exercise takes, exercises, backings and ambient state were copied too.
     All four services answer and see the 18i8. Nothing has opened the
     18i8 yet.
+  - **Configs on deploy:** `setup/install.sh` writes each `/etc/*.toml`
+    only when it is missing, so a change to `config/*.toml` reaches the
+    unit only by hand: diff the installed copy against the repo's, install
+    it, restart that service (the exercise app's `keep_channels`,
+    2026-10-15).
   - **Wi-Fi:** slot 7 (the board's nvram, a pinned MAC address, 5 GHz).
   - **The USB audio driver:** `options snd_usb_audio lowlatency=0` in
     `/etc/modprobe.d/snd-usb-audio.conf` (2026-10-15). It gave fewer
