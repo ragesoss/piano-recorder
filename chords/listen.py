@@ -82,6 +82,7 @@ ROOM_S = 1.0  # the room: what was heard up to this long before the attack
 CLIP_S = (ROOM_S, 1.6)  # a check's clip: this long before the attack, and after it
 CHECK_BASS = (L.BASS_NOTE_RANGE[0], L.HI)  # a check's bass: looked for from E1 to the top of the pitch axis
 LABEL_S = 2.0
+PIANO_BUDGET_MS = 35.0  # the Listen view runs the piano detector every so many frames that it costs this a frame
 STRUCK_DB = 6.0  # the Listen view skips the piano detector in a block this much louder than the one before
 ROOM_LEARN_S = 1.0  # the Listen view learns the room from this long of quiet (the piano detector's background):
 ROOM_DB = 4.0  # within this of the quietest of the last 10 s (itself under QUIET_CEIL_DBFS), not a chord's tail
@@ -374,6 +375,9 @@ class Listener:
         self.kind_shown: str | None = None
         self.last_heard: Heard | None = None
         self.room = None  # the room's peaks (`livechords.quiet_peaks`), learned from a quiet second, for the piano
+        self.piano_ms = 0.0  # what the piano detector takes a frame, lately (ms)
+        self.piano_due = 0  # frames until it runs again
+        self.piano_last = None  # what it heard last, for the frames between
         self.quiet_run = 0  # frames of the room alone in a row
         self.now: dict = {"chord": None, "confidence": 0.0, "top": [], "level_dbfs": None, "quiet_dbfs": None}
         self.history: collections.deque = collections.deque(maxlen=12)
@@ -480,12 +484,22 @@ class Listener:
             pn, pc_chord, pc_bass, ps_scores = [], None, None, np.zeros(len(CHORDS))
             ph = heard_of((), None, None)
             bass_midi, frame_kind = None, None
+            self.piano_due = 0  # heard afresh the next frame
+        elif piano and self.piano_due > 0 and self.piano_last is not None:
+            # the detector costs more than a frame can spare here (the LIVA: about 90 ms): what it last heard
+            self.piano_due -= 1
+            pn, pc_chord, pc_bass, ps_scores, ph, bass_midi, frame_kind = self.piano_last
         elif piano:  # the piano detector: the notes that best explain the window's peaks, less the room's
+            t_piano = time.perf_counter()
             pn = L.piano_notes(L.window_peaks(win, self.rate, 0.0, len(win) / self.rate, MIN_FFT, background=self.room))
             pc_chord, pc_bass, ps_scores = L.chord_of_notes(pn, VOCAB)
             ps_scores = np.zeros(len(CHORDS)) if ps_scores is None else ps_scores
             ph = heard_of(tuple(m for m, _ in pn), named(tuple(pc_chord), pc_bass) if pc_chord else None, pc_bass)
             bass_midi, frame_kind = (pn[0][0] if pn else None), ph.kind
+            self.piano_ms = 0.7 * self.piano_ms + 0.3 * 1000 * (time.perf_counter() - t_piano) if self.piano_ms else \
+                1000 * (time.perf_counter() - t_piano)
+            self.piano_due = max(0, math.ceil(self.piano_ms / PIANO_BUDGET_MS) - 1)
+            self.piano_last = (pn, pc_chord, pc_bass, ps_scores, ph, bass_midi, frame_kind)
         else:
             bass_midi, _ = L.bass_note(V)
             frame_kind = hear(V, s).kind
@@ -543,7 +557,8 @@ class Listener:
                                  for k in np.argsort(ps_scores)[::-1][:4]] if piano else
                                 [[chord_name(CHORDS[k]), round(float(s[k]), 3)] for k in order]) if kind == "chord" else [],
                         "level_dbfs": round(block_level, 1), "quiet_dbfs": round(quiet, 1),
-                        "frame_ms": round(1000 * (time.perf_counter() - t_frame), 1)}
+                        "frame_ms": round(1000 * (time.perf_counter() - t_frame), 1),
+                        "piano_ms": round(self.piano_ms, 1) if piano else None}
             if name and self.now["confidence"] >= 0.5 and (not self.history or self.history[-1][1] != name):
                 self.history.append((datetime.now().isoformat(timespec="seconds"), name))
             # this bar: the notes pooled over about half a bar (once the tempo is known), and the loop of those
