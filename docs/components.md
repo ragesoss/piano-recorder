@@ -49,8 +49,11 @@ yet.
 - **Role:** turn the instrument into an analog signal.
 - **Interface:** XLR into the capture interface. Phantom power if it is a
   condenser.
-- **Current:** two SDCs, with XLR cables. They sounded the same, so either
-  will do.
+- **Current:** two SDCs, with XLR cables, bought on Temu (the player, 2026-10-16). They sounded the
+  same, so either will do. Through the 18i8 the room is their noise floor, and the piano detector and
+  the chord app's checks were built on one of them: cheap, but measured and good enough here, so a
+  cheap mic is worth a trial if it passes the same measurements (room tone at the same gain, a
+  spectrum against these on one source, the triads take again).
   - Phantom (+48 V) must be on. With it off, the mixer got nothing.
   - Through the BMG-04F at channel gain 0 (the knob's middle), hard dobro
     picks at about 20 cm peaked at -15 to -18 dBFS, over a room tone of
