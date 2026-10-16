@@ -363,6 +363,17 @@ on the same screen as the controls, so a take needs little preparation.
   tab) and bass 011 (its table of bars) at 1180x820. Deployed 2026-10-15
   (just before 14:00, everything idle), and the 59 exercises pushed again with
   their instructions; the tunes have none.
+- **Lining up a click through the 18i8** (2026-10-15): with the 18i8 the click is not
+  returned electrically; it reaches the room microphone (and faintly the bass's pickup) through
+  the air 300-420 ms after the track, and the phase-transform correlation (which weighs every
+  frequency alike, where the click is two narrow tones in a take that is mostly bass) put 13 of
+  14 takes at 57-200 ms, eight of them marked found. `find_click` now finds the click by its
+  onsets in its own bands (1.5 and 2 kHz, every millisecond, every channel), within 0.6 s or one
+  beat, then to the sample by the phase transform within 2 ms of that; found when the take has
+  an onset where 70% of the click's beats fall (within 15 ms) and the onsets' peak is 3 times
+  its median. On the takes of 2026-10-13 to 15 (15 through the 18i8, 11 through the BMG-04F):
+  all found, 24 at the lag measured by hand (one BMG-04F take 28 ms off, one 18i8 take 13 ms);
+  a click at the wrong tempo never found. Not yet deployed.
 - **Next:** a tool to bring exercise takes into dobro-transcription with
   their `takes.csv` rows (`tools/pull-take` reads only the practice
   recorder's takes; exercise takes need `/etc/exercise-recorder.toml`),

@@ -34,15 +34,31 @@ FOUND_RATIO = 30.0
 
 # A click is searched for only this far into the take, or one beat if that is shorter: the
 # engine starts the playback once the capture is running, and the click's first beat arrives
-# 160-190 ms in on the Pi with the BMG-04F (six exercise takes, 2026-10-13). A search over the
-# whole take (-2 to +10 s, as for a backing) put four of those six 8-12 beats late: a click
-# track correlates with itself shifted by a bar (or a beat) almost as well as unshifted, and
-# the noise decides. A window under one beat wide holds only one of those candidates. Noise
-# alone peaks at about 6 in it; those takes' clicks at 73-215.
-CLICK_SEARCH_S = 0.4
+# 160-190 ms in on the Pi with the BMG-04F (six exercise takes, 2026-10-13), 300-420 ms through
+# the 18i8 (through the air to the room microphone; 2026-10-14/15). A search over the whole take
+# (-2 to +10 s, as for a backing) put four of those six 8-12 beats late: a click track correlates
+# with itself shifted by a bar (or a beat) almost as well as unshifted, and the noise decides. A
+# window under one beat wide holds only one of those candidates.
+CLICK_SEARCH_S = 0.6
 # ...over the click's first seconds only: a count-in bar and a few beats are plenty, and the
 # Pi 3 took 23-27 s to line up and clean a whole take (35 ms on the desktop for this).
 CLICK_EXCERPT_S = 8.0
+# The click is found by its onsets in its own two tones' bands (1.5 and 2 kHz), every millisecond,
+# in all of the take's channels, then placed to the sample by the phase-transform correlation
+# within `CLICK_REFINE_S` of that. The phase transform alone weighs every frequency alike, and the
+# click is two narrow tones in a take that is mostly bass: through the 18i8, where only the air
+# carries the click, it put 13 of 14 takes at 57-200 ms for 300-420, eight of them as found.
+CLICK_BANDS = ((1350.0, 1650.0), (1850.0, 2150.0))
+CLICK_HOP_S = 0.001
+CLICK_REFINE_S = 0.002
+# Found: the take has an onset within `CLICK_TOLERANCE_S` of where the lag puts the click's beats
+# (each beat's strongest onset within 40 ms, against their median) for at least `CLICK_ON_TIME` of
+# them, and the onsets' correlation peak is `CLICK_RATIO` times its median. 15 takes through the
+# 18i8: 0.73-1.00 on time, ratio 3.6-6.9; 11 through the BMG-04F: 1.00, 26-32; a click track at
+# the wrong tempo (26 cases): at most 0.75 on time, the only one over 0.7 at ratio 2.4; noise 0.27.
+CLICK_TOLERANCE_S = 0.015
+CLICK_ON_TIME = 0.7
+CLICK_RATIO = 3.0
 
 
 @dataclass
@@ -53,6 +69,8 @@ class Alignment:
     backing_dbfs: float | None  # the backing as it sits in the take (rms over the backing)
     left_dbfs: float | None  # what the fit still finds of it after subtraction
     taps: int | None  # None for a click: not fitted or subtracted
+    on_time: float | None = None  # a click: the share of its beats the take has an onset at
+    found_: bool | None = None  # a click: decided by `find_click` (else by `peak_ratio`)
 
     @property
     def lag_ms(self) -> float:
@@ -60,14 +78,17 @@ class Alignment:
 
     @property
     def found(self) -> bool:
-        return self.peak_ratio >= FOUND_RATIO
+        return self.found_ if self.found_ is not None else self.peak_ratio >= FOUND_RATIO
 
     def as_dict(self) -> dict:
-        return {"lag_samples": self.lag, "lag_ms": round(self.lag_ms, 2), "rate": self.rate,
-                "found": self.found, "peak_ratio": round(self.peak_ratio, 1),
-                "backing_dbfs": None if self.backing_dbfs is None else round(self.backing_dbfs, 1),
-                "left_dbfs": None if self.left_dbfs is None else round(self.left_dbfs, 1),
-                "taps": self.taps}
+        d = {"lag_samples": self.lag, "lag_ms": round(self.lag_ms, 2), "rate": self.rate,
+             "found": self.found, "peak_ratio": round(self.peak_ratio, 1),
+             "backing_dbfs": None if self.backing_dbfs is None else round(self.backing_dbfs, 1),
+             "left_dbfs": None if self.left_dbfs is None else round(self.left_dbfs, 1),
+             "taps": self.taps}
+        if self.on_time is not None:
+            d["clicks_on_time"] = round(self.on_time, 2)
+        return d
 
 
 def _next_pow2(n: int) -> int:
@@ -145,14 +166,53 @@ def align_and_clean(take: np.ndarray, played: np.ndarray, rate: int, max_lag_s: 
     return al, clean.astype(np.float32)
 
 
+def click_onsets(x: np.ndarray, rate: int) -> tuple[np.ndarray, int]:
+    """Onset strength in the click's bands (`CLICK_BANDS`), every `CLICK_HOP_S`: the rise of each
+    band's log energy over a ~11 ms window (bands x frames), and the hop in samples."""
+    hop = max(1, int(round(CLICK_HOP_S * rate)))
+    n_fft = _next_pow2(int(0.0107 * rate))
+    x = np.concatenate([np.asarray(x, dtype=np.float32), np.zeros(n_fft, dtype=np.float32)])
+    frames = np.lib.stride_tricks.sliding_window_view(x, n_fft)[: len(x) - n_fft: hop] * np.hanning(n_fft).astype(np.float32)
+    S = np.abs(np.fft.rfft(frames, axis=1)) ** 2
+    f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+    out = []
+    for lo, hi in CLICK_BANDS:
+        e = np.log(S[:, (f >= lo) & (f < hi)].sum(axis=1) + 1e-12)
+        out.append(np.maximum(0.0, np.diff(e, prepend=e[:1])))
+    return np.array(out), hop
+
+
 def find_click(take: np.ndarray, click: np.ndarray, rate: int, beat_s: float) -> Alignment:
-    """Where a click track (`click_track`) starts in a take, searched from the take's first
-    sample to `CLICK_SEARCH_S` in, or one beat if that is shorter, so the click's beats either
-    side of the true one fall outside the search; over the click's first `CLICK_EXCERPT_S`."""
+    """Where a click track (`click_track`) starts in a take (one channel, or several: frames x
+    channels), searched from the take's first sample to `CLICK_SEARCH_S` in, or one beat if that
+    is shorter, so the click's beats either side of the true one fall outside the search; over
+    the click's first `CLICK_EXCERPT_S`. Found by its onsets in its own bands, placed to the sample
+    by the phase-transform correlation near there (`CLICK_*`)."""
+    take = take[:, None] if take.ndim == 1 else take
     max_lag = max(1, int(min(CLICK_SEARCH_S, beat_s) * rate) - 1)
     m = min(len(click), int(CLICK_EXCERPT_S * rate))
-    lag, ratio = find_lag(take[:m + max_lag + 1].astype(np.float64), click[:m], max_lag, 0)
-    return Alignment(lag, rate, ratio, None, None, None)
+    seg = take[: m + max_lag + 1]
+    fc, hop = click_onsets(click[:m], rate)
+    ft = sum(click_onsets(seg[:, c], rate)[0] for c in range(seg.shape[1]))
+    n = fc.shape[1]
+    scores = np.array([np.sum(ft[:, k:k + n] * fc[:, : max(0, min(n, ft.shape[1] - k))])
+                       for k in range(max(1, max_lag // hop))])
+    k = int(np.argmax(scores))
+    ratio = float(scores[k] / (np.median(scores) + 1e-12))
+    # the click's beats (its onsets' peaks), and whether the take has its onsets there
+    c = fc.sum(axis=0)
+    beats = [i for i in range(1, len(c) - 1) if c[i] > 0.5 * c.max() and c[i] >= c[i - 1] and c[i] >= c[i + 1]]
+    beats = [i for j, i in enumerate(beats) if j == 0 or (i - beats[j - 1]) * hop > 0.02 * rate]
+    t = ft.sum(axis=0)
+    w = int(0.04 * rate / hop)
+    offs = np.array([int(np.argmax(t[i + k - w: i + k + w + 1])) - w for i in beats
+                     if i + k - w >= 0 and i + k + w + 1 <= len(t)]) * hop / rate
+    on_time = float(np.mean(np.abs(offs - np.median(offs)) <= CLICK_TOLERANCE_S)) if len(offs) else 0.0
+    # to the sample, near the onsets' lag
+    near = int(CLICK_REFINE_S * rate)
+    lag, _ = find_lag(seg.mean(axis=1).astype(np.float64), click[:m], k * hop + near, max(0, k * hop - near))
+    return Alignment(lag, rate, ratio, None, None, None, on_time=on_time,
+                     found_=on_time >= CLICK_ON_TIME and ratio >= CLICK_RATIO)
 
 
 def count_in(tempo: dict, rate: int, level_dbfs: float = -14.0) -> tuple[np.ndarray, float, list[float]]:

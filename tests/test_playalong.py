@@ -72,6 +72,30 @@ def test_a_click_is_found_at_the_start_to_the_sample(bpm, pickup):
     assert al.as_dict()["taps"] is None  # not fitted, not taken out
 
 
+def test_a_click_heard_only_through_the_air_is_found_in_the_room_microphone():
+    """Through the 18i8 the click is not returned electrically: it reaches the room microphone
+    (and faintly the bass's pickup) through the air, 300-420 ms after the track, under a bass much
+    louder than it. Two channels, as the exercise app records them."""
+    rate, lag, bpm = 48000, 20160, 80  # 420 ms
+    click, _ = click_track({"bpm": bpm, "pickup_beats": 0.0, "beats_per_bar": 4}, rate, 32.0)
+    n = lag + len(click) + rate
+    t = np.arange(n) / rate
+    tau = np.mod(t + 0.31, 60 / bpm)  # the bass on every beat, off the click's grid
+    bass = sum(a * np.sin(2 * np.pi * 55 * h * t) for h, a in ((1, 0.3), (2, 0.2), (3, 0.1), (5, 0.05)))
+    bass = bass * (1 - np.exp(-tau / 0.005)) * np.exp(-tau * 3)
+    rng = np.random.default_rng(7)
+    air = np.zeros(n)
+    # the room microphone hears the click about 30 dB over its background (2026-10-15), the pickup
+    # less; the bass's attacks (on its own beat grid, 240 ms off the click's) are what the search
+    # must not take for the click
+    air[lag:lag + len(click)] = np.convolve(click, [0.25, 0.0, 0.1, -0.05])[: len(click)]
+    take = np.stack([bass + 0.1 * air + 3e-4 * rng.normal(size=n),            # the pickup
+                     0.15 * bass + air + 1e-3 * rng.normal(size=n)], axis=1)  # the room microphone
+    al = find_click(take, click, rate, 60 / bpm)
+    assert al.found and abs(al.lag - lag) <= int(0.002 * rate)
+    assert al.as_dict()["clicks_on_time"] >= 0.9
+
+
 def test_no_click_in_the_take_is_reported_not_found():
     click, _ = click_track({"bpm": 80, "pickup_beats": 0.0, "beats_per_bar": 4}, 48000, 16.0)
     al = find_click(np.random.default_rng(4).normal(0, 0.1, len(click)), click, 48000, 0.75)

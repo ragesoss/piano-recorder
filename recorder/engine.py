@@ -364,11 +364,11 @@ class Engine:
             meta["click"] = rec.click
         try:
             played = np.concatenate(rec.played) if rec.played else np.zeros(0, dtype=np.float32)
-            take, rate = self.takes.load(rec.take_id)
-            take = take if take.ndim == 1 else take.mean(axis=1)
+            channels, rate = self.takes.load(rec.take_id)
+            take = channels if channels.ndim == 1 else channels.mean(axis=1)
             if len(played) and len(take):
-                if rec.guide == "click":  # found near the start; it stays in the take
-                    al, clean = playalong.find_click(take, played, rate, 60.0 / float(rec.tempo["bpm"])), None
+                if rec.guide == "click":  # found near the start, in every channel; it stays in the take
+                    al, clean = playalong.find_click(channels, played, rate, 60.0 / float(rec.tempo["bpm"])), None
                 else:
                     al, clean = playalong.align_and_clean(take, played, rate)
                 meta["playalong"] = al.as_dict()
