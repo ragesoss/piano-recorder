@@ -735,6 +735,11 @@ either part is swapped.
     yield (`POST /api/yield`) closes it and keeps it closed for 10 s: a
     peer that asks to record gets the inputs. If they are busy anyway, the
     page says so and tries again 10 s later.
+  - **A fourth program** (2026-10-16): the chord app (`chords/`, port 8003; PLAN.md step 7). It only
+    listens, and only while its page is open, the same way: it lets the inputs go for 10 s when
+    asked. The two recorders list it among their peers, so a recording always gets the inputs; it
+    asks no one itself, so if they are in use (a recording, or the exercise app listening) its page
+    says so.
 
 ## Tests
 

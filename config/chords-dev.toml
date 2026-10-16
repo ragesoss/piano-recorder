@@ -1,0 +1,24 @@
+# The chord app on the desktop, with the fake device (or --demo: chords it plays itself).
+
+capture = "fake"
+playback = "fake"
+keep_channels = [2, 3, 0]
+takes_dir = "chord-checks-dev"
+
+[inputs.1]
+name = "Piezo"
+details = "Fishman Full Circle, through the Fishman Pro-EQ Platinum DI"
+for = "bass"
+
+[inputs.3]
+name = "Nadine"
+details = "Ear Trumpet Labs Nadine, on the bass"
+for = "bass"
+
+[inputs.4]
+name = "Room mic"
+details = "The condenser, pointed at the player"
+
+[web]
+host = "127.0.0.1"
+port = 8003

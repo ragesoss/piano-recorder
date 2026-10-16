@@ -1,0 +1,11 @@
+#!/bin/sh
+# Copy the chord app's checks and labels from the control unit: each clip's WAV and its sidecar (what
+# was asked, heard and scored), for study on the desktop (dobro-transcription).
+#   tools/pull-checks DEST_DIR [HOST]     HOST: an ssh host (default: practice)
+set -eu
+dest=$1
+host=${2:-practice}
+dir=$(ssh "$host" "cd practice-recorder && .venv/bin/python -c 'from recorder.config import load_config; print(load_config(\"/etc/chord-listener.toml\").takes_dir)'")
+mkdir -p "$dest"
+rsync -a "$host:$dir/" "$dest/"
+echo "$(ls "$dest"/*.json 2>/dev/null | wc -l) checks in $dest"

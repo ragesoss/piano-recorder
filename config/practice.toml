@@ -12,9 +12,10 @@ takes_dir = "~/takes"
 # The control unit's address on the LAN, reserved on the router (slot 7).
 # Nothing in the code uses it yet.
 address = "practice.local"
-# Other programs on the control unit that play through the same speakers:
-# only one plays at a time (recorder/peers.py).
-peers = ["http://127.0.0.1:8001", "http://127.0.0.1:8002"]
+# Other programs on the control unit that play through the same speakers (only one plays at a
+# time), or listen to the same inputs (the chord app, 8003): before recording or playing, this one asks
+# each to let go (recorder/peers.py).
+peers = ["http://127.0.0.1:8001", "http://127.0.0.1:8002", "http://127.0.0.1:8003"]
 
 [web]
 host = "0.0.0.0"

@@ -443,6 +443,44 @@ on the same screen as the controls, so a take needs little preparation.
   recorder's takes; exercise takes need `/etc/exercise-recorder.toml`),
   which could also take the backing out on the desktop instead of the Pi.
 
+### 7. The chord app (started 2026-10-16)
+
+The player's request: "let's add a stripped down beginning of live detection as a fourth music room
+app... just showing the currently playing chord as detected. this might benefit from some piano work
+where it will be easy to play a chord, check for accurate detection, and give feedback". For making
+dobro-transcription's live chord detection more accurate (the band that follows hears chords the
+same way).
+
+- **A fourth program on the control unit:** `chords/`, port 8003, `setup/chord-listener.service`, its
+  own config (`/etc/chord-listener.toml` from `config/chords.toml`). It only listens: the inputs the
+  exercise app keeps (3 the Nadine, 4 the condenser, 1 the piezo), mixed as the page chooses (the
+  room mic unless told).
+- **The listener is the band's own:** `chords/livechords.py` is dobro-transcription's
+  `transcribe/livechords.py`, copied as it is by `tools/sync-livechords` (a test fails when the two
+  differ). Every 100 ms the last 0.4 s are heard (each spectrum peak at its semitone, a treble and a
+  bass chroma, 36 chord templates: major, minor and seven on 12 roots), the chord shown smoothed by a
+  forward HMM (stays put with probability 0.85 a frame). Nothing is named within 12 dB of the
+  quietest of the last 10 s, or under -50 dBFS + 12 dB before anything that quiet is heard.
+- **Listen:** the chord, large, its runners-up and recent chords; Right, or Wrong: it was... (a grid of
+  the 36, or no chord) keeps the last 2 s with the player's label.
+- **Check:** a chord is asked for (major, minor, seven; all 12 roots or G C D A E F Bb); the next
+  attack (a rise of 9 dB within 0.3 s) starts it, and the chord is judged over 0.1-1.1 s after it,
+  once the strike has passed: right or what it heard, at once; the clip (every kept channel, from
+  0.3 s before the attack to 1.6 s after) is kept when its end has been heard. "I played it wrong"
+  throws the clip away. A tally of the session, and its misses.
+- **Kept for study:** `~/chord-checks` on the control unit, one WAV and a JSON sidecar per check or
+  label (asked, heard, right, the top scores, the instrument being played, the inputs mixed, which
+  listener judged); `tools/pull-checks DEST` copies them to the desktop.
+- **Sharing the inputs:** it listens only while its page asks (5 s each time), and lets them go for
+  10 s when asked (`/api/yield`): the practice recorder and the exercise app now list it among their
+  peers, so they ask before they record (and before they play a take, when it pauses 10 s and comes
+  back). The ambient synth does not list it: it does not use the inputs.
+- Tried on the desktop with `--demo` (chords made by the program in place of the inputs): both views
+  at 1180x820 and 390x844, a check and two labels kept, no console errors. On synthesized chords the
+  listener names 33 or more of the 36 (a test). Not deployed yet: `/etc/practice-recorder.toml`,
+  `/etc/exercise-recorder.toml` (peers) and `/etc/room-home.toml` (the tile) need the new lines by
+  hand, as the installer keeps existing configs.
+
 ## Open questions
 
 - ~~Which instrument?~~ The piano (2026-10-10). The speakers are across

@@ -1,0 +1,28 @@
+# The chord app's config (chords/), installed as /etc/chord-listener.toml by setup/install.sh. It
+# only listens: the recorders' capture, and the inputs the exercise app keeps (input 3 the Nadine,
+# input 4 the condenser, input 1 the bass's piezo). Every config names a playback; this one plays nothing.
+capture = "scarlett-18i8-gen3"
+playback = "scarlett-18i8-gen3"
+keep_channels = [2, 3, 0]
+# The checks and labelled clips it keeps ("~" is the home of the user the service runs as);
+# tools/pull-checks copies them to the desktop.
+takes_dir = "~/chord-checks"
+
+# As in config/exercises.toml. The page hears the inputs without a "for" (the room) unless told.
+[inputs.1]
+name = "Piezo"
+details = "Fishman Full Circle, through the Fishman Pro-EQ Platinum DI"
+for = "bass"
+
+[inputs.3]
+name = "Nadine"
+details = "Ear Trumpet Labs Nadine, on the bass"
+for = "bass"
+
+[inputs.4]
+name = "Room mic"
+details = "The condenser, pointed at the player"
+
+[web]
+host = "0.0.0.0"
+port = 8003

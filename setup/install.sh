@@ -29,6 +29,13 @@ for d in takes_dir exercises_dir; do
     mkdir -p "$(PYTHONPATH="$app" "$app/.venv/bin/python" -c "from recorder.config import load_config; print(load_config('/etc/exercise-recorder.toml').$d)")"
 done
 
+# The chord app (chords/): its own config, and the checks it keeps.
+if [ ! -f /etc/chord-listener.toml ]; then
+    sudo install -m 644 "$app/config/chords.toml" /etc/chord-listener.toml
+    echo "installed /etc/chord-listener.toml"
+fi
+mkdir -p "$(PYTHONPATH="$app" "$app/.venv/bin/python" -c "from recorder.config import load_config; print(load_config('/etc/chord-listener.toml').takes_dir)")"
+
 # The services: (re)installed and restarted on every run. room-home is the
 # home page on port 80, linking this and the other apps (home/server.py).
 if [ ! -f /etc/room-home.toml ]; then
@@ -40,12 +47,12 @@ fi
 user=$(id -un)
 unit_tmp=$(mktemp)
 trap 'rm -f "$unit_tmp"' EXIT
-for unit in practice-recorder exercise-recorder room-home; do
+for unit in practice-recorder exercise-recorder chord-listener room-home; do
     sed -e "s|@USER@|$user|g" -e "s|@APP@|$app|g" "$app/setup/$unit.service" >"$unit_tmp"
     sudo install -m 644 "$unit_tmp" /etc/systemd/system/$unit.service
 done
 sudo systemctl daemon-reload
-for unit in practice-recorder exercise-recorder room-home; do
+for unit in practice-recorder exercise-recorder chord-listener room-home; do
     sudo systemctl enable -q $unit
     sudo systemctl restart $unit
 done

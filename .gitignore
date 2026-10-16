@@ -12,6 +12,8 @@ __pycache__/
 # The exercise app's on the desktop (config/exercises-dev.toml).
 /exercise-takes*/
 /exercises-dev/
+# The chord app's checks (config/chords-dev.toml: chord-checks-dev/).
+/chord-checks*/
 *.wav
 *.flac
 *.mp3

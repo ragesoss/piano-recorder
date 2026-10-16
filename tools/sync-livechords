@@ -1,0 +1,14 @@
+#!/bin/sh
+# Copy the chord listener from dobro-transcription (where it is studied and improved) into the chord
+# app. The copy is that file as it is, under a two-line header; tests/test_chords.py checks they match.
+#   tools/sync-livechords [DOBRO_TRANSCRIPTION_DIR]     default: ../dobro-transcription
+set -eu
+here=$(cd "$(dirname "$0")/.." && pwd)
+src=${1:-$here/../dobro-transcription}/pipeline/src/transcribe/livechords.py
+rev=$(git -C "$(dirname "$src")" rev-parse --short HEAD)
+{
+    echo "# Copied from dobro-transcription pipeline/src/transcribe/livechords.py ($rev) by tools/sync-livechords."
+    echo "# Change it there and copy it again; do not edit this copy."
+    cat "$src"
+} >"$here/chords/livechords.py"
+echo "chords/livechords.py from $src ($rev)"

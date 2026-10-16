@@ -19,6 +19,13 @@ port = 8002
 stop = ["/api/record/stop", "/api/stop"]
 
 [[apps]]
+id = "chords"
+name = "Chords"
+about = "The chord being played, and checks of it"
+port = 8003
+stop = ["/api/stop"]
+
+[[apps]]
 id = "ambient"
 name = "Ambient"
 about = "Music for the room"
