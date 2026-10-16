@@ -1,4 +1,4 @@
-# Copied from dobro-transcription pipeline/src/transcribe/livechords.py (c6f263f) by tools/sync-livechords.
+# Copied from dobro-transcription pipeline/src/transcribe/livechords.py (6080b34) by tools/sync-livechords.
 # Change it there and copy it again; do not edit this copy.
 """Chords in the moment, for a band that follows: per beat, what the audio heard so far says the chord
 is, where in a chart the player is, and the key. Causal: every answer at a time t uses only audio
@@ -181,7 +181,8 @@ PIANO_RANGE = (21, 108)  # A0 to C8
 
 def window_peaks(y: np.ndarray, sr: int, a: float, b: float, min_fft: int = 16384, floor_db: float = 50.0,
                  snr_db: float = 10.0, background=None, near_hz: float = 1.5, near_rel: float = 0.004,
-                 rise_db: float = 6.0, ringing=None, ringing_rise_db: float = 3.0) -> tuple[np.ndarray, np.ndarray]:
+                 rise_db: float = 6.0, ringing=None, ringing_rise_db: float = 3.0,
+                 min_band_s: float = 16.0) -> tuple[np.ndarray, np.ndarray]:
     """The spectrum's peaks in y between a and b seconds (one Hann-windowed segment), as (frequencies
     in Hz, amplitudes): each where a parabola through its log magnitude and its neighbours' puts it, its
     amplitude a sinusoid's (so a steady tone reads the same in any window). Kept: peaks `snr_db` over
@@ -201,8 +202,13 @@ def window_peaks(y: np.ndarray, sr: int, a: float, b: float, min_fft: int = 1638
     p = np.where(np.abs(den) > 1e-12, 0.5 * (l[k] - r[k]) / den, 0.0)
     lmag = c[k] - 0.25 * (l[k] - r[k]) * p
     f = (k + 1 + p) * sr / n
-    # the floor: the median log magnitude of each sixth of an octave from 20 Hz
-    edges = 20.0 * 2 ** (np.arange(0, 6 * np.log2(sr / 2 / 20.0) + 1) / 6)
+    # the floor: the median log magnitude of each sixth of an octave from 20 Hz, and at least 16/T Hz
+    # wide (T the window's length; a peak's main lobe is 4/T wide, so a narrower band's median is the
+    # peak's own level: a low fundamental in a short window)
+    edges = [20.0]
+    while edges[-1] < sr / 2:
+        edges.append(max(edges[-1] * 2 ** (1 / 6), edges[-1] + min_band_s / max(len(seg) / sr, 1e-3)))
+    edges = np.array(edges)
     cen, med = [], []
     for e0, e1 in zip(edges[:-1], edges[1:]):
         b0, b1 = int(e0 * n / sr), int(e1 * n / sr)
@@ -279,6 +285,14 @@ class NoteSearch:
     max_notes: int = 8
     claim_cap: float = 1.0  # a note claims of a peak above its fundamental no more than this times its
     # neighbouring partials' amplitude (0: the whole peak)
+    stack_ratio: float = 2.0  # a note on another's partial: its fundamental's peak this many times the found
+    # notes' predicted share of it (0: no such notes looked for; `_stacked`)...
+    stack_left: float = 0.15  # ...and a partial of it counts where this share of its peak is left over
+    stack_coprime: bool = True  # a found note's own level read from its partials prime to 6
+    stack_shared_miss: float = 0.0  # a partial of it on a shared peak with too little left counts this much missing
+    own_partials: int = 32  # a found note's partials to here are its own unless a note stands over them
+    stack_partials: int = 6  # notes are looked for on found notes' partials 2 to this (an octave, a twelfth,
+    # two octaves, a seventeenth, two octaves and a fifth over them)
 
 
 _PARTIAL_TABLES: dict = {}
@@ -413,8 +427,152 @@ def piano_notes(peaks: tuple[np.ndarray, np.ndarray], search: NoteSearch = NoteS
         notes.discard(drop)
     if not notes:
         return []
-    top = max(float(pw[i].max()) for i in notes)
-    return sorted((int(ms[i]), round(float(pw[i].max()) / top, 3)) for i in notes)
+    level_of = {i: float(pw[i].max()) for i in notes}
+    if search.stack_ratio:
+        # each note's partials past the counted ones, up to `own_partials`, at its offset: to tell its high
+        # partials from notes struck on them
+        hx = np.arange(search.partials + 1, max(search.partials, search.own_partials) + 1)
+        cents = piano.cents(ms) + np.asarray(search.offsets, dtype=float)[j]
+        Bm = piano.B(ms)[:, None]
+        fx = 440.0 * 2 ** ((ms[:, None] - 69) / 12 + cents[:, None] / 1200) * hx * np.sqrt(1 + Bm * hx ** 2)
+        tx = 2 ** ((search.tol_cents + search.stretch_tol * 1200 * np.log2(np.sqrt(1 + Bm * hx ** 2))) / 1200)
+        bx, _ = _loudest_within(fs, w, fx, np.broadcast_to(tx, fx.shape))
+        bx = np.where((bx >= 0) & (fx <= search.explain_hz), bx, len(w))
+        idx_all = np.concatenate([idx, bx], axis=1)
+        level_of = _stacked(notes, level_of, idx_all, apad[idx_all], expect[rows, j], chance, fund, len(w), search)
+        if not level_of:
+            return []
+    top = max(level_of.values())
+    return sorted((int(ms[i]), round(v / top, 3)) for i, v in level_of.items())
+
+
+def _envelope(a: np.ndarray, clean: np.ndarray) -> np.ndarray:
+    """A note's partial amplitudes (a, linear, by partial number) where they are its own (`clean`), and
+    elsewhere the most its own partials either side allow: a line through them in log amplitude over
+    log partial number or over partial number, or falling as 1/h from the one above (a bass's
+    fundamental is faint at a room mic); with one side only, falling as 1/h from it. With none of its
+    own, its observed ones. The larger reading, so that a note's own partial is not taken for another
+    note's."""
+    h = np.arange(1, len(a) + 1, dtype=float)
+    own = np.nonzero(clean & (a > 0))[0]
+    if not len(own):
+        return a.copy()
+    out = a.copy()
+    for k in np.nonzero(~clean)[0]:
+        below, above = own[own < k], own[own > k]
+        if len(below) and len(above):
+            p, q = below[-1], above[0]
+            t_log = (np.log(h[k]) - np.log(h[p])) / (np.log(h[q]) - np.log(h[p]))
+            t_lin = (h[k] - h[p]) / (h[q] - h[p])
+            lp, lq = np.log(a[p]), np.log(a[q])
+            out[k] = max(np.exp(lp + (lq - lp) * t_log), np.exp(lp + (lq - lp) * t_lin), a[q] * h[q] / h[k])
+        else:
+            s = below[-1] if len(below) else above[0]
+            out[k] = a[s] * h[s] / h[k]
+    return out
+
+
+def _stacked(notes: set, level_of: dict, idx: np.ndarray, A: np.ndarray, expect: np.ndarray, chance: np.ndarray,
+             fund: np.ndarray, none: int, search: NoteSearch) -> dict:
+    """Notes struck on another note's partials, which the set search cannot tell from those partials, since
+    their peaks are claimed: a left-hand root under a right-hand triad (C2 under C3-E3-G3: C3 is C2's 2nd
+    partial, G3 its 3rd), octaves, tenths over a bass. A found note's share of a peak it shares is what
+    its own partials predict there (`_envelope`). The notes are read low to high, and a note's own
+    amplitude at a peak it shares with lower notes is the peak less their shares there. What it reads
+    as its own: not its partials that a note an octave, a twelfth or two octaves over it would share
+    (numbers not prime to 6, `stack_coprime`), nor those shared with a higher found note or the note
+    tested. What a peak holds beyond the found notes' shares is the tested note's.
+    A found note whose fundamental is a lower found note's partial (to `own_partials`) and not
+    `stack_ratio` times the shares there is that note's partial, and goes. Notes are then added, the
+    best at a time: a note whose fundamental is a found note's partial and `stack_ratio` times the
+    shares there, and whose leftovers (each its amplitude to the power gamma; less than `stack_left` of
+    a peak left is none) pay its costs as a note's do. A partial of it on a shared peak with none left
+    is not missing (`stack_shared_miss`: partials at one frequency add with their phases, and may
+    cancel). After each addition the found notes are checked again. Returns {note index: level}."""
+    g, P = search.gamma, search.partials
+    hh = np.arange(1, idx.shape[1] + 1)
+    stackable = ((hh % 2 == 0) | (hh % 3 == 0)) if search.stack_coprime else np.zeros(len(hh), bool)
+    by_fundamental: dict = {}
+    for m in range(len(idx)):
+        if idx[m, 0] != none:
+            by_fundamental.setdefault(int(idx[m, 0]), []).append(m)
+
+    def shares(found, m):
+        """{peak: the found notes' predicted share} at the peaks of note m (m not among them). Read low to
+        high: a note's own amplitude at a peak it shares with lower notes is the peak less their predicted
+        shares there; its partials shared with higher found notes or with m, or that an octave, a twelfth
+        or two octaves over it would share, are not read."""
+        owners: dict = {}
+        for n in found:
+            for q in idx[n]:
+                if q != none:
+                    owners.setdefault(int(q), []).append(n)
+        mine = {int(q) for q in idx[m] if q != none}
+        pred: dict = {}  # peak: the shares predicted so far (of the notes read)
+        out: dict = {}
+        for n in sorted(found):
+            own = np.zeros(idx.shape[1], bool)
+            amp = np.zeros(idx.shape[1])
+            for h, q in enumerate(idx[n]):
+                if q == none:
+                    continue
+                q = int(q)
+                amp[h] = max(0.0, float(A[n, h]) - pred.get(q, 0.0))
+                own[h] = not stackable[h] and q not in mine and all(o <= n for o in owners[q]) and amp[h] > 0
+            env = _envelope(np.where(own, amp, A[n]), own)
+            for h, q in enumerate(idx[n]):
+                if q != none:
+                    pred[int(q)] = pred.get(int(q), 0.0) + float(env[h])
+                    if int(q) in mine:
+                        out[int(q)] = out.get(int(q), 0.0) + float(env[h])
+        return out
+
+    def check(found):
+        """Drop each found note whose fundamental is a lower found note's partial (to `own_partials`) and
+        not `stack_ratio` times the predicted share there (low to high). Returns whether any went."""
+        went = False
+        for m in sorted(found):
+            if idx[m, 0] == none or not any(n < m and idx[m, 0] in idx[n, 1:] for n in found):
+                continue
+            if A[m, 0] < search.stack_ratio * shares(found - {m}, m).get(int(idx[m, 0]), 0.0):
+                found.discard(m)
+                level_of.pop(m, None)
+                went = True
+        return went
+
+    found = set(notes)
+    check(found)
+    for _ in range(2 * search.max_notes):
+        if len(found) >= search.max_notes:
+            break
+        cands = {m for n in found for q in idx[n, 1:search.stack_partials] if q != none
+                 for m in by_fundamental.get(int(q), ()) if m not in found}
+        best = None
+        for m in cands:
+            pred = shares(found, m)
+            if A[m, 0] < search.stack_ratio * pred.get(int(idx[m, 0]), 0.0):
+                continue
+            left = np.array([max(0.0, float(A[m, k]) - pred.get(int(q), 0.0)) if q != none else 0.0
+                             for k, q in enumerate(idx[m, :P])])
+            has = left > search.stack_left * A[m, :P]
+            # a partial on a shared peak is not missing, whatever is left of it: notes' partials at one
+            # frequency add with their phases, and may cancel
+            gone = np.array([1.0 if q == none or (int(q) not in pred and not has[k]) else
+                             (search.stack_shared_miss if not has[k] else 0.0) for k, q in enumerate(idx[m, :P])])
+            lw = np.where(has, left, 0.0) ** g
+            if lw[0] < fund[m] * lw.max():
+                continue
+            level = np.sort(lw)[-3:].mean()
+            cost = search.per_note + search.miss * level * float((expect[m] * gone).sum()) + search.chance * chance[m]
+            gain = float(lw.sum()) - cost
+            if gain > 0 and (best is None or gain > best[0]):
+                best = (gain, m, float(lw.max()))
+        if best is None:
+            break
+        found.add(best[1])
+        level_of[best[1]] = best[2]
+        check(found)
+    return {n: v for n, v in level_of.items() if n in found}
 
 
 def chord_of_notes(notes: list[tuple[int, float]], vocab: Vocabulary | None = None, root_bass: float = 0.05,
