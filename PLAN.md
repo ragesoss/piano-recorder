@@ -608,7 +608,7 @@ same way).
     over a room's hum and each strike's thump, damped and ringing, A0 to G6, on both paths. DemoSource's
     checks judge as "other": its partials are exact harmonics, and the piano detector hears its Dm as
     D2 and F3.
-- **Listen hears the piano by the piano detector** (2026-10-16; deployed about 10:25 with the checks' piano detector, everything idle). With the piano chosen,
+- **Listen hears the piano by the piano detector** (2026-10-16; deployed about 10:15 with the checks' piano detector, everything idle). With the piano chosen,
   this moment's notes, what they make, and the bar's pool come from `livechords.piano_notes` (each 0.4 s
   window's peaks, the notes on another note's partials found too), the chord from `chord_of_notes`, the
   bass the lowest note. Other instruments keep the chroma path. The frame where a note is struck is
@@ -620,7 +620,7 @@ same way).
   detector took 91 ms a 0.4 s window (measured just after the deploy, on a synthetic chord; 4-6 ms on the
   desktop; `window_salience` 7 ms), nearly the whole 100 ms a frame has: so the Listen view runs it only
   as often as costs `PIANO_BUDGET_MS` (35 ms) a frame, what it last heard in between (every third frame
-  on the LIVA; afresh the frame after a strike), redeployed about 10:40. `/api/status` reports
+  on the LIVA; afresh the frame after a strike), redeployed at 10:24. `/api/status` reports
   `frame_ms` and `piano_ms`. A check (judged once) takes the detector's full cost once.
 - **Deployed 2026-10-16, about 07:10** (both recorders idle). The installer added
   `/etc/chord-listener.toml` and the unit; by hand, the peers line of `/etc/practice-recorder.toml` and
