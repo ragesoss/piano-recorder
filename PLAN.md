@@ -608,6 +608,17 @@ same way).
     over a room's hum and each strike's thump, damped and ringing, A0 to G6, on both paths. DemoSource's
     checks judge as "other": its partials are exact harmonics, and the piano detector hears its Dm as
     D2 and F3.
+- **Listen hears the piano by the piano detector** (2026-10-16, not yet deployed). With the piano chosen,
+  this moment's notes, what they make, and the bar's pool come from `livechords.piano_notes` (each 0.4 s
+  window's peaks, the notes on another note's partials found too), the chord from `chord_of_notes`, the
+  bass the lowest note. Other instruments keep the chroma path. The frame where a note is struck is
+  skipped (`STRUCK_DB`: a block 6 dB over the one before), since a note struck at the window's very end
+  shows its partials before its fundamental stands out and is read as several. The room's hum and
+  noise are learned from each second of the room alone (within `ROOM_DB` of the quietest of the last
+  10 s, itself under `QUIET_CEIL_DBFS`, so not a chord's tail) and taken out of the peaks. The demo now
+  plays this piano's stretched partials (`piano_tone`), so the detector hears it. A frame took about
+  3-5 ms on the desktop; `/api/status` reports `frame_ms`, to watch on the LIVA (estimated 25-30 ms of
+  the 100 ms a frame has).
 - **Deployed 2026-10-16, about 07:10** (both recorders idle). The installer added
   `/etc/chord-listener.toml` and the unit; by hand, the peers line of `/etc/practice-recorder.toml` and
   `/etc/exercise-recorder.toml` and the tile in `/etc/room-home.toml` (copies kept as
