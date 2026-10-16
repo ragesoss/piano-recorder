@@ -117,9 +117,9 @@ Home network only, no login, for the first version.
     1180x820 and 820x1180): takes recorded, played, sought, noted and
     deleted; the level changed; "Stop everything" stopped a recording. No
     console errors, and no sideways scroll on the phone. Not yet deployed.
-  - Still on both pages, from the BMG-04F: "the mixer's channel 3/4 button
-    must be on MP3/USB" to hear takes. Since the 18i8 (2026-10-14) takes
-    play through it, not the BMG-04F's USB, so this needs checking.
+  - The BMG-04F's note ("the mixer's channel 3/4 button must be on MP3/USB"
+    to hear takes) is gone from both pages (2026-10-16, the player): takes
+    play through the 18i8 since 2026-10-14.
 
 ## Steps
 
