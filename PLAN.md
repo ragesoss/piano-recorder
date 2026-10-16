@@ -511,7 +511,9 @@ same way).
   shows as a note ("E3"), two as a pair ("C+G, a fifth"), three or more as a chord. Checks ask for
   any of these (inversions, notes with their octave, pairs in any octave), a chord judged on the chord
   and the bass apart; the label picker has the three kinds. On synthesized tones: 55 or more of the
-  60 chords, the inversions and the bass, notes and pairs (tests). The band's own scoring is unchanged.
+  60 chords, the inversions and the bass, notes and pairs (tests). The band's own scoring is unchanged. Deployed
+  2026-10-16, about 07:35 (everything idle), with the practice recorder's page and the home page in
+  the exercise app's look (no config changes).
 - **Deployed 2026-10-16, about 07:10** (both recorders idle). The installer added
   `/etc/chord-listener.toml` and the unit; by hand, the peers line of `/etc/practice-recorder.toml` and
   `/etc/exercise-recorder.toml` and the tile in `/etc/room-home.toml` (copies kept as
