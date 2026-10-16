@@ -514,6 +514,15 @@ same way).
   60 chords, the inversions and the bass, notes and pairs (tests). The band's own scoring is unchanged. Deployed
   2026-10-16, about 07:35 (everything idle), with the practice recorder's page and the home page in
   the exercise app's look (no config changes).
+- **Play one** (2026-10-16, the player: "the ui for right and wrong is confusing because detection
+  keeps changing while i try to input feedback... a dedicated feedback ux that lets me play a single
+  chord then give feedback if it's wrong and be able to play the clip to confirm how it got
+  recorded"). A strike: the next attack is heard and judged as a check is, with nothing asked for, and
+  held (the chord and its bass, the notes, the runners-up) until the player answers: Right, Wrong: it
+  was... (the picker), or Throw it away; then the next. Hear it plays the kept clip on the iPad (the
+  mixed inputs, peaking at -3 dBFS, 16-bit mono: `/api/checks/{id}/audio?mix=1`); a Check's result has
+  it too. The answer goes into the clip's sidecar (`/api/checks/{id}/label`: what it was, and whether
+  that is what was heard). Listen is a display only now.
 - **Deployed 2026-10-16, about 07:10** (both recorders idle). The installer added
   `/etc/chord-listener.toml` and the unit; by hand, the peers line of `/etc/practice-recorder.toml` and
   `/etc/exercise-recorder.toml` and the tile in `/etc/room-home.toml` (copies kept as

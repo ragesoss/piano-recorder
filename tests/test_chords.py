@@ -185,3 +185,32 @@ def test_the_copied_listener_is_the_projects():
         pytest.skip("dobro-transcription is not beside this repo")
     copy = (REPO / "chords" / "livechords.py").read_text().split("\n", 2)[2]
     assert copy == src.read_text(), "the chord listener changed in dobro-transcription: run tools/sync-livechords"
+
+
+def test_a_strike_is_held_until_the_player_says_what_it_was(cfg):
+    lis = Listener(cfg, cfg.takes_dir)
+    src = demo(["-", "C/E", "-", "Am"], cfg)
+    feed(lis, src, 2.4)
+    lis.start_check()  # a strike: nothing asked for
+    feed(lis, src, 1.2)  # the strike at 2.5 s, judged by 3.6 s
+    st = lis.status()["check"]
+    assert st["state"] == "done" and st["target"] is None and st["heard"] == "C/E" and st["right"] is None
+    feed(lis, src, 0.6)  # the clip kept once its end is heard
+    sid = lis.status()["check"]["id"]
+    side = json.loads((cfg.takes_dir / f"{sid}.json").read_text())
+    assert side["kind"] == "strike" and side["target"] is None and side["heard"] == "C/E"
+    assert lis.relabel(sid, parse_target("C/E"))["right"] is True
+    assert lis.relabel(sid, parse_target("C"))["right"] is False  # the bass said otherwise
+    meta = lis.relabel(sid, parse_target("Em/G"))
+    assert meta["target"] == "Em/G" and meta["right"] is False and meta["labelled"]
+    import io, wave as W
+    with W.open(io.BytesIO(lis.listen_wav(sid))) as w:  # the clip as a browser plays it
+        assert (w.getnchannels(), w.getsampwidth(), w.getframerate()) == (1, 2, 48000)
+        assert abs(w.getnframes() / 48000 - sum(LS.CLIP_S)) < 0.11
+
+
+def test_matching_what_was_said_against_what_was_heard():
+    m = LS.matches
+    assert m(parse_target("C/E"), "C/E") and not m(parse_target("C"), "C/E") and m(parse_target("C"), "C")
+    assert m(parse_target("Ebdim7"), "Cdim7/Eb") and m(parse_target("E4"), "E4") and not m(parse_target("E4"), "E3")
+    assert m(parse_target("G+C"), "C+G") and not m(parse_target("C+G"), "C") and m(None, None) and not m(None, "C")

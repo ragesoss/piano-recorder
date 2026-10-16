@@ -14,7 +14,10 @@ frames agree. Nothing is named while the level is within `QUIET_DB` of the quiet
 
 A check: a chord, a note ("E4", its octave too) or two notes ("C+G", any octave) is asked for; the
 next attack (a rise of `ATTACK_DB` within 0.3 s, over the quiet) starts it, and it is judged over
-`CHECK_SPAN_S` after the attack, once the strike has passed.
+`CHECK_SPAN_S` after the attack, once the strike has passed. A strike is a check with nothing asked
+for: one chord played, what was heard kept and shown until the player says what it was
+(`relabel`), with its clip to hear again (`listen_wav`: the mixed inputs, louder, 16-bit mono, as a
+browser plays it).
 The clip (every kept channel, from just before the attack) and what was asked, heard and scored are
 kept in the config's takes_dir, for study on the desktop (`tools/pull-checks`). A label is the same
 from the Listen view: the last `LABEL_S` kept with the chord the player says it was.
@@ -181,6 +184,24 @@ def hear(V: np.ndarray, s: np.ndarray, best: int | None = None) -> Heard:
                                                             and bass != chord[0] else ""), notes, chord, bass)
 
 
+def matches(said: Target | None, heard: str | None) -> bool:
+    """Whether what was heard (a name as `hear` gives it) is what the player says it was."""
+    if said is None or heard is None:
+        return said is None and heard is None
+    try:
+        h = parse_target(heard)
+    except ValueError:
+        return False
+    if said.kind != h.kind:
+        return False
+    if said.kind == "note":
+        return said.midi == h.midi
+    if said.kind == "pair":
+        return set(said.pcs) == set(h.pcs)
+    return same_chord(said.chord, h.chord) and (said.bass if said.bass is not None else said.chord[0]) == (
+        h.bass if h.bass is not None else h.chord[0])
+
+
 def tones(c: tuple[int, str]) -> set[int]:
     return {(c[0] + d) % 12 for d in L.ALL_QUALITIES[c[1]]}
 
@@ -204,7 +225,7 @@ def detector() -> str:
 
 @dataclass
 class Check:
-    target: Target
+    target: Target | None  # None: a strike, what it was said afterwards
     state: str = "waiting"  # waiting (for the attack), hearing, done
     attack: int | None = None  # the attack's position in the stream (samples)
     heard: Heard | None = None
@@ -398,8 +419,8 @@ class Listener:
 
     def _keep(self, ck: Check) -> None:
         """The check's clip, from just before its attack, kept with what was asked and heard."""
-        sid = self._save("check", ck.attack - int(CLIP_S[0] * self.rate), ck.attack + int(CLIP_S[1] * self.rate),
-                         ck.meta)
+        sid = self._save("check" if ck.target is not None else "strike", ck.attack - int(CLIP_S[0] * self.rate),
+                         ck.attack + int(CLIP_S[1] * self.rate), ck.meta)
         with self.lock:
             ck.id = sid
 
@@ -413,8 +434,11 @@ class Listener:
         bass_midi, bass_share = L.bass_note(V)
         h = hear(V, s)
         t = ck.target
-        chord_right = bass_right = None
-        if t.kind == "chord":  # judged as a chord whatever the count of notes
+        chord_right = bass_right = right = None
+        heard_name = h.name
+        if t is None:  # a strike: what it was comes later
+            pass
+        elif t.kind == "chord":  # judged as a chord whatever the count of notes
             chord_right = same_chord(h.chord, t.chord)
             bass_right = h.bass == (t.chord[0] if t.bass is None else t.bass)
             right = chord_right and bass_right
@@ -429,7 +453,8 @@ class Listener:
         with self.lock:
             ck.heard, ck.scores, ck.state = h, scores, "done"
             ck.chord_right, ck.bass_right, ck.right = chord_right, bass_right, right
-            ck.meta = {"target": t.name, "target_kind": t.kind, "heard": heard_name, "right": right,
+            ck.meta = {"target": t.name if t else None, "target_kind": t.kind if t else None, "heard": heard_name,
+                       "right": right,
                        "chord_right": chord_right, "bass_right": bass_right, "heard_kind": h.kind,
                        "heard_detail": h.detail, "notes_heard": [note_name(m) for m in h.notes],
                        "bass": NAMES[h.bass] if h.bass is not None else None, "bass_midi": bass_midi,
@@ -438,7 +463,7 @@ class Listener:
 
     # --- checks and labels
 
-    def start_check(self, target: Target) -> None:
+    def start_check(self, target: Target | None = None) -> None:
         with self.lock:
             self.check = Check(target=target)
 
@@ -486,6 +511,37 @@ class Listener:
         (self.dir / f"{sid}.json").write_text(json.dumps(side, indent=1))
         return sid
 
+    def relabel(self, sid: str, said: Target | None) -> dict:
+        """What a kept strike (or any kept clip) was, as the player says: kept in its sidecar, with
+        whether that is what was heard (None: nothing was playing)."""
+        self.path(sid)
+        side = self.dir / f"{sid}.json"
+        meta = json.loads(side.read_text())
+        meta.update({"target": said.name if said else None, "target_kind": said.kind if said else None,
+                     "right": matches(said, meta.get("heard")),
+                     "labelled": datetime.now().isoformat(timespec="seconds")})
+        side.write_text(json.dumps(meta, indent=1))
+        return meta
+
+    def listen_wav(self, sid: str) -> bytes:
+        """A kept clip as a browser plays it: the inputs it mixed, as one channel, peaking at -3 dBFS,
+        16-bit."""
+        path = self.path(sid)
+        meta = json.loads((self.dir / f"{sid}.json").read_text())
+        with wave.open(str(path)) as w:
+            rate, ch, width = w.getframerate(), w.getnchannels(), w.getsampwidth()
+            x = np.frombuffer(w.readframes(w.getnframes()), dtype={2: "<i2", 4: "<i4"}[width]).reshape(-1, ch)
+        chans = [c["channel"] for c in meta.get("channels", []) if c["input"] in meta.get("mixed", [])] or list(range(ch))
+        y = x[:, chans].astype(np.float64).mean(axis=1)
+        y *= 10 ** (-3 / 20) / max(float(np.abs(y).max()), 1e-12)
+        out = __import__("io").BytesIO()
+        with wave.open(out, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(rate)
+            w.writeframes(np.round(y * 32767).astype("<i2").tobytes())
+        return out.getvalue()
+
     def checks(self) -> list[dict]:
         out = []
         for p in sorted(self.dir.glob("*.json"), key=lambda q: q.stat().st_mtime_ns, reverse=True):  # newest first
@@ -517,7 +573,10 @@ class Listener:
                 "state": "listening" if on else ("waiting" if time.monotonic() < self.wait_until else "idle"),
                 **(self.now if on else {"chord": None, "confidence": 0.0, "top": [], "level_dbfs": None}),
                 "history": [{"time": t, "chord": c} for t, c in self.history],
-                "check": ck and {"target": ck.target.name, "kind": ck.target.kind, "state": ck.state,
+                "check": ck and {"target": ck.target.name if ck.target else None,
+                                 "kind": ck.target.kind if ck.target else None, "state": ck.state,
+                                 "heard_kind": ck.heard.kind if ck.heard else None,
+                                 "notes": [note_name(m) for m in ck.heard.notes] if ck.heard else [],
                                  "heard": ck.meta["heard"] if ck.meta else None,
                                  "heard_detail": ck.heard.detail if ck.heard else None, "right": ck.right,
                                  "chord_right": ck.chord_right, "bass_right": ck.bass_right,

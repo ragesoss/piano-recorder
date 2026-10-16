@@ -95,7 +95,7 @@ main { flex: 1; display: flex; flex-direction: column; align-items: center; just
   <header class="top">
     <a class="home" id="home" href="/">‹ Music room</a>
     <h1>Chords</h1>
-    <div class="seg" role="group" aria-label="View"><button type="button" id="vListen" aria-pressed="true">Listen</button><button type="button" id="vCheck" aria-pressed="false">Check</button></div>
+    <div class="seg" role="group" aria-label="View"><button type="button" id="vListen" aria-pressed="true">Listen</button><button type="button" id="vOne" aria-pressed="false">Play one</button><button type="button" id="vCheck" aria-pressed="false">Check</button></div>
     <span class="grow"></span>
     <div class="chips" id="inputs"><span class="lbl">Hear</span></div>
     <label class="chips"><span class="lbl">Playing</span><select id="instrument">
@@ -113,11 +113,24 @@ main { flex: 1; display: flex; flex-direction: column; align-items: center; just
     <div class="alts" id="alts"></div>
     <div class="meter" aria-label="Level"><i id="level"></i></div>
     <div class="history" id="history" aria-label="Recently heard"></div>
+    <div class="toast">To tell it when it is wrong, use Play one: one chord at a time, held until you answer.</div>
+  </main>
+
+  <main id="one" hidden>
+    <div class="ask" id="oneAsk">Play one chord</div>
+    <div class="big none" id="oneHeard">–</div>
+    <div class="quality" id="oneDetail">It waits for you to strike, then holds what it heard.</div>
+    <div class="alts" id="oneNotes"></div>
+    <div class="alts" id="oneAlts"></div>
     <div class="row">
-      <button type="button" class="btn" id="right">Right</button>
-      <button type="button" class="btn" id="wrong">Wrong: it was…</button>
+      <button type="button" class="btn" id="oneHear" disabled>▶ Hear it</button>
+      <button type="button" class="btn go" id="right" disabled>Right</button>
+      <button type="button" class="btn" id="wrong" disabled>Wrong: it was…</button>
+      <button type="button" class="btn quiet" id="oneDrop" disabled>Throw it away</button>
     </div>
     <div class="toast" id="toast"></div>
+    <div class="tally" id="oneTally"></div>
+    <div class="misses" id="oneMisses"></div>
   </main>
 
   <main id="check" hidden>
@@ -127,6 +140,7 @@ main { flex: 1; display: flex; flex-direction: column; align-items: center; just
     <div class="verdict" id="verdict" aria-live="polite"></div>
     <div class="alts" id="checkAlts"></div>
     <div class="row">
+      <button type="button" class="btn" id="checkHear" disabled>▶ Hear it</button>
       <button type="button" class="btn go" id="next">Next chord</button>
       <button type="button" class="btn" id="again">Same again</button>
       <button type="button" class="btn quiet" id="discard">I played it wrong</button>
@@ -149,6 +163,7 @@ main { flex: 1; display: flex; flex-direction: column; align-items: center; just
   </main>
 </div>
 
+<audio id="clip" preload="none"></audio>
 <div class="sheet" id="picker" hidden>
   <div class="sheet-box" role="dialog" aria-modal="true" aria-labelledby="pickTitle">
     <h2 id="pickTitle">What was it?</h2>
@@ -198,11 +213,41 @@ let st = null, session = [], checkTarget = null, lastId = null;
 const qualities = new Set(store.get("asks", ["maj", "min"])); let roots = store.get("roots", "all");
 
 function setView(v) {
-  view = v; store.set("view", v);
-  $("vListen").setAttribute("aria-pressed", String(v === "listen")); $("vCheck").setAttribute("aria-pressed", String(v === "check"));
-  $("listen").hidden = v !== "listen"; $("check").hidden = v !== "check";
-  if (v === "check" && !checkTarget) nextCheck(); else if (v === "listen") api("POST", "/api/check/cancel").catch(() => {});
+  view = v; store.set("view", v); stopClip();
+  for (const [id, name] of [["vListen", "listen"], ["vOne", "one"], ["vCheck", "check"]]) $(id).setAttribute("aria-pressed", String(v === name));
+  $("listen").hidden = v !== "listen"; $("one").hidden = v !== "one"; $("check").hidden = v !== "check";
+  if (v === "check") nextCheck(true); else if (v === "one") armOne(); else api("POST", "/api/check/cancel").catch(() => {});
 }
+// Play one: a strike, held until answered
+let oneSession = [], oneAnswered = null;
+function armOne(keepToast) { oneAnswered = null; if (!keepToast) $("toast").textContent = ""; api("POST", "/api/check", {}).catch((e) => showError(e.message)); }
+function renderOneTally() {
+  const n = oneSession.length, r = oneSession.filter((x) => x.right).length;
+  $("oneTally").innerHTML = n ? `<span>This session: <b>${r}</b> heard right of <b>${n}</b></span>` : "";
+  const misses = {};
+  for (const x of oneSession) if (!x.right) { const k = `${pretty(x.said || "nothing")} heard as ${pretty(x.heard || "nothing")}`; misses[k] = (misses[k] || 0) + 1; }
+  $("oneMisses").innerHTML = Object.entries(misses).map(([k, v]) => `<span>${k}${v > 1 ? ` ×${v}` : ""}</span>`).join("");
+}
+async function answer(said) {  // the player's answer for the strike shown, then the next
+  const ck = st && st.check;
+  if (!ck || !ck.id || oneAnswered === ck.id) return;
+  oneAnswered = ck.id;
+  try {
+    const meta = await api("POST", `/api/checks/${ck.id}/label`, { chord: said });
+    oneSession.push({ said, heard: ck.heard, right: meta.right }); renderOneTally();
+    $("toast").textContent = meta.right ? `Kept: ${pretty(ck.heard)}, heard right.` : `Kept: it was ${pretty(said || "nothing")}, heard ${pretty(ck.heard || "nothing")}.`;
+  } catch (e) { showError(e.message); }
+  stopClip(); armOne(true);
+}
+// a kept clip, on the iPad
+function playClip(id, btn) {
+  const a = $("clip");
+  if (!a.paused && a.dataset.id === id) { stopClip(); return; }
+  a.src = `/api/checks/${id}/audio?mix=1`; a.dataset.id = id; a.dataset.btn = btn;
+  a.play().then(() => { $(btn).textContent = "■ Stop"; }).catch((e) => showError(`Could not play it: ${e.message}`));
+}
+function stopClip() { const a = $("clip"); a.pause(); if (a.dataset.btn) $(a.dataset.btn).textContent = "▶ Hear it"; }
+$("clip").onended = stopClip;
 function renderInputs() {
   const box = $("inputs");
   box.querySelectorAll("button").forEach((b) => b.remove());
@@ -233,9 +278,23 @@ function render(s) {
   $("alts").innerHTML = (s.top || []).slice(c ? 1 : 0, 4).map(([n, v]) => `<span class="alt"><b>${pretty(n)}</b>${v.toFixed(2)}</span>`).join("");
   $("level").style.width = s.level_dbfs == null ? "0" : `${Math.max(0, Math.min(100, (s.level_dbfs + 70) / 70 * 100))}%`;
   $("history").innerHTML = (s.history || []).map((h) => `<span>${pretty(h.chord)}</span>`).join("");
-  // Check
+  // Play one
   const ck = s.check;
+  if (view === "one") {
+    const one = ck && ck.target === null ? ck : null, done = one && one.state === "done";
+    $("oneAsk").textContent = !one || one.state === "waiting" ? (on ? "Play one chord" : "Not listening") : one.state === "hearing" ? "Hearing…" : "Heard";
+    $("oneHeard").innerHTML = done ? bigHtml(one.heard) : "–"; $("oneHeard").classList.toggle("none", !done);
+    $("oneDetail").textContent = done ? acc(one.heard_detail || "nothing it could name") : "It waits for you to strike, then holds what it heard.";
+    $("oneNotes").innerHTML = done && one.notes.length ? `<span class="alt">Notes <b>${one.notes.map(pretty).join(" ")}</b></span>` : "";
+    $("oneAlts").innerHTML = done ? (one.scores || []).slice(0, 4).map(([n, x]) => `<span class="alt"><b>${pretty(n)}</b>${x.toFixed(2)}</span>`).join("") : "";
+    const ready = !!(done && one.id && oneAnswered !== one.id);
+    for (const id of ["oneHear", "right", "wrong", "oneDrop"]) $(id).disabled = !ready;
+    if (done && !one.id) $("toast").textContent = "Keeping the clip…";
+    else if (ready && $("toast").textContent === "Keeping the clip…") $("toast").textContent = "";
+  }
+  // Check
   if (view === "check" && ck) {
+    $("checkHear").disabled = !(ck.state === "done" && ck.id);
     $("ask").textContent = ck.state === "waiting" ? "Play" : ck.state === "hearing" ? "Hearing…" : "Asked for";
     const v = $("verdict");
     if (ck.state === "done") {
@@ -274,7 +333,8 @@ function chordsInSet() {  // every target the set asks for
 }
 function nextCheck(same) {
   const all = chordsInSet();
-  if (!same) { let t; do { t = all[Math.floor(Math.random() * all.length)]; } while (all.length > 1 && t === checkTarget); checkTarget = t; }
+  if (!same || !checkTarget) { let t; do { t = all[Math.floor(Math.random() * all.length)]; } while (all.length > 1 && t === checkTarget); checkTarget = t; }
+  stopClip();
   $("target").innerHTML = bigHtml(checkTarget);
   $("targetQ").textContent = words(checkTarget);
   $("verdict").textContent = ""; $("checkAlts").innerHTML = "";
@@ -305,11 +365,6 @@ for (const b of document.querySelectorAll("[data-roots]")) {
   b.setAttribute("aria-pressed", String(b.dataset.roots === roots));
   b.onclick = () => { roots = b.dataset.roots; store.set("roots", roots); document.querySelectorAll("[data-roots]").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.roots === roots))); };
 }
-// labels from the Listen view: the last two seconds, with what it was
-async function label(chord) {
-  try { await api("POST", "/api/label", { chord }); $("toast").textContent = chord ? `Kept: it was ${pretty(chord)}${st && st.chord ? `, heard ${pretty(st.chord)}` : ""}.` : "Kept: nothing was playing."; }
-  catch (e) { $("toast").textContent = `Not kept: ${e.message}.`; }
-}
 let pickBass = null, pickOct = 4, pickPair = [];
 function pickTab(k) {
   for (const b of document.querySelectorAll("[data-pt]")) b.setAttribute("aria-pressed", String(b.dataset.pt === k));
@@ -323,19 +378,26 @@ function renderPicker() {
   $("pickPair").innerHTML = NAMES.map((n) => `<button type="button" data-p="${n}" aria-pressed="${pickPair.includes(n)}">${pretty(n)}</button>`).join("");
   $("pairKeep").disabled = pickPair.length !== 2;
 }
-$("right").onclick = () => { if (st && st.chord) label(st.chord); };
-$("wrong").onclick = () => { pickBass = null; pickPair = []; renderPicker(); pickTab(st && st.kind === "note" ? "note" : st && st.kind === "pair" ? "pair" : "chord"); $("picker").hidden = false; };
+$("vOne").onclick = () => setView("one");
+$("right").onclick = () => { const ck = st && st.check; if (ck && ck.heard) answer(ck.heard); };
+$("wrong").onclick = () => { const ck = st && st.check; pickBass = null; pickPair = []; renderPicker();
+  pickTab(ck && ck.heard_kind === "note" ? "note" : ck && ck.heard_kind === "pair" ? "pair" : "chord"); $("picker").hidden = false; };
+$("oneHear").onclick = () => { const ck = st && st.check; if (ck && ck.id) playClip(ck.id, "oneHear"); };
+$("checkHear").onclick = () => { const ck = st && st.check; if (ck && ck.id) playClip(ck.id, "checkHear"); };
+$("oneDrop").onclick = async () => { const ck = st && st.check; if (!ck || !ck.id) return; oneAnswered = ck.id;
+  try { await api("DELETE", `/api/checks/${ck.id}`); $("toast").textContent = "Thrown away."; } catch (e) { showError(e.message); }
+  stopClip(); armOne(true); };
 document.querySelectorAll("[data-pt]").forEach((b) => { b.onclick = () => pickTab(b.dataset.pt); });
 $("pickClose").onclick = () => { $("picker").hidden = true; };
-$("noChord").onclick = () => { $("picker").hidden = true; label(null); };
+$("noChord").onclick = () => { $("picker").hidden = true; answer(null); };
 $("pickBass").onclick = (e) => { const b = e.target.closest("[data-b]"); if (b) { pickBass = b.dataset.b || null; renderPicker(); } };
 $("pickGrid").onclick = (e) => { const b = e.target.closest("[data-c]"); if (!b) return;
-  const root = rootOf(b.dataset.c); $("picker").hidden = true; label(pickBass && pickBass !== root ? `${b.dataset.c}/${pickBass}` : b.dataset.c); };
+  const root = rootOf(b.dataset.c); $("picker").hidden = true; answer(pickBass && pickBass !== root ? `${b.dataset.c}/${pickBass}` : b.dataset.c); };
 $("pickOct").onclick = (e) => { const b = e.target.closest("[data-o]"); if (b) { pickOct = Number(b.dataset.o); renderPicker(); } };
-$("pickNote").onclick = (e) => { const b = e.target.closest("[data-n]"); if (b) { $("picker").hidden = true; label(`${b.dataset.n}${pickOct}`); } };
+$("pickNote").onclick = (e) => { const b = e.target.closest("[data-n]"); if (b) { $("picker").hidden = true; answer(`${b.dataset.n}${pickOct}`); } };
 $("pickPair").onclick = (e) => { const b = e.target.closest("[data-p]"); if (!b) return; const n = b.dataset.p;
   pickPair = pickPair.includes(n) ? pickPair.filter((x) => x !== n) : [...pickPair, n].slice(-2); renderPicker(); };
-$("pairKeep").onclick = () => { if (pickPair.length === 2) { $("picker").hidden = true; label(pickPair.join("+")); } };
+$("pairKeep").onclick = () => { if (pickPair.length === 2) { $("picker").hidden = true; answer(pickPair.join("+")); } };
 document.addEventListener("visibilitychange", () => { if (!document.hidden) ask(); });
 
 (async () => {

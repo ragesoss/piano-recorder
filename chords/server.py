@@ -13,7 +13,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from recorder.config import Config, load_config
@@ -31,7 +31,9 @@ class ListenIn(BaseModel):
 
 
 class CheckIn(BaseModel):
-    target: str  # a chord ("D", "F#m", "Bb7", "Cdim7", "C/E": an inversion), a note ("E4") or two ("C+G")
+    # a chord ("D", "F#m", "Bb7", "Cdim7", "C/E": an inversion), a note ("E4") or two ("C+G"); None: a
+    # strike (one chord played, what it was said afterwards)
+    target: str | None = None
 
 
 class LabelIn(BaseModel):
@@ -100,10 +102,7 @@ def create_app(cfg: Config, source=None) -> FastAPI:
 
     @app.post("/api/check")
     def check(body: CheckIn):
-        target = target_of(body.target)
-        if target is None:
-            raise HTTPException(400, "a check needs something to play")
-        listener.start_check(target)
+        listener.start_check(target_of(body.target))
         return {"ok": True}
 
     @app.post("/api/check/cancel")
@@ -123,12 +122,23 @@ def create_app(cfg: Config, source=None) -> FastAPI:
         return listener.checks()
 
     @app.get("/api/checks/{sid}/audio")
-    def check_audio(sid: str):
+    def check_audio(sid: str, mix: bool = False):
+        """The clip as kept (every channel), or with `mix` as a browser plays it (the mixed inputs, mono)."""
         try:
+            if mix:
+                return Response(listener.listen_wav(sid), media_type="audio/wav", headers={"Cache-Control": "no-cache"})
             path = listener.path(sid)
         except FileNotFoundError:
             raise HTTPException(404, "no such check")
         return FileResponse(path, media_type="audio/wav", filename=path.name)
+
+    @app.post("/api/checks/{sid}/label")
+    def relabel(sid: str, body: LabelIn):
+        """What a kept clip was, as the player says (a strike's answer)."""
+        try:
+            return listener.relabel(sid, target_of(body.chord))
+        except FileNotFoundError:
+            raise HTTPException(404, "no such check")
 
     @app.delete("/api/checks/{sid}")
     def delete(sid: str):
