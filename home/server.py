@@ -9,16 +9,18 @@ so this page only shows and links, plus "Stop everything".
 
 import json
 import os
+import re
 import tomllib
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
 STATIC = Path(__file__).parent / "static"
+FONTS = Path(__file__).parent.parent / "exercises" / "static" / "fonts"  # the exercise app's (SIL OFL 1.1)
 DEFAULT_CONFIG = Path("/etc/room-home.toml")
 
 
@@ -60,6 +62,13 @@ def create_app(cfg: dict) -> FastAPI:
     @app.get("/icon.svg")
     def icon():
         return FileResponse(STATIC / "icon.svg", media_type="image/svg+xml")
+
+    @app.get("/fonts/{name}")
+    def font(name: str):
+        path = FONTS / name
+        if not re.match(r"^[A-Za-z0-9-]+\.woff2$", name) or not path.is_file():
+            raise HTTPException(404, "no such font")
+        return FileResponse(path, media_type="font/woff2", headers={"Cache-Control": "max-age=86400"})
 
     @app.get("/api/status")
     def status():

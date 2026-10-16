@@ -1,3 +1,4 @@
+import re
 import time
 from dataclasses import replace
 
@@ -29,6 +30,17 @@ def test_page_and_status(client):
     assert "Practice recorder" in client.get("/").text
     s = client.get("/api/status").json()
     assert s["state"] == "idle" and s["devices"]["capture"] is True
+
+
+def test_page_fonts_are_served(client):
+    """The page's fonts come from the app itself: the exercise app's (exercises/static/fonts/)."""
+    names = re.findall(r"url\(/fonts/([^)]+)\)", client.get("/").text)
+    assert len(names) == 2
+    for name in names:
+        r = client.get(f"/fonts/{name}")
+        assert r.status_code == 200 and r.headers["content-type"] == "font/woff2"
+    for bad in ("nope.woff2", "OFL-public-sans.txt", "public-sans.ttf"):
+        assert client.get(f"/fonts/{bad}").status_code == 404
 
 
 def test_record_list_play_note_delete(client):
