@@ -53,6 +53,7 @@ h1, h2, h3, p { margin: 0; }
 .crumbs .chip { padding: 0 12px; max-width: 230px; }
 .crumbs .chip.now { padding: 0 14px; }
 .crumbs .chip.todo { padding: 0 8px; }
+.crumbs .chip .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .crumbs .chev { color: var(--faint); }
 .crumbs .off { opacity: .45; cursor: default; }
 .crumbs .chip.off { background: transparent; }
@@ -726,7 +727,7 @@ function crumbsNav() {
   STEPS.forEach((s, i) => {
     out.push(ICON.chev);
     const n = i + 1, val = stepValue(s), ok = stepOk(s), long = s === "which" ? stepValue(s, true) : val;
-    const label = long !== val && long.startsWith(val) ? `${esc(val)}<span class="wide">${esc(long.slice(val.length))}</span>` : esc(val);
+    const label = long !== val && long.startsWith(val) ? `<span class="lbl">${esc(val)}<span class="wide">${esc(long.slice(val.length))}</span></span>` : esc(val);
     if (s === scr) out.push(`<span class="chip now" aria-current="step">${n} ${esc(names[s])}</span>`);
     else if (ok && val) out.push(crumb(`${ICON.check}${label}`, `data-act="step" data-step="${s}"`));
     else if (val && STEPS.slice(0, i).every(stepOk)) out.push(crumb(`<s>${esc(val)}</s> pick again`, `data-act="step" data-step="${s}"`, " again"));
@@ -1077,7 +1078,7 @@ function renderRecord() {
   return `<div class="rec-head"><p class="sentence display">${recSentence(true)}</p><div class="meta">${meta}</div></div>
     <div class="rec-grid">${main}
       <div class="side"><div class="box"><span class="label">Listening</span>${used.map((i) => `<div class="row"><span>${esc(i.name)}${carries()[i.input] === "room" ? " (room)" : ""}</span><span class="tnum" data-meter-text="${i.channel}">–</span></div><span class="meter" data-meter="${i.channel}"><i></i><b></b></span>`).join("")}<span class="muted" id="monNote" style="font-size:14px"></span>
-          <span class="dev-line">${devLine()}</span></div>
+          <span class="dev-line" data-dev-line>${devLine()}</span></div>
         <div class="box"><div class="row"><label for="recLevel" style="font-weight:700">Speakers</label><span data-level-text class="tnum">${esc(dbText(level))}</span></div><input id="recLevel" type="range" min="-30" max="12" step="1" value="${level}" data-level></div>
         <button type="button" class="btn small" data-act="sheet" style="justify-content:center">Takes of this ${c.kind === "exercise" ? "exercise" : c.kind === "playalong" ? "backing" : "kind"} (${mine.length})</button>
         <button type="button" class="recbtn" data-act="record" ${s && s.devices.capture ? "" : "disabled"}><i></i>Record</button></div></div>`;
@@ -1175,6 +1176,7 @@ function live() {
   const s = S.status;
   if (!s) return;
   const rec = s.recording, mon = s.monitor;
+  $$("[data-dev-line]").forEach((el) => { const h = devLine(); if (el.innerHTML !== h) el.innerHTML = h; });
   $$("[data-act=record]").forEach((b) => { b.disabled = !s.devices.capture; });
   const meters = rec ? rec.meters_dbfs : mon ? mon.meters_dbfs : null, peaks = rec ? rec.peaks_dbfs : mon ? mon.peaks_dbfs : null;
   $$("[data-meter]").forEach((el) => {
