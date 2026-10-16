@@ -16,7 +16,8 @@ from .takes import Takes
 
 MIN_FREE_MB = 200
 TAIL_S = 2.0  # a play-along take keeps recording this long after the backing ends
-OFFSET_RANGE_DB = (-30.0, 0.0)
+OFFSET_RANGE_DB = (-30.0, 12.0)  # the speakers' level offset; above 0 dB through `dsp.StreamLimiter` (2026-10-15:
+# a guitar over a backing at 0 dB could not hear the dobro over its own playing)
 
 
 class Busy(Exception):
@@ -208,8 +209,9 @@ class Engine:
         try:
             pb.start()
             pos, block = 0, rate // 10
+            lim = self._limiter(rate)
             while pos < len(y) and not rec.stop.is_set():
-                chunk = y[pos:pos + block] * np.float32(10 ** (self.level_offset_db / 20))
+                chunk = lim.process(y[pos:pos + block] * np.float32(10 ** (self.level_offset_db / 20)))
                 if not pb.write(chunk):
                     self.error = "the backing stopped: the playback device went away"
                     break
@@ -333,7 +335,7 @@ class Engine:
             rec = _Recording(take_id=take_id, rate=rate, backing_title=meta.get("backing_title", "Click"), backing=y,
                              backing_rate=rate, tempo=meta["tempo"], guide="click", beat0_s=beat0,
                              click=meta["click"], count_in_s=beat0)
-            rec.played = [y * np.float32(10 ** (float(meta.get("level_offset_db", 0.0)) / 20))]
+            rec.played = [self._limiter(rate).process(y * np.float32(10 ** (float(meta.get("level_offset_db", 0.0)) / 20)))]
             self._line_up(rec, level_offset_db=float(meta.get("level_offset_db", 0.0)))
             return self.takes.meta(take_id)
         if not meta.get("backing"):
@@ -349,7 +351,7 @@ class Engine:
         rec = _Recording(take_id=take_id, rate=rate, backing_id=meta["backing"], backing_title=title,
                          backing=y, backing_rate=rate, backing_gain_db=gain_db, count_in_s=lead,
                          tempo=tempo if lead else None)
-        rec.played = [y * np.float32(10 ** (float(meta.get("level_offset_db", 0.0)) / 20))]
+        rec.played = [self._limiter(rate).process(y * np.float32(10 ** (float(meta.get("level_offset_db", 0.0)) / 20)))]
         self._line_up(rec, level_offset_db=float(meta.get("level_offset_db", 0.0)))
         return self.takes.meta(take_id)
 
@@ -452,9 +454,10 @@ class Engine:
             pb.start()
             pos = min(int(pl.position * rate), len(y))
             block = rate // 10
+            lim = self._limiter(rate)
             while pos < len(y) and not pl.stop.is_set():
                 g = np.float32(10 ** (self.level_offset_db / 20))
-                if not pb.write(y[pos:pos + block] * g):
+                if not pb.write(lim.process(y[pos:pos + block] * g)):
                     self.error = "playback stopped: the playback device went away"
                     break
                 pos += block
@@ -481,6 +484,10 @@ class Engine:
         self.takes.delete(take_id)
         with self.lock:
             self.takes_version += 1
+
+    def _limiter(self, rate: int) -> dsp.StreamLimiter:
+        """What playback goes through last: the offset held under the takes' peak ceiling."""
+        return dsp.StreamLimiter(rate, self.cfg.loudness.limit_dbfs)
 
     def set_level_offset(self, offset_db: float) -> float:
         lo, hi = OFFSET_RANGE_DB

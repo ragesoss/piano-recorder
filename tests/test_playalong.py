@@ -169,3 +169,24 @@ def test_playalong_with_a_count_in_says_where_the_backing_starts(client):
     pa = next(t for t in client.get("/api/takes").json() if t["id"] == take)["playalong"]
     assert pa["found"]
     assert pa["backing_starts_samples"] - pa["lag_samples"] == round(2.95 * 48000)
+
+
+def test_stream_limiter_holds_a_boost_under_the_ceiling():
+    # the speakers' offset above 0 dB: a backing limited at -1 dBFS, boosted 12 dB, never passes
+    # the ceiling, and comes out the same fed in 100 ms pieces as at once
+    rate = 48000
+    t = np.arange(2 * rate) / rate
+    x = (0.89 * np.sin(2 * np.pi * 220 * t) * (0.3 + 0.7 * (t % 0.5 < 0.05))).astype(np.float32)
+    boosted = x * np.float32(10 ** (12 / 20))
+    whole = dsp.StreamLimiter(rate, -1.0).process(boosted)
+    lim = dsp.StreamLimiter(rate, -1.0)
+    pieces = np.concatenate([lim.process(boosted[i:i + rate // 10]) for i in range(0, len(boosted), rate // 10)])
+    assert np.max(np.abs(whole)) <= 10 ** (-1 / 20) + 1e-6
+    assert np.allclose(whole, pieces)
+    assert dsp.rms_dbfs(whole) > dsp.rms_dbfs(x) + 3  # louder, though limited
+
+
+def test_stream_limiter_passes_audio_under_the_ceiling():
+    rate = 48000
+    x = (0.5 * np.sin(2 * np.pi * 330 * np.arange(rate) / rate)).astype(np.float32)
+    assert np.array_equal(dsp.StreamLimiter(rate, -1.0).process(x), x)

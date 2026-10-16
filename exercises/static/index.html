@@ -282,7 +282,7 @@ li.group { padding: 12px 16px 4px; font-size: 13px; color: var(--muted); font-we
 
     <div class="level">
       <span>Speakers</span>
-      <input type="range" id="level" min="-30" max="0" step="1" value="0">
+      <input type="range" id="level" min="-30" max="12" step="1" value="0">
       <span id="levelText">0 dB</span>
     </div>
   </aside>
@@ -311,6 +311,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
 };
 
+function signedDb(v) { return (v > 0 ? `+${v}` : `${v}`) + " dB"; }  // the speakers' offset: a boost shows its sign
 function fmt(s) {
   s = Math.max(0, Math.floor(s));
   const m = Math.floor(s / 60), sec = String(s % 60).padStart(2, "0");
@@ -812,7 +813,7 @@ function render(s) {
   }
   if (document.activeElement !== $("level")) {
     $("level").value = s.level_offset_db;
-    $("levelText").textContent = `${s.level_offset_db} dB`;
+    $("levelText").textContent = signedDb(s.level_offset_db);
   }
   const playingChanged = (prev && prev.playing && prev.playing.take) !== (pl && pl.take);
   const recChanged = !!(prev && prev.recording) !== !!rec;
@@ -868,7 +869,7 @@ $("progress").onclick = (ev) => {
   const r = $("progress").firstElementChild.getBoundingClientRect();
   act(() => api("POST", `/api/takes/${pl.take}/play`, { start: Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)) * pl.seconds }));
 };
-$("level").oninput = () => { $("levelText").textContent = `${$("level").value} dB`; };
+$("level").oninput = () => { $("levelText").textContent = signedDb(Number($("level").value)); };
 $("level").onchange = () => act(() => api("PUT", "/api/settings", { level_offset_db: Number($("level").value) }));
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { poll(true); refreshExercises(false); } });
 

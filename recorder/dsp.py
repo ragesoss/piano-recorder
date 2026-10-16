@@ -107,6 +107,42 @@ def limit(x: np.ndarray, rate: int, ceiling_dbfs: float = -1.0,
     return np.clip(x * gain, -ceiling, ceiling)
 
 
+class StreamLimiter:
+    """The playback's last stage: holds the speakers' level offset (a boost above 0 dB too)
+    under the ceiling, block by block as the audio is written, with no added delay.
+
+    Each 1 ms block's gain is the lower of what its own peak needs and the previous block's
+    recovered toward 1 with time constant `release_s`. The gain carries from one call to the
+    next, so audio fed in pieces whose lengths are whole blocks comes out as if fed at once.
+    Under the ceiling (an offset of 0 dB or less, on audio already limited) it passes the
+    audio unchanged."""
+
+    def __init__(self, rate: int, ceiling_dbfs: float = -1.0, release_s: float = 0.08):
+        self.ceiling = 10 ** (ceiling_dbfs / 20)
+        self.blk = max(1, rate // 1000)
+        self.recover = float(np.exp(-self.blk / (release_s * rate)))
+        self.gain = 1.0
+
+    def process(self, x: np.ndarray) -> np.ndarray:
+        n = len(x)
+        if n == 0:
+            return x
+        nb = -(-n // self.blk)
+        mag = np.zeros(nb * self.blk, dtype=np.float32)
+        mag[:n] = np.abs(x) if x.ndim == 1 else np.abs(x).max(axis=1)
+        need = np.minimum(1.0, self.ceiling / np.maximum(mag.reshape(nb, self.blk).max(axis=1), 1e-12))
+        gains = np.empty(nb, dtype=np.float32)
+        g = self.gain
+        for k in range(nb):
+            g = min(float(need[k]), 1.0 - (1.0 - g) * self.recover)
+            gains[k] = g
+        self.gain = g
+        gain = np.repeat(gains, self.blk)[:n]
+        if x.ndim == 2:
+            gain = gain[:, None]
+        return np.clip(x * gain, -self.ceiling, self.ceiling).astype(np.float32)
+
+
 def prepare_for_playback(x: np.ndarray, rate: int, target_dbfs: float,
                          limit_dbfs: float, max_gain_db: float) -> tuple[np.ndarray, float]:
     """Bring a take to the target gated rms, then limit its peaks.

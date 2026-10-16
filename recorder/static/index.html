@@ -114,7 +114,7 @@ li.playing .take-when { color: var(--accent); }
   <section class="card">
     <div class="level">
       <span>Playback level</span>
-      <input type="range" id="level" min="-30" max="0" step="1" value="0">
+      <input type="range" id="level" min="-30" max="12" step="1" value="0">
       <span id="levelText">0 dB</span>
     </div>
     <p class="hint">To hear takes, the mixer's channel 3/4 button must be on <b>MP3/USB</b>. Records play on <b>3/4</b>.</p>
@@ -129,6 +129,7 @@ document.getElementById("home").href = `http://${location.hostname}/`;
 const $ = (id) => document.getElementById(id);
 let status = null, takesVersion = -1, takes = [], pollTimer = null;
 
+function signedDb(v) { return (v > 0 ? `+${v}` : `${v}`) + " dB"; }  // the speakers' offset: a boost shows its sign
 function fmt(s) {
   s = Math.max(0, Math.floor(s));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = String(s % 60).padStart(2, "0");
@@ -251,7 +252,7 @@ function render(s) {
   }
   if (document.activeElement !== $("level")) {
     $("level").value = s.level_offset_db;
-    $("levelText").textContent = `${s.level_offset_db} dB`;
+    $("levelText").textContent = signedDb(s.level_offset_db);
   }
   const playingChanged = (prev && prev.playing && prev.playing.take) !== (pl && pl.take);
   const recChanged = !!(prev && prev.recording) !== !!rec;
@@ -281,7 +282,7 @@ $("progress").onclick = (ev) => {
   const frac = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
   act(() => api("POST", `/api/takes/${pl.take}/play`, { start: frac * pl.seconds }));
 };
-$("level").oninput = () => { $("levelText").textContent = `${$("level").value} dB`; };
+$("level").oninput = () => { $("levelText").textContent = signedDb(Number($("level").value)); };
 $("level").onchange = () => act(() => api("PUT", "/api/settings", { level_offset_db: Number($("level").value) }));
 document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(true); });
 

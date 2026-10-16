@@ -76,7 +76,9 @@ def test_yield_stops_playback_but_not_a_recording(client):
 
 
 def test_level_offset_is_clamped_and_kept(client, tmp_path):
-    assert client.put("/api/settings", json={"level_offset_db": 12}).json()["level_offset_db"] == 0.0
+    assert client.put("/api/settings", json={"level_offset_db": 20}).json()["level_offset_db"] == 12.0
+    assert client.put("/api/settings", json={"level_offset_db": -40}).json()["level_offset_db"] == -30.0
+    assert client.put("/api/settings", json={"level_offset_db": 6}).json()["level_offset_db"] == 6.0
     assert client.put("/api/settings", json={"level_offset_db": -8}).json()["level_offset_db"] == -8.0
     assert client.get("/api/status").json()["level_offset_db"] == -8.0
 
