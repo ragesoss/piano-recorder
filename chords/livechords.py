@@ -1,4 +1,4 @@
-# Copied from dobro-transcription pipeline/src/transcribe/livechords.py (1750469) by tools/sync-livechords.
+# Copied from dobro-transcription pipeline/src/transcribe/livechords.py (d0054ee) by tools/sync-livechords.
 # Change it there and copy it again; do not edit this copy.
 """Chords in the moment, for a band that follows: per beat, what the audio heard so far says the chord
 is, where in a chart the player is, and the key. Causal: every answer at a time t uses only audio
@@ -14,7 +14,9 @@ before t. The pieces and settings are the ones `tools/realtime_chords_study.py` 
 - Two chromas: the bass (E1-D3) and the treble (C3-C6). Each chord scores the treble chroma's cosine
   with its tones, plus half the bass chroma's share on its root (1), fifth (0.4), third or seventh
   (0.2); the bass counted on beats 1 and 3 only once the bar is known (it walks to the fifth on 2 and
-  4). Splitting them added 0.14-0.23 at 150 ms.
+  4). Splitting them added 0.14-0.23 at 150 ms. For inversions (the chord app, 2026-10-16:
+  `chord_scores(..., inversions=True)`) any chord tone in the bass counts nearly as the root, and
+  `bass_note` names what is in the bass: the lowest strong peak.
 - Reacting (`BeatChords`): a forward HMM over the chords, a change likelier on the bar's 1 and 3 than
   on 2 and 4 when the bar is known; 0.90-0.94 at 150 ms after the beat on the development mixes, the
   guitar take (held out) 0.90.
@@ -36,8 +38,11 @@ N_SEMI = HI - LO + 1
 BASS_RANGE = (28, 50)  # E1 to D3: the bass, and the guitar's bass notes
 TREBLE_RANGE = (48, 84)  # C3 to C6
 
-QUALITIES = {"maj": (0, 4, 7), "min": (0, 3, 7), "7": (0, 4, 7, 10)}
+QUALITIES = {"maj": (0, 4, 7), "min": (0, 3, 7), "7": (0, 4, 7, 10)}  # the band's vocabulary
 CHORDS = [(r, q) for q in ("maj", "min", "7") for r in range(12)]
+# more chords, for a wider vocabulary (`Vocabulary`; the chord app's)
+MORE_QUALITIES = {"dim": (0, 3, 6), "dim7": (0, 3, 6, 9)}
+ALL_QUALITIES = {**QUALITIES, **MORE_QUALITIES}
 # a bluegrass vocabulary in a key, as (semitones above the tonic, quality)
 BLUEGRASS = ((0, "maj"), (5, "maj"), (7, "maj"), (7, "7"), (2, "min"), (9, "min"), (4, "min"), (2, "maj"),
              (2, "7"), (9, "7"), (4, "7"), (0, "7"), (10, "maj"))
@@ -82,17 +87,88 @@ def peak_salience(S: np.ndarray, sr: int, n_fft: int, floor_db: float = 40.0) ->
     return V
 
 
-def window_chroma(y: np.ndarray, sr: int, a: float, b: float, notch=(), min_fft: int = 8192):
-    """The treble and bass chroma (12 each) of y between a and b seconds: one Hann-windowed segment,
-    its peaks per semitone, the notches applied (pairs of semitone index and gain), cube-root
-    compressed, folded over TREBLE_RANGE and BASS_RANGE."""
+def window_salience(y: np.ndarray, sr: int, a: float, b: float, notch=(), min_fft: int = 8192) -> np.ndarray:
+    """Each semitone's salience (N_SEMI, from LO) in y between a and b seconds: one Hann-windowed
+    segment, its peaks per semitone, the notches applied (pairs of semitone index and gain), cube-root
+    compressed."""
     i, j = int(round(a * sr)), int(round(b * sr))
     seg = y[max(0, i): max(i + 16, j)]
     n = max(min_fft, 1 << int(np.ceil(np.log2(max(len(seg), 2)))))
     V = peak_salience(np.abs(np.fft.rfft(seg * np.hanning(len(seg)), n)), sr, n)
     for idx, g in notch:
         V[idx] *= g
-    V = V ** (1 / 3)
+    return V ** (1 / 3)
+
+
+def window_chroma(y: np.ndarray, sr: int, a: float, b: float, notch=(), min_fft: int = 8192):
+    """The treble and bass chroma (12 each) of y between a and b seconds (`window_salience`, folded
+    over TREBLE_RANGE and BASS_RANGE)."""
+    return fold(window_salience(y, sr, a, b, notch, min_fft))
+
+
+# where a chord's lowest note is looked for, E1 to E4, and how loud it must be against the loudest
+# there (cube-root salience: 0.5 is about 18 dB under)
+BASS_NOTE_RANGE = (28, 64)
+BASS_NOTE_SHARE = 0.5
+
+
+def bass_note(V: np.ndarray, share: float = BASS_NOTE_SHARE, rng: tuple[int, int] = BASS_NOTE_RANGE):
+    """What is in the bass: the lowest semitone in `rng` that is a peak of V (no louder neighbour) and
+    at least `share` of the loudest there. (MIDI note, its salience over that loudest), or (None, 0.0)."""
+    lo, hi = rng[0] - LO, rng[1] - LO
+    W = V[lo: hi + 1]
+    top = float(W.max()) if len(W) else 0.0
+    if top <= 0:
+        return None, 0.0
+    for k in range(len(W)):
+        left = V[lo + k - 1] if lo + k > 0 else 0.0
+        right = V[lo + k + 1] if lo + k + 1 < len(V) else 0.0
+        if W[k] >= share * top and W[k] >= left and W[k] >= right:
+            return rng[0] + k, round(float(W[k] / top), 3)
+    return None, 0.0
+
+
+# a note's partials, as semitones over its fundamental (h = 1..8), for `notes_heard`
+HARMONIC_SEMIS = tuple(int(round(12 * np.log2(h))) for h in range(1, 9))
+NOTE_SHARE = 0.2  # a note counts when its own fundamental, after the others' partials, is this share of the loudest
+
+
+def notes_heard(V: np.ndarray, share: float = NOTE_SHARE, max_notes: int = 6,
+                rng: tuple[int, int] = (28, 96)) -> list[tuple[int, float]]:
+    """The notes sounding, low to high, as (MIDI, level against the loudest found), from `V` (semitone
+    saliences as `window_salience` gives them; the cube root is undone here). Found one at a time: the
+    pitch whose harmonic series (8 partials, the h-th expected at 1/h of the fundamental) holds the most
+    of what is left, its partials then taken out; a pitch counts only while its own fundamental, after
+    that, is `share` of the loudest found or more. So a single note's partials (its fifth and third
+    above) are not notes, and an octave over a note counts only when louder than its second partial."""
+    R = np.maximum(np.asarray(V, dtype=float), 0.0) ** 3
+    found: list[tuple[int, float]] = []
+    loudest = 0.0
+    for _ in range(max_notes):
+        best, best_sum = None, 0.0
+        for m in range(rng[0], rng[1] + 1):
+            i = m - LO
+            if i >= len(R) or R[i] <= 0:
+                continue
+            total = sum(R[i + o] / h for h, o in enumerate(HARMONIC_SEMIS, start=1) if i + o < len(R))
+            if total > best_sum:
+                best, best_sum = m, total
+        if best is None:
+            break
+        f = R[best - LO]
+        if f < share * loudest:
+            break
+        loudest = max(loudest, f)
+        found.append((best, f))
+        for h, o in enumerate(HARMONIC_SEMIS, start=1):
+            j = best - LO + o
+            if j < len(R):
+                R[j] = max(0.0, R[j] - f / h)
+    return sorted((m, round(f / loudest, 3)) for m, f in found)
+
+
+def fold(V: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Semitone saliences folded to the treble and bass chroma (TREBLE_RANGE, BASS_RANGE)."""
     out = []
     for lo, hi in (TREBLE_RANGE, BASS_RANGE):
         C = np.zeros(12)
@@ -102,29 +178,50 @@ def window_chroma(y: np.ndarray, sr: int, a: float, b: float, notch=(), min_fft:
     return out[0], out[1]
 
 
-def _templates():
-    T = np.zeros((len(CHORDS), 12))
-    B = np.zeros((len(CHORDS), 12))
-    for i, (r, q) in enumerate(CHORDS):
-        iv = QUALITIES[q]
+INVERSION_TONE = 0.85  # with inversions, a chord's other tones in the bass count this much against its root
+
+
+def _templates(chords=CHORDS):
+    T = np.zeros((len(chords), 12))
+    B = np.zeros((len(chords), 12))
+    BI = np.zeros((len(chords), 12))
+    for i, (r, q) in enumerate(chords):
+        iv = ALL_QUALITIES[q]
         for d in iv:
             T[i, (r + d) % 12] = 1.0
-        B[i, r] = 1.0
+            BI[i, (r + d) % 12] = INVERSION_TONE
+        B[i, r] = BI[i, r] = 1.0
         B[i, (r + iv[2]) % 12] = max(B[i, (r + iv[2]) % 12], 0.4)
         for d in iv[1:2] + iv[3:]:
             B[i, (r + d) % 12] = max(B[i, (r + d) % 12], 0.2)
-    return T / np.linalg.norm(T, axis=1, keepdims=True), B
+    return T / np.linalg.norm(T, axis=1, keepdims=True), B, BI
 
 
-TEMPLATES, BASS_WEIGHTS = _templates()
+TEMPLATES, BASS_WEIGHTS, INVERSION_BASS_WEIGHTS = _templates()
 
 
-def chord_scores(treble: np.ndarray, bass: np.ndarray | None, w_bass: float = 0.5) -> np.ndarray:
+class Vocabulary:
+    """A set of chord qualities (of `ALL_QUALITIES`) on all 12 roots, with its templates, for
+    `chord_scores(..., vocab=)`: the band keeps `CHORDS`; the chord app hears more."""
+
+    def __init__(self, qualities=("maj", "min", "7", "dim", "dim7")):
+        self.qualities = tuple(qualities)
+        self.chords = [(r, q) for q in self.qualities for r in range(12)]
+        self.templates, self.bass_weights, self.inversion_bass_weights = _templates(self.chords)
+
+
+def chord_scores(treble: np.ndarray, bass: np.ndarray | None, w_bass: float = 0.5,
+                 inversions: bool = False, vocab: Vocabulary | None = None) -> np.ndarray:
     """Each of CHORDS: the treble chroma's cosine with its tones, plus `w_bass` times the bass chroma's
-    share on its root, fifth, third and seventh."""
-    s = TEMPLATES @ (treble / (np.linalg.norm(treble) + 1e-12))
+    share on its root, fifth, third and seventh (root position expected: 1, 0.4, 0.2, 0.2). With
+    `inversions`, any of its tones in the bass counts nearly as much as the root (`INVERSION_TONE`), so
+    the bass says only that it is the chord's, and the treble says which chord (C/E against Em).
+    `vocab`: score its chords (`vocab.chords`) in place of `CHORDS`."""
+    T, B, BI = (TEMPLATES, BASS_WEIGHTS, INVERSION_BASS_WEIGHTS) if vocab is None else (
+        vocab.templates, vocab.bass_weights, vocab.inversion_bass_weights)
+    s = T @ (treble / (np.linalg.norm(treble) + 1e-12))
     if bass is not None and w_bass:
-        s = s + w_bass * (BASS_WEIGHTS @ (bass / (bass.sum() + 1e-12)))
+        s = s + w_bass * ((BI if inversions else B) @ (bass / (bass.sum() + 1e-12)))
     return s
 
 

@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from recorder.config import Config, load_config
 
-from .listen import DemoSource, Listener, parse_chord
+from .listen import DemoSource, Listener, parse_target
 
 STATIC = Path(__file__).parent / "static"
 FONTS = Path(__file__).resolve().parent.parent / "exercises" / "static" / "fonts"  # the exercise app's
@@ -31,11 +31,11 @@ class ListenIn(BaseModel):
 
 
 class CheckIn(BaseModel):
-    target: str  # "D", "F#m", "Bb7"
+    target: str  # a chord ("D", "F#m", "Bb7", "Cdim7", "C/E": an inversion), a note ("E4") or two ("C+G")
 
 
 class LabelIn(BaseModel):
-    chord: str | None = None  # what it was; None: no chord
+    chord: str | None = None  # what it was, as a check's target is named; None: nothing
 
 
 def create_app(cfg: Config, source=None) -> FastAPI:
@@ -43,9 +43,9 @@ def create_app(cfg: Config, source=None) -> FastAPI:
     app = FastAPI(title="Chords", docs_url=None, redoc_url=None)
     app.state.listener = listener
 
-    def chord_of(name: str | None):
+    def target_of(name: str | None):
         try:
-            return parse_chord(name) if name else None
+            return parse_target(name) if name else None
         except ValueError as e:
             raise HTTPException(400, str(e))
 
@@ -100,7 +100,10 @@ def create_app(cfg: Config, source=None) -> FastAPI:
 
     @app.post("/api/check")
     def check(body: CheckIn):
-        listener.start_check(chord_of(body.target))
+        target = target_of(body.target)
+        if target is None:
+            raise HTTPException(400, "a check needs something to play")
+        listener.start_check(target)
         return {"ok": True}
 
     @app.post("/api/check/cancel")
@@ -111,7 +114,7 @@ def create_app(cfg: Config, source=None) -> FastAPI:
     @app.post("/api/label")
     def label(body: LabelIn):
         try:
-            return {"id": listener.label(chord_of(body.chord))}
+            return {"id": listener.label(target_of(body.chord))}
         except ValueError as e:
             raise HTTPException(409, str(e))
 
@@ -145,7 +148,7 @@ def main() -> None:
     cfg = load_config(Path(os.environ.get("CHORD_LISTENER_CONFIG", SYSTEM_CONFIG)))
     source = None
     if a.demo:
-        chords = ["G", "C", "D7", "Em", "A", "Bm", "F", "Bb7"]
+        chords = ["-", "G", "C/E", "D7", "-", "A3", "C+G", "Bdim", "Cdim7/Eb"]
         source = lambda: DemoSource(chords, len(cfg.inputs), cfg.capture.capture.rate)  # noqa: E731
     uvicorn.run(create_app(cfg, source), host=cfg.web_host, port=cfg.web_port, log_level="warning")
 

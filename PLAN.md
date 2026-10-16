@@ -501,6 +501,17 @@ same way).
 - Tried on the desktop with `--demo` (chords made by the program in place of the inputs): both views
   at 1180x820 and 390x844, a check and two labels kept, no console errors. On synthesized chords the
   listener names 33 or more of the 36 (a test).
+- **Inversions, diminished chords, single notes and two** (2026-10-16, the player: "it would be good
+  if it could handle inversions and indicate what's in the bass"; "no detection of diminished chords";
+  "extend detection to handle a single pitch or diad as well"). From dobro-transcription's listener:
+  what is in the bass (the lowest strong peak, E1-E4) named on its own, "C/E" when not the root; chords
+  scored with any of their tones in the bass counting nearly as the root; a wider vocabulary for the
+  app (major, minor, seven, diminished, diminished seven: 60 chords; a diminished seven named by its
+  bass); and how many notes sound (pitches found one harmonic series at a time), so one pitch class
+  shows as a note ("E3"), two as a pair ("C+G, a fifth"), three or more as a chord. Checks ask for
+  any of these (inversions, notes with their octave, pairs in any octave), a chord judged on the chord
+  and the bass apart; the label picker has the three kinds. On synthesized tones: 55 or more of the
+  60 chords, the inversions and the bass, notes and pairs (tests). The band's own scoring is unchanged.
 - **Deployed 2026-10-16, about 07:10** (both recorders idle). The installer added
   `/etc/chord-listener.toml` and the unit; by hand, the peers line of `/etc/practice-recorder.toml` and
   `/etc/exercise-recorder.toml` and the tile in `/etc/room-home.toml` (copies kept as

@@ -1,13 +1,20 @@
 """Hearing chords as they are played, and checking them.
 
 Every 100 ms the inputs a page has chosen, mixed to one signal, are heard over the last `WINDOW_S`
-(`livechords`: the band's own listener, copied from dobro-transcription), and the chord shown is
-smoothed over time: a forward HMM over the 36 chords, staying put with probability `STAY` from one
-frame to the next. Nothing is named while the level is within `QUIET_DB` of the quietest of the last
-10 s (or of `QUIET_CEIL_DBFS`, if nothing that quiet has been heard yet).
+(`livechords`: the band's own listener, copied from dobro-transcription), with a wider vocabulary
+than the band's (major, minor, seven, diminished and diminished seven on 12 roots) and inversions
+(any chord tone in the bass), and what is in the bass named on its own (the lowest strong peak): "C/E"
+when it is not the root. The chord shown is smoothed over time: a forward HMM over the 60 chords,
+staying put with probability `STAY` from one frame to the next; the bass shown changes once two frames
+agree. A diminished seven (four roots, the same notes) is named by its bass when that is one of them.
+How many notes sound (`livechords.notes_heard`: pitches found one harmonic series at a time) says
+whether it is a single note ("E3"), two ("C+G, a fifth") or a chord; the kind shown changes once two
+frames agree. Nothing is named while the level is within `QUIET_DB` of the quietest of the last 10 s
+(or of `QUIET_CEIL_DBFS`, if nothing that quiet has been heard yet).
 
-A check: a chord is asked for; the next attack (a rise of `ATTACK_DB` within 0.3 s, over the quiet)
-starts it, and the chord is judged over `CHECK_SPAN_S` after the attack, once the strike has passed.
+A check: a chord, a note ("E4", its octave too) or two notes ("C+G", any octave) is asked for; the
+next attack (a rise of `ATTACK_DB` within 0.3 s, over the quiet) starts it, and it is judged over
+`CHECK_SPAN_S` after the attack, once the strike has passed.
 The clip (every kept channel, from just before the attack) and what was asked, heard and scored are
 kept in the config's takes_dir, for study on the desktop (`tools/pull-checks`). A label is the same
 from the Listen view: the last `LABEL_S` kept with the chord the player says it was.
@@ -53,23 +60,139 @@ LABEL_S = 2.0
 MIN_FFT = 16384  # at 48 kHz, bins of 2.9 Hz: the bass's semitones apart (2.4 Hz at E1)
 
 NAMES = ("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B")
-SUFFIX = {"maj": "", "min": "m", "7": "7"}
-QUALITY_WORDS = {"maj": "major", "min": "minor", "7": "seven"}
-NAME_RE = re.compile(r"^([A-G])([#b]?)(m|7)?$")
+SUFFIX = {"maj": "", "min": "m", "7": "7", "dim": "dim", "dim7": "dim7"}
+QUALITY_WORDS = {"maj": "major", "min": "minor", "7": "seven", "dim": "diminished", "dim7": "diminished seven"}
+NAME_RE = re.compile(r"^([A-G])([#b]?)(dim7|dim|m|7)?(?:/([A-G])([#b]?))?$")
+VOCAB = L.Vocabulary(("maj", "min", "7", "dim", "dim7"))
+CHORDS = VOCAB.chords
 ID_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}(-\d+)?$")
+NOTE_RE = re.compile(r"^([A-G])([#b]?)(-?\d)$")
+PAIR_RE = re.compile(r"^([A-G])([#b]?)\+([A-G])([#b]?)$")
+INTERVALS = ("octave", "minor second", "major second", "minor third", "major third", "fourth", "tritone",
+             "fifth", "minor sixth", "major sixth", "minor seventh", "major seventh")
 
 
-def chord_name(c: tuple[int, str]) -> str:
-    return NAMES[c[0]] + SUFFIX[c[1]]
+def chord_name(c: tuple[int, str], bass: int | None = None) -> str:
+    """(pitch class, quality) and the bass's pitch class -> "C", "F#m", "Bbdim7", "C/E" (the bass only
+    when it is not the root)."""
+    return NAMES[c[0]] + SUFFIX[c[1]] + (f"/{NAMES[bass]}" if bass is not None and bass != c[0] else "")
 
 
-def parse_chord(name: str) -> tuple[int, str]:
-    """"D", "F#m", "Bb7" -> (pitch class, quality). Raises ValueError."""
+def _semis(letter: str, accidental: str) -> int:
+    """Semitones above C of a written note (Cb is -1, B# 12)."""
+    return {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}[letter] + {"#": 1, "b": -1, "": 0}[accidental]
+
+
+def _pc(letter: str, accidental: str) -> int:
+    return _semis(letter, accidental) % 12
+
+
+def parse_chord(name: str) -> tuple[tuple[int, str], int | None]:
+    """"D", "F#m", "Bbdim7", "C/E" -> ((pitch class, quality), the bass's pitch class or None for
+    the root). Raises ValueError."""
     m = NAME_RE.match(name or "")
     if not m:
         raise ValueError(f"not a chord: {name!r}")
-    pc = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}[m.group(1)] + {"#": 1, "b": -1, "": 0}[m.group(2)]
-    return pc % 12, {"m": "min", "7": "7", None: "maj"}[m.group(3)]
+    q = {"m": "min", "7": "7", "dim": "dim", "dim7": "dim7", None: "maj"}[m.group(3)]
+    root = _pc(m.group(1), m.group(2))
+    bass = _pc(m.group(4), m.group(5) or "") if m.group(4) else None
+    return (root, q), (None if bass == root else bass)
+
+
+def note_name(m: int) -> str:
+    """MIDI -> "E3" (C4 is middle C, 60)."""
+    return f"{NAMES[m % 12]}{m // 12 - 1}"
+
+
+@dataclass(frozen=True)
+class Target:
+    """What a check asks for, or a label says it was: a chord (and its bass), a note, or two notes."""
+    kind: str  # "chord", "note", "pair"
+    chord: tuple[int, str] | None = None
+    bass: int | None = None  # a chord's bass when not its root
+    midi: int | None = None  # a note, its octave too
+    pcs: tuple[int, int] | None = None  # two notes, low then high, any octave
+
+    @property
+    def name(self) -> str:
+        if self.kind == "note":
+            return note_name(self.midi)
+        if self.kind == "pair":
+            return f"{NAMES[self.pcs[0]]}+{NAMES[self.pcs[1]]}"
+        return chord_name(self.chord, self.bass)
+
+
+def parse_target(name: str) -> Target:
+    """"C/E", "Bbdim7" (chords), "E4" (a note), "C+G" (two notes). A chord's name wins: "C7" is C
+    seven, never the note in octave 7. Raises ValueError."""
+    if NAME_RE.match(name or ""):
+        chord, bass = parse_chord(name)
+        return Target("chord", chord=chord, bass=bass)
+    m = NOTE_RE.match(name or "")
+    if m:
+        return Target("note", midi=12 * (int(m.group(3)) + 1) + _semis(m.group(1), m.group(2)))
+    m = PAIR_RE.match(name or "")
+    if m:
+        a, b = _pc(m.group(1), m.group(2)), _pc(m.group(3), m.group(4))
+        if a == b:
+            raise ValueError(f"two notes, not one: {name!r}")
+        return Target("pair", pcs=(a, b))
+    chord, bass = parse_chord(name)
+    return Target("chord", chord=chord, bass=bass)
+
+
+@dataclass(frozen=True)
+class Heard:
+    """What a window holds: its kind (by how many pitch classes sound), a name and a line in words."""
+    kind: str | None  # "note", "pair", "chord"; None: nothing
+    name: str | None
+    detail: str
+    notes: tuple[int, ...] = ()  # MIDI, low to high
+    chord: tuple[int, str] | None = None  # the chord scores' best (always, for a chord check)
+    bass: int | None = None  # the bass's pitch class
+
+
+def hear(V: np.ndarray, s: np.ndarray, best: int | None = None) -> Heard:
+    """What `V` (semitone saliences) and `s` (VOCAB's chord scores) say: `best` is the chord to name
+    (the smoothed one, in the Listen view), else the scores' best."""
+    bass_midi, _ = L.bass_note(V)
+    bass = bass_midi % 12 if bass_midi is not None else None
+    notes = tuple(m for m, _ in L.notes_heard(V))
+    pcs = []
+    for m in notes:
+        if m % 12 not in pcs:
+            pcs.append(m % 12)
+    chord = named(CHORDS[int(np.argmax(s)) if best is None else best], bass)
+    if len(pcs) == 1:
+        octs = [m for m in notes if m % 12 == pcs[0]]
+        detail = f"{note_name(octs[0])}, a single note" if len(octs) == 1 else \
+            f"{' and '.join(note_name(m) for m in octs)}, in octaves"
+        return Heard("note", note_name(octs[0]), detail, notes, chord, bass)
+    if len(pcs) == 2:
+        lo = min(m for m in notes if m % 12 == pcs[0])
+        hi = min(m for m in notes if m % 12 == pcs[1])
+        word = INTERVALS[(hi - lo) % 12]
+        return Heard("pair", f"{NAMES[pcs[0]]}+{NAMES[pcs[1]]}",
+                     f"{note_name(lo)} and {note_name(hi)}, a {word}", notes, chord, bass)
+    if not notes:
+        return Heard(None, None, "", notes, chord, bass)
+    words = f"{NAMES[chord[0]]} {QUALITY_WORDS[chord[1]]}"
+    return Heard("chord", chord_name(chord, bass), words + (f", {NAMES[bass]} in the bass" if bass is not None
+                                                            and bass != chord[0] else ""), notes, chord, bass)
+
+
+def tones(c: tuple[int, str]) -> set[int]:
+    return {(c[0] + d) % 12 for d in L.ALL_QUALITIES[c[1]]}
+
+
+def same_chord(a: tuple[int, str], b: tuple[int, str]) -> bool:
+    """The same chord: a diminished seven on any of its four roots is the same four notes."""
+    return a == b or (a[1] == b[1] == "dim7" and tones(a) == tones(b))
+
+
+def named(c: tuple[int, str], bass: int | None) -> tuple[int, str]:
+    """A diminished seven named by its bass, when the bass is one of its notes."""
+    return (bass, "dim7") if c[1] == "dim7" and bass is not None and bass in tones(c) else c
 
 
 def detector() -> str:
@@ -81,10 +204,12 @@ def detector() -> str:
 
 @dataclass
 class Check:
-    target: tuple[int, str]
+    target: Target
     state: str = "waiting"  # waiting (for the attack), hearing, done
     attack: int | None = None  # the attack's position in the stream (samples)
-    heard: tuple[int, str] | None = None
+    heard: Heard | None = None
+    chord_right: bool | None = None  # a chord check: the chord (whatever the bass)
+    bass_right: bool | None = None  # ...and the bass (the root, unless an inversion was asked for)
     right: bool | None = None
     scores: list | None = None
     id: str | None = None  # once its clip is kept (when the clip's end has been heard)
@@ -116,7 +241,12 @@ class Listener:
         self.raw: collections.deque = collections.deque(maxlen=int(KEEP_S / BLOCK_S) + 2)  # (start, block)
         self.pos = 0
         self.levels: collections.deque = collections.deque(maxlen=int(10 / BLOCK_S))
-        self.post = np.full(len(L.CHORDS), 1.0 / len(L.CHORDS))
+        self.post = np.full(len(CHORDS), 1.0 / len(CHORDS))
+        self.bass_seen: list[int | None] = []  # the last frames' bass pitch classes
+        self.bass_shown: int | None = None
+        self.kind_seen: list[str | None] = []  # the last frames' kinds (note, pair, chord)
+        self.kind_shown: str | None = None
+        self.last_heard: Heard | None = None
         self.now: dict = {"chord": None, "confidence": 0.0, "top": [], "level_dbfs": None, "quiet_dbfs": None}
         self.history: collections.deque = collections.deque(maxlen=12)
         self.check: Check | None = None
@@ -209,8 +339,11 @@ class Listener:
         win = self._between(pos - int(WINDOW_S * self.rate), pos)
         level = dsp.db(float(np.sqrt(np.mean(win ** 2))) if len(win) else 0.0)
         block_level = dsp.db(float(np.sqrt(np.mean(mono ** 2))) if n else 0.0)
-        tr, bs = L.window_chroma(win, self.rate, 0.0, len(win) / self.rate, min_fft=MIN_FFT)
-        s = L.chord_scores(tr, bs, 0.5)
+        V = L.window_salience(win, self.rate, 0.0, len(win) / self.rate, min_fft=MIN_FFT)
+        tr, bs = L.fold(V)
+        s = L.chord_scores(tr, bs, 0.5, inversions=True, vocab=VOCAB)
+        bass_midi, _ = L.bass_note(V)
+        frame_kind = hear(V, s).kind
         with self.lock:
             before = list(self.levels)[-3:]
             self.levels.append(block_level)
@@ -224,13 +357,35 @@ class Listener:
                 self.post = 0.7 * self.post + 0.3 / len(self.post)
             best = int(np.argmax(self.post))
             order = np.argsort(s)[::-1][:4]
-            chord = chord_name(L.CHORDS[best]) if loud else None
-            self.now = {"chord": chord, "quality": QUALITY_WORDS[L.CHORDS[best][1]] if loud else None,
-                        "confidence": round(float(self.post[best]), 3) if loud else 0.0,
-                        "top": [[chord_name(L.CHORDS[k]), round(float(s[k]), 3)] for k in order] if loud else [],
+            pc = bass_midi % 12 if (loud and bass_midi is not None) else None
+            self.bass_seen = (self.bass_seen + [pc])[-2:]
+            if len(self.bass_seen) == 2 and self.bass_seen[0] == self.bass_seen[1]:
+                self.bass_shown = pc
+            if not loud:
+                self.bass_shown = None
+            self.kind_seen = (self.kind_seen + [frame_kind if loud else None])[-2:]
+            if len(self.kind_seen) == 2 and self.kind_seen[0] == self.kind_seen[1]:
+                self.kind_shown = self.kind_seen[0]
+            kind = self.kind_shown if loud else None
+            h = hear(V, s, best)
+            if kind == "chord":  # the chord as smoothed, with the bass shown
+                c = named(CHORDS[best], self.bass_shown)
+                h = Heard("chord", chord_name(c, self.bass_shown), f"{NAMES[c[0]]} {QUALITY_WORDS[c[1]]}" + (
+                    f", {NAMES[self.bass_shown]} in the bass" if self.bass_shown not in (None, c[0]) else ""),
+                    h.notes, c, self.bass_shown)
+            elif kind is not None and h.kind != kind:  # a frame of another kind: keep the last of this one
+                h = self.last_heard if self.last_heard is not None and self.last_heard.kind == kind else h
+                kind = h.kind
+            self.last_heard = h if kind else None
+            name = h.name if kind else None
+            self.now = {"chord": name, "kind": kind, "detail": h.detail if kind else None,
+                        "notes": [note_name(m) for m in h.notes] if kind else [],
+                        "bass": NAMES[self.bass_shown] if loud and self.bass_shown is not None else None,
+                        "confidence": round(float(self.post[best]), 3) if kind == "chord" else (1.0 if kind else 0.0),
+                        "top": [[chord_name(CHORDS[k]), round(float(s[k]), 3)] for k in order] if kind == "chord" else [],
                         "level_dbfs": round(block_level, 1), "quiet_dbfs": round(quiet, 1)}
-            if chord and self.now["confidence"] >= 0.5 and (not self.history or self.history[-1][1] != chord):
-                self.history.append((datetime.now().isoformat(timespec="seconds"), chord))
+            if name and self.now["confidence"] >= 0.5 and (not self.history or self.history[-1][1] != name):
+                self.history.append((datetime.now().isoformat(timespec="seconds"), name))
             ck = self.check
             if ck is not None and ck.state == "waiting" and before and loud and \
                     block_level - min(before) >= ATTACK_DB:
@@ -251,19 +406,39 @@ class Listener:
     def _judge(self, ck: Check) -> None:
         a, b = (ck.attack + int(t * self.rate) for t in CHECK_SPAN_S)
         seg = self._between(a, b)
-        tr, bs = L.window_chroma(seg, self.rate, 0.0, len(seg) / self.rate, min_fft=MIN_FFT)
-        s = L.chord_scores(tr, bs, 0.5)
+        V = L.window_salience(seg, self.rate, 0.0, len(seg) / self.rate, min_fft=MIN_FFT)
+        tr, bs = L.fold(V)
+        s = L.chord_scores(tr, bs, 0.5, inversions=True, vocab=VOCAB)
         order = np.argsort(s)[::-1]
-        heard = L.CHORDS[int(order[0])]
-        scores = [[chord_name(L.CHORDS[k]), round(float(s[k]), 3)] for k in order[:6]]
+        bass_midi, bass_share = L.bass_note(V)
+        h = hear(V, s)
+        t = ck.target
+        chord_right = bass_right = None
+        if t.kind == "chord":  # judged as a chord whatever the count of notes
+            chord_right = same_chord(h.chord, t.chord)
+            bass_right = h.bass == (t.chord[0] if t.bass is None else t.bass)
+            right = chord_right and bass_right
+            heard_name = chord_name(h.chord, h.bass)
+        elif t.kind == "note":
+            right = h.kind == "note" and h.notes[0] == t.midi
+            heard_name = h.name
+        else:
+            right = h.kind == "pair" and {m % 12 for m in h.notes} == set(t.pcs)
+            heard_name = h.name
+        scores = [[chord_name(CHORDS[k]), round(float(s[k]), 3)] for k in order[:6]]
         with self.lock:
-            ck.heard, ck.right, ck.scores, ck.state = heard, heard == ck.target, scores, "done"
-            ck.meta = {"target": chord_name(ck.target), "heard": chord_name(heard), "right": heard == ck.target,
-                       "scores": scores, "attack_s": CLIP_S[0], "judged_s": list(CHECK_SPAN_S)}
+            ck.heard, ck.scores, ck.state = h, scores, "done"
+            ck.chord_right, ck.bass_right, ck.right = chord_right, bass_right, right
+            ck.meta = {"target": t.name, "target_kind": t.kind, "heard": heard_name, "right": right,
+                       "chord_right": chord_right, "bass_right": bass_right, "heard_kind": h.kind,
+                       "heard_detail": h.detail, "notes_heard": [note_name(m) for m in h.notes],
+                       "bass": NAMES[h.bass] if h.bass is not None else None, "bass_midi": bass_midi,
+                       "bass_share": bass_share, "scores": scores, "attack_s": CLIP_S[0],
+                       "judged_s": list(CHECK_SPAN_S)}
 
     # --- checks and labels
 
-    def start_check(self, target: tuple[int, str]) -> None:
+    def start_check(self, target: Target) -> None:
         with self.lock:
             self.check = Check(target=target)
 
@@ -271,15 +446,19 @@ class Listener:
         with self.lock:
             self.check = None
 
-    def label(self, chord: tuple[int, str] | None) -> str:
-        """Keep the last LABEL_S with what the player says it was (None: no chord), and what was shown."""
+    def label(self, said: Target | None) -> str:
+        """Keep the last LABEL_S with what the player says it was (a chord, a note or two; None:
+        nothing), and what was shown."""
         with self.lock:
             shown, pos = self.now.get("chord"), self.pos
         if pos < int(0.5 * self.rate):
             raise ValueError("nothing heard yet")
-        said = chord_name(chord) if chord else None
+        kind = said.kind if said else None
+        said = said.name if said else None
         return self._save("label", pos - int(LABEL_S * self.rate), pos,
-                          {"target": said, "heard": shown, "right": said == shown, "scores": self.now.get("top", [])})
+                          {"target": said, "target_kind": kind, "heard": shown, "heard_kind": self.now.get("kind"),
+                           "right": said == shown, "scores": self.now.get("top", []),
+                           "notes_heard": self.now.get("notes", [])})
 
     def _save(self, kind: str, p0: int, p1: int, meta: dict) -> str:
         with self.lock:
@@ -338,8 +517,11 @@ class Listener:
                 "state": "listening" if on else ("waiting" if time.monotonic() < self.wait_until else "idle"),
                 **(self.now if on else {"chord": None, "confidence": 0.0, "top": [], "level_dbfs": None}),
                 "history": [{"time": t, "chord": c} for t, c in self.history],
-                "check": ck and {"target": chord_name(ck.target), "state": ck.state,
-                                 "heard": ck.heard and chord_name(ck.heard), "right": ck.right,
+                "check": ck and {"target": ck.target.name, "kind": ck.target.kind, "state": ck.state,
+                                 "heard": ck.meta["heard"] if ck.meta else None,
+                                 "heard_detail": ck.heard.detail if ck.heard else None, "right": ck.right,
+                                 "chord_right": ck.chord_right, "bass_right": ck.bass_right,
+                                 "bass": NAMES[ck.heard.bass] if ck.heard and ck.heard.bass is not None else None,
                                  "scores": ck.scores, "id": ck.id},
                 "mix": [self.inputs[c].number for c in self.mix],
                 "instrument": self.instrument,
@@ -354,7 +536,7 @@ class DemoSource:
 
     def __init__(self, chords: list[str], channels: int, rate: int = 48000, every_s: float = 2.5,
                  gap_s: float = 0.3, realtime: bool = True, decay: float = 1.2):
-        self.chords = [parse_chord(c) for c in chords]
+        self.chords = [None if c == "-" else parse_target(c) for c in chords]  # "-": a rest
         self.channels, self.rate, self.every, self.gap, self.realtime = channels, rate, every_s, gap_s, realtime
         self.decay = decay  # per second, of each chord's tones
         self.dtype = np.dtype("<i4")
@@ -379,10 +561,18 @@ class DemoSource:
         x = 1e-4 * self.rng.normal(size=frames)
         for idx in np.unique(k):
             m = k == idx
-            root, q = self.chords[int(idx) % len(self.chords)]
-            tones = [48 + root + d for d in L.QUALITIES[q]] + [36 + root]
+            t = self.chords[int(idx) % len(self.chords)]
+            if t is None:
+                continue
+            if t.kind == "note":
+                notes = [t.midi]
+            elif t.kind == "pair":
+                notes = [48 + t.pcs[0], 48 + t.pcs[0] + (t.pcs[1] - t.pcs[0]) % 12]
+            else:
+                root, q = t.chord
+                notes = [48 + root + d for d in L.ALL_QUALITIES[q]] + [36 + (root if t.bass is None else t.bass)]
             env = np.where(since[m] < self.every - self.gap, np.exp(-self.decay * since[m]), 0.0)
-            for tone in tones:
+            for tone in notes:
                 f0 = 440 * 2 ** ((tone - 69) / 12)
                 for h in range(1, 6):
                     x[m] += 0.05 * env * np.sin(2 * math.pi * f0 * h * since[m]) / h ** 1.5
