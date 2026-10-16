@@ -398,6 +398,43 @@ on the same screen as the controls, so a take needs little preparation.
     within 9 s), a free take on "other:guitar" (its sidecar: "a guitar (not listed)",
     `instrument` guitar). Record ends at 667 px over the click and 711 px over a backing, in
     820 px. Not yet deployed.
+- **The page, redesigned** (2026-10-16). The player's direction: "there are two main tasks:
+  choosing what to record, and recording it"; from the design canvas, steps with one question
+  each ("P1 is okay. dark theme, purple a key color"), as quick as the one-screen version for a
+  take like the last. Dark, purple for what to tap.
+  - **Choosing:** four steps. What you are recording on (one or two instruments, and an inputs
+    panel: what each input carries, with its level). What sort of take (exercise, play-along,
+    free play). Which exercise, which backing, or anything from the speakers. Then Ready.
+  - **It opens on Ready, as it was left.** The choices are kept on the control unit
+    (`GET`/`PUT /api/choices`); with none, they start from the newest take. The steps along the
+    top hold the choices: a tap on one changes it, and a change goes straight back to Ready
+    unless it leaves a later step unanswered (switch from the dobro to the bass, and the dobro
+    exercise needs a new pick). Ready offers the next exercise the project wants (Or next, Swap).
+    With two instruments there is no exercise; "Just the ..." narrows to one.
+  - **Recording:** the record screen (the score and its instructions, the inputs' levels, the
+    speakers, Record). Then the take (the count-in counted down, the bar and beat, each input's
+    meter and peak, Stop). Then what was just recorded: its waveform and beat 0, play on the
+    speakers or the iPad, a note, Record it again, Record something else, delete, and the
+    exercise's other takes.
+  - **New in the API:** `/api/inputs` (the config's `[inputs.N]`: what is plugged into each
+    input, and for which kind of instrument); `/api/monitor` (the inputs' levels between takes,
+    for 5 s after the page last asked); each channel's meter in the status;
+    `/api/backings/{id}/play` (a backing heard on its own); each backing's `added`;
+    `/api/takes/{id}/peaks` (a waveform, read a second at a time); a free take over a click,
+    until stopped (`playalong.ClickStream`, sample for sample `click_track`; the sidecar's
+    `click.beats` says how far it went, to line the take up again).
+  - **The sidecar** gets `kind` (exercise, playalong, free), `instruments` (one or two:
+    `instrument_id`, `instrument_name`, `kind`) and `channels` (each channel's input, its name,
+    and what it carried: an instrument's id, `room` or `none`). With one instrument,
+    `instrument_id` as before; with two, none, and no `instrument`.
+  - **Fonts:** Bricolage Grotesque and Public Sans, served by the app
+    (`exercises/static/fonts/`, SIL Open Font License 1.1), so the page needs no internet.
+  - Tried on the desktop: the fake device now has four channels (each 6 dB under the one
+    before), kept like the 18i8's three; headless Chromium at 1180x820, 820x1180 and 390x844.
+    Every step, a change with a knock-on, an exercise take over its click, a play-along with
+    the backing heard first, a free take over a click (lined up again from its beats), and the
+    takes' note and delete. No console errors. Not yet deployed: `/etc/exercise-recorder.toml`
+    needs the `[inputs.N]` tables by hand.
 - **Next:** a tool to bring exercise takes into dobro-transcription with
   their `takes.csv` rows (`tools/pull-take` reads only the practice
   recorder's takes; exercise takes need `/etc/exercise-recorder.toml`),

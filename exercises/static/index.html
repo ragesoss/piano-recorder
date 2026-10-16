@@ -7,328 +7,574 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#16181d">
+<meta name="theme-color" content="#121016">
 <style>
+/* Two parts: choosing the next take (steps that open on Ready, as you left it) and recording it
+   (the record screen, the take, what was just recorded). Dark, with purple as the key color. */
+@font-face { font-family: "Bricolage Grotesque"; src: url(/fonts/bricolage-grotesque.woff2) format("woff2");
+  font-weight: 200 800; font-display: swap; }
+@font-face { font-family: "Public Sans"; src: url(/fonts/public-sans.woff2) format("woff2");
+  font-weight: 100 900; font-display: swap; }
 :root {
-  --bg: #f1f1ee; --card: #ffffff; --text: #1b1d22; --muted: #6b6f78; --line: #e2e2de;
-  --rec: #d93a3f; --rec-text: #ffffff; --ok: #2f9e5b; --warn: #d9a400; --accent: #2d6cdf;
-  --meter-bg: #e9e9e6; --paper: #ffffff; --warn-text: #8a6700; --on-accent: #ffffff;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #16181d; --card: #1f2229; --text: #eceef2; --muted: #9aa0ab; --line: #2e323b;
-    --rec: #e5484d; --meter-bg: #2a2e36; --accent: #6b9cff; --paper: #f4f2ec; --warn-text: #e2b93b; --on-accent: #16181d;
-  }
+  color-scheme: dark;
+  --bg: #121016; --surf2: #1E1A24; --surf: #28232F; --line: #3E3748; --line-soft: #2F2A37; --dash: #514960;
+  --ink: #F2EEF8; --ink2: #CEC7DA; --ink3: #A79FB4; --faint: #7E768B;
+  --purple-fill: #7C3AED; --purple: #8B5CF6; --purple-line: #A78BFA; --purple-ink: #B9A0FF;
+  --purple-tint: #33264F; --purple-tint2: #45356A;
+  --red: #D42A1F; --red-dot: #FF5147; --red-ink: #FF8F85; --red-tint: #3E1F24;
+  --green: #4ADE80; --amber: #E8B93B;
+  --display: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --text: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
-body {
-  margin: 0; background: var(--bg); color: var(--text);
-  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  -webkit-tap-highlight-color: transparent; overflow: hidden;
-}
-.app { display: grid; grid-template-columns: 1fr 360px; height: 100vh; height: 100dvh; }
-/* the score */
-.score {
-  overflow-y: auto; -webkit-overflow-scrolling: touch;
-  padding: max(10px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
-}
-.score img { display: block; width: 100%; height: auto; background: var(--paper); border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(0,0,0,.12); margin-bottom: 12px; }
-.score .none { color: var(--muted); padding: 40px 20px; text-align: center; }
-/* the exercise's instructions (its README), above the score */
-.readme { background: var(--card); border: 1px solid var(--line); border-radius: 6px; margin-bottom: 12px; font-size: 15px; }
-.readme > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; min-height: 44px; display: flex; align-items: center;
-  gap: 8px; list-style: none; }
-.readme > summary::-webkit-details-marker { display: none; }
-.readme > summary::before { content: "›"; color: var(--muted); font-size: 20px; line-height: 1; transition: transform .15s; }
-.readme[open] > summary::before { transform: rotate(90deg); }
-.readme .body { padding: 0 14px 12px; max-width: 46em; }
-.readme .body > :first-child { margin-top: 0; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.4 var(--text); -webkit-tap-highlight-color: transparent;
+  overflow: hidden; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+a { color: var(--purple-ink); }
+h1, h2, h3, p { margin: 0; }
+.app { display: flex; flex-direction: column; height: 100vh; height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.display { font-family: var(--display); }
+.tnum { font-variant-numeric: tabular-nums; }
+.svg-i { flex: none; }
+
+/* the top line: back home, the steps (choosing) or the take (recording), the mixer */
+.top { flex: none; min-height: 68px; display: flex; align-items: center; gap: 12px; padding: 8px 24px; flex-wrap: wrap; }
+.top .home { min-height: 44px; display: flex; align-items: center; gap: 6px; color: var(--ink3); font-size: 17px; text-decoration: none; flex: none; }
+.top .home svg path { stroke: var(--ink3); }
+.top .mid { flex: 1; min-width: 0; display: flex; justify-content: center; }
+.top .end { flex: none; display: flex; align-items: center; gap: 14px; font-size: 15px; color: var(--ink3); }
+.steps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.steps .chev { color: var(--faint); }
+.chip { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 0 16px; border-radius: 22px; border: 0;
+  background: var(--surf2); color: var(--ink); font-size: 16px; font-weight: 600; text-decoration: none; white-space: nowrap;
+  max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
+.chip.now { background: var(--purple-fill); color: #fff; font-size: 17px; font-weight: 700; padding: 0 18px; }
+.chip.todo { background: transparent; color: var(--ink3); font-weight: 400; font-size: 17px; padding: 0 10px; }
+.chip.again { background: transparent; border: 1.5px dashed var(--red-ink); color: var(--red-ink); font-weight: 700; }
+.chip.again s { color: var(--ink3); font-weight: 600; }
+.dev { display: inline-flex; align-items: center; gap: 8px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); display: inline-block; }
+.dot.on { background: var(--green); }
+.banner { margin: 0 24px 8px; padding: 12px 16px; border-radius: 14px; background: var(--red-tint); color: var(--ink);
+  border: 1.5px solid var(--red-ink); font-size: 16px; display: flex; gap: 12px; align-items: center; }
+.banner button { margin-left: auto; min-height: 40px; padding: 0 14px; border-radius: 12px; border: 1.5px solid var(--ink3); background: transparent; }
+
+/* a step: the question, its choices (scrolling), and a footer */
+.screen { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 18px 40px 20px; }
+.foot { flex: none; min-height: 104px; display: flex; align-items: center; gap: 16px; padding: 12px 28px 12px 40px;
+  border-top: 1.5px solid var(--line); flex-wrap: wrap; }
+.foot .note { flex: 1; min-width: 200px; font-size: 17px; line-height: 1.35; color: var(--ink2); }
+.foot .note b { color: var(--ink); }
+.foot .hint { margin-left: auto; font-size: 18px; color: var(--ink3); }
+.q h1 { font-family: var(--display); font-size: 44px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; }
+.q p { margin-top: 6px; font-size: 19px; color: var(--ink3); }
+.btn { min-height: 64px; padding: 0 24px; display: inline-flex; align-items: center; gap: 10px; border: 1.5px solid var(--ink2);
+  border-radius: 20px; background: transparent; font-size: 19px; font-weight: 700; }
+.btn.go { min-height: 76px; padding: 0 30px; border: 0; border-radius: 22px; background: var(--purple-fill); color: #fff;
+  font-family: var(--display); font-size: 26px; font-weight: 700; margin-left: auto; }
+.btn.go.big { min-height: 92px; padding: 0 36px; border-radius: 26px; font-size: 34px; gap: 16px; }
+.btn.go:disabled { background: #2A2531; color: var(--faint); }
+.btn.small { min-height: 48px; padding: 0 18px; border-radius: 24px; font-size: 17px; }
+.btn.outline-p { border-color: var(--purple); color: var(--purple-ink); }
+.pill { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 14px; font-size: 14px; font-weight: 700; }
+.pill.red { background: var(--red-tint); color: var(--red-ink); }
+.pill.purple { background: var(--purple-tint); color: var(--purple-ink); }
+.label { font-size: 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); }
+.muted { color: var(--ink3); }
+.red-ink { color: var(--red-ink); }
+.p-ink { color: var(--purple-ink); }
+
+/* 1 on what */
+.on-grid { display: grid; grid-template-columns: minmax(0, 1fr) 352px; gap: 28px; margin-top: 18px; align-items: start; }
+.kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.kind { display: flex; flex-direction: column; gap: 8px; }
+.card { min-height: 80px; padding: 10px 14px; border: 1.5px solid var(--line); border-radius: 16px; background: var(--surf);
+  text-align: left; display: flex; flex-direction: column; justify-content: center; gap: 4px; font-size: 18px; font-weight: 600; }
+.card.sel { border: 2.5px solid var(--purple); background: var(--purple-tint); font-weight: 700; }
+.card.unlisted { min-height: 64px; border: 1.5px dashed var(--dash); background: transparent; font-size: 17px; font-weight: 400; color: var(--ink2); }
+.card.unlisted.sel { border: 2.5px solid var(--purple); background: var(--purple-tint); color: var(--ink); font-weight: 700; }
+.card .sub { font-size: 15px; color: var(--ink3); font-weight: 400; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.card.sel .sub { color: var(--purple-ink); font-weight: 600; }
+.panel { background: var(--surf); border: 1.5px solid var(--line); border-radius: 22px; padding: 18px; }
+.panel h2 { font-family: var(--display); font-size: 24px; font-weight: 700; }
+.inputs { display: flex; flex-direction: column; gap: 14px; }
+.input { display: flex; flex-direction: column; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--line-soft); }
+.input:last-child { border-bottom: 0; padding-bottom: 0; }
+.input .row { display: flex; align-items: center; gap: 10px; }
+.input .name { font-size: 17px; font-weight: 700; width: 144px; flex: none; }
+.input .det { font-size: 14px; color: var(--ink3); }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 3px; border-radius: 13px; background: var(--surf2); }
+.seg button { min-height: 44px; border: 0; border-radius: 10px; background: transparent; font-size: 15px; font-weight: 600; padding: 4px 6px; line-height: 1.15; }
+.seg button[aria-pressed="true"] { background: var(--purple-fill); color: #fff; font-weight: 700; }
+.meter { flex: 1; height: 10px; border-radius: 5px; background: var(--line); position: relative; overflow: hidden; min-width: 60px; }
+.meter > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 5px; background: var(--ink2); transition: width .12s linear; }
+.meter > b { position: absolute; top: 0; bottom: 0; width: 3px; background: var(--ink); opacity: .8; display: none; }
+.meter.big { height: 14px; border-radius: 7px; }
+
+/* 2 what sort */
+.sorts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-top: 22px; }
+.sort { min-height: 420px; border: 1.5px solid var(--line); border-radius: 26px; background: var(--surf); padding: 26px 24px 22px;
+  display: flex; flex-direction: column; gap: 14px; text-align: left; }
+.sort.sel { border: 2.5px solid var(--purple); }
+.sort.off { border: 1.5px dashed var(--dash); background: var(--surf2); cursor: default; }
+.sort .t { font-family: var(--display); font-size: 36px; font-weight: 700; }
+.sort.off .t, .sort.off .d { color: var(--ink3); }
+.sort .d { font-size: 18px; line-height: 1.4; color: var(--ink2); }
+.sort .why { background: var(--surf); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;
+  font-size: 17px; line-height: 1.4; }
+.sort .why button { min-height: 48px; padding: 0 16px; border: 1.5px solid var(--purple); border-radius: 14px; background: transparent;
+  color: var(--purple-ink); font-size: 17px; font-weight: 700; text-align: left; }
+.sort .end { margin-top: auto; font-size: 17px; font-weight: 600; display: flex; gap: 10px; align-items: center; }
+
+/* 3 which exercise */
+.ex-grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 28px; margin-top: 18px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.col h2 { font-size: 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); margin-top: 8px; }
+.col h2.red { color: var(--red-ink); }
+.strip { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 8px 16px; border-radius: 12px; background: var(--surf2);
+  font-size: 16px; color: var(--ink2); }
+.strip b { color: var(--ink); }
+.ex { min-height: 74px; display: flex; align-items: center; gap: 16px; padding: 8px 18px; border: 1.5px solid var(--line); border-radius: 18px;
+  background: var(--surf); text-align: left; width: 100%; }
+.ex .num { font-family: var(--display); font-size: 26px; font-weight: 700; width: 54px; flex: none; color: var(--ink3); }
+.ex .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ex .title { font-size: 20px; font-weight: 700; }
+.ex .info { font-size: 16px; color: var(--ink3); }
+.ex.sel { border: 2.5px solid var(--purple); background: var(--purple-tint); }
+.ex.sel .num { color: var(--purple-ink); }
+.ex.sel .info { color: var(--ink2); }
+.ex .now { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: var(--purple-ink); flex: none; }
+.list { background: var(--surf); border: 1.5px solid var(--line); border-radius: 18px; display: flex; flex-direction: column; padding: 4px 0; }
+.list button { min-height: 54px; display: flex; align-items: center; gap: 12px; padding: 0 16px; border: 0; border-bottom: 1px solid var(--line-soft);
+  background: transparent; text-align: left; }
+.list button:last-child { border-bottom: 0; }
+.list .n { font-weight: 700; width: 36px; color: var(--ink3); flex: none; }
+.list .t { flex: 1; font-size: 18px; font-weight: 600; }
+.list .r { font-size: 15px; color: var(--ink3); }
+.list button.sel { background: var(--purple-tint); }
+.list button.sel .n { color: var(--purple-ink); }
+.list .more { font-size: 17px; font-weight: 700; color: var(--purple-ink); }
+.tunes { display: flex; flex-wrap: wrap; gap: 8px; }
+.tunes button { min-height: 48px; padding: 0 16px; border: 1.5px solid var(--line); border-radius: 24px; background: var(--surf); font-size: 17px; font-weight: 600; }
+.tunes button.sel { border: 2.5px solid var(--purple); background: var(--purple-tint); }
+
+/* 3 which backing, and the speakers */
+.bk-grid { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 28px; margin-top: 18px; align-items: start; }
+.bk { display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border: 1.5px solid var(--line); border-radius: 20px; background: var(--surf); }
+.bk.sel { border: 2.5px solid var(--purple); }
+.bk .head { display: flex; gap: 10px; align-items: flex-start; }
+.bk .head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.bk .t { font-size: 19px; font-weight: 700; line-height: 1.25; }
+.bk .i { font-size: 15px; color: var(--ink3); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bk .acts { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.bk .use { margin-left: auto; min-height: 52px; padding: 0 18px; border: 0; border-radius: 16px; background: var(--purple-tint); color: var(--purple-ink); font-size: 17px; font-weight: 700; }
+.hear { min-height: 52px; padding: 0 18px; display: inline-flex; align-items: center; gap: 8px; border: 1.5px solid var(--ink2); border-radius: 16px;
+  background: transparent; font-size: 17px; font-weight: 700; }
+.hear.on { border: 0; background: var(--purple-fill); color: #fff; }
+.prog { flex: 1; min-width: 140px; display: flex; flex-direction: column; gap: 4px; }
+.prog .bar { height: 8px; border-radius: 4px; background: var(--line); position: relative; overflow: hidden; }
+.prog .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--purple); border-radius: 4px; width: 0; }
+.prog span { font-size: 14px; color: var(--ink2); }
+.switch { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px;
+  border: 1.5px solid var(--line); border-radius: 16px; background: transparent; font-size: 17px; text-align: left; }
+.switch .track { width: 52px; height: 30px; border-radius: 15px; background: var(--line); display: flex; padding: 3px; flex: none; }
+.switch .track i { width: 24px; height: 24px; border-radius: 12px; background: #fff; }
+.switch[aria-checked="true"] .track { background: var(--purple); justify-content: flex-end; }
+.speakers { border: 2.5px solid var(--ink2); border-radius: 24px; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; background: var(--surf); }
+.speakers .lv { font-family: var(--display); font-size: 64px; font-weight: 700; line-height: 1; }
+.speakers .lv small { font-size: 26px; }
+.speakers .pm { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.speakers .pm button { min-height: 60px; border: 1.5px solid var(--line); border-radius: 16px; background: transparent; font-size: 28px; }
+input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--purple); }
+.scale { display: flex; justify-content: space-between; font-size: 14px; color: var(--ink3); }
+
+/* 3 free play */
+.fr-grid { display: grid; grid-template-columns: 0.8fr 1.2fr; gap: 20px; margin-top: 22px; }
+.fr { border: 1.5px solid var(--line); border-radius: 26px; background: var(--surf); padding: 26px; display: flex; flex-direction: column; gap: 16px; text-align: left; }
+.fr.sel { border: 2.5px solid var(--purple); }
+.fr .t { font-family: var(--display); font-size: 40px; font-weight: 700; display: flex; align-items: center; gap: 14px; }
+.fr .d { font-size: 19px; line-height: 1.4; color: var(--ink2); }
+.radio { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--ink3); flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.sel .radio { border-color: var(--purple); }
+.sel .radio::after { content: ""; width: 18px; height: 18px; border-radius: 50%; background: var(--purple); }
+.bpm { display: flex; align-items: center; gap: 14px; }
+.bpm button { width: 64px; height: 64px; flex: none; border: 1.5px solid var(--line); border-radius: 32px; background: transparent; font-size: 30px; }
+.bpm .bv { flex: 1; text-align: center; font-family: var(--display); font-size: 56px; font-weight: 700; white-space: nowrap; }
+.bpm .bv small { font-size: 22px; font-weight: 600; }
+.bpm.sm button { width: 56px; height: 56px; font-size: 26px; }
+.bpm.sm .bv { flex: none; min-width: 128px; font-size: 36px; }
+.bpm.sm .bv small { font-size: 18px; }
+.kv { display: flex; align-items: center; gap: 14px; }
+.kv > span { font-size: 18px; font-weight: 600; width: 130px; flex: none; }
+.kv .seg { flex: 1; }
+
+/* ready */
+.ready-body { padding-top: 22px; display: flex; flex-direction: column; gap: 16px; }
+.ready-body > * { flex-shrink: 0; }
+.sentence { font-family: var(--display); font-size: 31px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.2; }
+.sentence b { font-weight: 700; }
+.ornext { display: flex; align-items: center; gap: 18px; min-height: 68px; padding: 8px 12px 8px 22px; border-radius: 18px; background: var(--surf2); flex-wrap: wrap; }
+.rows { background: var(--surf); border: 1.5px solid var(--line); border-radius: 22px; display: flex; flex-direction: column; }
+.rows > div { display: flex; align-items: center; gap: 18px; min-height: 84px; padding: 10px 22px; border-bottom: 1px solid var(--line-soft); flex-wrap: wrap; }
+.rows > div:last-child { border-bottom: 0; }
+.rows .k { width: 120px; flex: none; font-size: 15px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); }
+.rows .v { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 3px; }
+.rows .v .big { font-size: 21px; font-weight: 700; }
+.rows .v .sm { font-size: 16px; color: var(--ink3); }
+.rows .change { min-height: 44px; display: flex; align-items: center; padding: 0 8px; color: var(--purple-ink); font-size: 17px; font-weight: 700;
+  background: transparent; border: 0; text-decoration: underline; text-underline-offset: 3px; }
+.ins-line { display: flex; align-items: center; gap: 12px; font-size: 16px; color: var(--ink2); flex-wrap: wrap; }
+.ins-line b { color: var(--ink); }
+.ins-line .meter { flex: none; width: 150px; }
+.toggles { display: flex; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+
+/* recording: the record screen, the take, what was just recorded */
+.rec-head { flex: none; padding: 4px 40px 0; display: flex; flex-direction: column; gap: 10px; }
+.rec-head .sentence { font-size: 44px; line-height: 1.25; font-weight: 500; }
+.rec-head .sentence button { font: inherit; font-weight: 700; color: var(--purple-ink); background: var(--purple-tint); border: 0;
+  border-radius: 14px; padding: 0 12px; margin: 2px 0; }
+.rec-head .meta { display: flex; align-items: center; gap: 10px; font-size: 17px; color: var(--ink2); flex-wrap: wrap; }
+.rec-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; padding: 16px 28px 24px 40px; }
+.score { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--surf); border: 1.5px solid var(--line);
+  border-radius: 22px; padding: 14px 16px; }
+.score .bar { display: flex; justify-content: space-between; align-items: center; font-size: 15px; color: var(--ink3); margin-bottom: 6px; }
+.score .bar button { background: transparent; border: 0; color: var(--purple-ink); font-weight: 700; text-decoration: underline; min-height: 44px; }
+.score img { display: block; width: 100%; height: auto; filter: invert(0.92); mix-blend-mode: lighten; margin-bottom: 10px; }
+.score .none { color: var(--ink3); padding: 40px 20px; text-align: center; font-size: 19px; line-height: 1.5; }
+.readme { font-size: 16px; line-height: 1.5; color: var(--ink2); background: var(--surf2); border-radius: 14px; padding: 12px 16px; margin-bottom: 12px; }
+.readme > :first-child { margin-top: 0; }
 .readme p, .readme ul, .readme ol { margin: 0 0 8px; }
 .readme ul, .readme ol { padding-left: 1.3em; }
-.readme ul { list-style: disc; }
-.readme li { margin-bottom: 2px; }
-.readme h2, .readme h3, .readme h4 { font-size: 15px; color: var(--text); margin: 12px 0 4px; }
-.readme code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--meter-bg); border-radius: 4px; padding: 0 3px; }
-.readme pre { font: 13px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--meter-bg); border-radius: 6px;
-  padding: 8px 10px; overflow-x: auto; margin: 0 0 8px; }
-.readme table { border-collapse: collapse; margin: 0 0 8px; font-size: 14px; }
+.readme h2, .readme h3, .readme h4 { font-size: 16px; color: var(--ink); margin: 12px 0 4px; }
+.readme code, .readme pre { font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); border-radius: 4px; padding: 0 3px; }
+.readme pre { padding: 8px 10px; overflow-x: auto; }
+.readme table { border-collapse: collapse; margin: 0 0 8px; font-size: 15px; }
 .readme th, .readme td { border-bottom: 1px solid var(--line); padding: 4px 10px 4px 0; text-align: left; vertical-align: top; }
-.readme th { color: var(--muted); font-weight: 600; }
-/* the controls */
-.side {
-  border-left: 1px solid var(--line); background: var(--card); overflow-y: auto; -webkit-overflow-scrolling: touch;
-  padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) 14px;
-  display: flex; flex-direction: column; gap: 12px;
+.readme th { color: var(--ink3); }
+.side { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.box { background: var(--surf2); border-radius: 18px; padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; }
+.box .row { display: flex; justify-content: space-between; font-size: 16px; }
+.recbtn { margin-top: auto; min-height: 132px; border: 0; border-radius: 26px; background: var(--red); color: #fff; display: flex; align-items: center;
+  justify-content: center; gap: 18px; font-family: var(--display); font-size: 40px; font-weight: 700; }
+.recbtn:disabled { background: #2A2531; color: var(--faint); }
+.recbtn i { width: 28px; height: 28px; border-radius: 50%; background: #fff; }
+.recbtn.stop i { border-radius: 4px; }
+.recording-chip { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 18px; border-radius: 22px; background: var(--red);
+  color: #fff; font-size: 18px; font-weight: 700; flex: none; animation: pulse 1.6s ease-in-out infinite; }
+.recording-chip i { width: 10px; height: 10px; border-radius: 50%; background: #fff; }
+@keyframes pulse { 50% { opacity: .78; } }
+.live { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 40px; border-top: 1.5px solid var(--line); }
+.live .score { border: 0; background: transparent; padding: 0; overflow: visible; }
+.bigtime { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; height: 100%; min-height: 240px; text-align: center; }
+.bigtime .v { font-family: var(--display); font-size: 120px; font-weight: 700; line-height: 1; }
+.bigtime .s { font-size: 22px; color: var(--ink2); }
+.bigtime .prog { width: min(720px, 100%); flex: none; }
+.bigtime .prog .bar { height: 14px; border-radius: 7px; }
+.rec-bar { flex: none; min-height: 150px; display: flex; align-items: center; gap: 32px; padding: 16px 28px 16px 40px; background: var(--surf2);
+  border-top: 1.5px solid var(--line); flex-wrap: wrap; }
+.where { display: flex; align-items: baseline; gap: 10px; min-width: 210px; }
+.where .v { font-family: var(--display); font-size: 64px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.where .v.count { color: var(--red-ink); font-size: 88px; }
+.where .of { font-size: 22px; color: var(--ink3); }
+.beats { display: flex; flex-direction: column; gap: 8px; }
+.beats .dots { display: flex; gap: 10px; }
+.beats .dots i { width: 30px; height: 30px; border-radius: 50%; border: 2.5px solid var(--faint); }
+.beats .dots i.on { background: var(--purple); border-color: var(--purple); }
+.beats span, .clock span { font-size: 16px; color: var(--ink3); }
+.clock { display: flex; flex-direction: column; align-items: center; }
+.clock .v { font-family: var(--display); font-size: 46px; font-weight: 700; line-height: 1.1; }
+.meters { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 8px; font-size: 16px; }
+.meters .row { display: flex; align-items: center; gap: 12px; }
+.meters .row span { width: 96px; flex: none; }
+.meters .peak { font-size: 15px; color: var(--ink3); }
+.meters .peak.clip { color: var(--red-ink); font-weight: 700; }
+.stopbtn { min-height: 104px; min-width: 240px; border: 0; border-radius: 24px; background: var(--red); color: #fff; display: flex; align-items: center;
+  justify-content: center; gap: 14px; font-family: var(--display); font-size: 40px; font-weight: 700; margin-left: auto; }
+.stopbtn i { width: 24px; height: 24px; border-radius: 4px; background: #fff; }
+
+.done-head { flex: none; padding: 6px 40px 0; display: flex; flex-direction: column; gap: 10px; }
+.done-head h1 { font-family: var(--display); font-size: 46px; font-weight: 500; line-height: 1.15; letter-spacing: -0.015em; }
+.done-head h1 b { color: var(--purple-ink); font-weight: 700; }
+.lined { display: flex; align-items: center; gap: 10px; font-size: 18px; color: var(--ink2); }
+.done-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; padding: 18px 28px 24px 40px; }
+.take-card { background: var(--surf); border: 1.5px solid var(--line); border-radius: 22px; padding: 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0; min-height: 0; overflow-y: auto; }
+.wave { position: relative; height: 130px; cursor: pointer; touch-action: manipulation; }
+.wave svg { width: 100%; height: 100%; display: block; }
+.wave .head { position: absolute; top: 0; bottom: 0; width: 3px; background: var(--red-dot); left: 0; display: none; }
+.wave .b0 { position: absolute; top: 0; bottom: 0; border-left: 2px dotted var(--purple-line); }
+.wave-times { display: flex; justify-content: space-between; font-size: 15px; color: var(--ink3); }
+.wave-times b { color: var(--purple-ink); font-weight: 600; }
+.acts { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.acts .btn { min-height: 60px; font-size: 19px; }
+.acts .btn.fill { border: 0; background: var(--purple-fill); color: #fff; }
+.notefield { display: flex; align-items: center; gap: 12px; }
+.notefield label { font-weight: 700; }
+.notefield input { flex: 1; min-height: 56px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--bg); padding: 0 14px; font-size: 18px; }
+.next-acts { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr 84px; gap: 12px; }
+.next-acts button { min-height: 84px; border-radius: 20px; font-family: var(--display); font-size: 26px; font-weight: 700; }
+.next-acts .again { border: 2px solid var(--red-ink); background: transparent; color: var(--red-ink); display: flex; align-items: center; justify-content: center; gap: 12px; }
+.next-acts .again i { width: 20px; height: 20px; border-radius: 50%; background: var(--red-dot); }
+.next-acts .else { border: 0; background: var(--purple-tint); color: var(--purple-ink); }
+.next-acts .del { border: 1.5px solid var(--line); background: transparent; display: flex; align-items: center; justify-content: center; }
+.takes { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
+.takes h2 { font-family: var(--display); font-size: 26px; font-weight: 700; }
+.tk { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 18px; background: transparent; text-align: left; width: 100%; }
+.tk.on { background: var(--purple-tint); border-color: var(--purple-tint); }
+.tk .play { width: 52px; height: 52px; flex: none; border-radius: 26px; border: 1.5px solid var(--ink2); display: flex; align-items: center; justify-content: center; }
+.tk.on .play { background: var(--purple); border-color: var(--purple); }
+.tk .m { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tk .m b { font-size: 17px; }
+.tk .m span { font-size: 14px; color: var(--ink2); }
+.tk .m em { font-size: 14px; color: var(--ink3); }
+.tip { margin-top: auto; background: var(--surf2); border-radius: 16px; padding: 14px 16px; font-size: 16px; line-height: 1.4; color: var(--ink2); }
+
+/* the takes, from the record screen */
+.sheet { position: fixed; inset: 0; background: rgba(0, 0, 0, .6); display: flex; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
+.sheet-box { background: var(--surf2); border: 1.5px solid var(--line); width: min(760px, 100%); max-height: min(92dvh, 900px); border-radius: 22px; display: flex; flex-direction: column; overflow: hidden; }
+.sheet-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.sheet-head h2 { flex: 1; font-family: var(--display); font-size: 26px; }
+.sheet-list { overflow-y: auto; padding: 12px 18px 18px; display: flex; flex-direction: column; gap: 10px; }
+.sheet-list .tk { flex-wrap: wrap; }
+.sheet-list .tk .x { display: flex; gap: 8px; }
+.sheet-list .tk .x a, .sheet-list .tk .x button { min-height: 44px; padding: 0 12px; border: 1.5px solid var(--line); border-radius: 12px; background: transparent;
+  display: inline-flex; align-items: center; color: var(--ink); text-decoration: none; font-size: 15px; }
+.empty { color: var(--ink3); padding: 12px 0; }
+
+@media (max-width: 1060px) {
+  .on-grid, .ex-grid, .bk-grid { grid-template-columns: minmax(0, 1fr); }
+  .rec-grid, .done-grid { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
+  .score { min-height: 360px; }
+  .sorts { grid-template-columns: minmax(0, 1fr); }
+  .sort { min-height: 0; }
+  .fr-grid { grid-template-columns: minmax(0, 1fr); }
 }
-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-h1 { font-size: 18px; margin: 0; font-weight: 600; }
-a.home { display: inline-block; font-size: 14px; color: var(--muted); text-decoration: none; }
-.status { font-size: 13px; color: var(--muted); text-align: right; }
-.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 4px; vertical-align: 1px; }
-.dot.on { background: var(--ok); }
-select { width: 100%; min-height: 44px; font: inherit; color: var(--text); background: var(--card);
-  border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
-.meta { font-size: 13px; color: var(--muted); margin-top: 4px; }
-.row { display: flex; align-items: center; gap: 8px; }
-.tempo { justify-content: space-between; }
-.tempo .bpm { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 4.2em; text-align: center; }
-.tempo .bpm small { font-size: 13px; font-weight: 400; color: var(--muted); }
-button.small {
-  border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 10px;
-  padding: 8px 12px; font-size: 15px; cursor: pointer; min-height: 44px; min-width: 44px;
-}
-button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-button:disabled { opacity: .45; }
-.toggles { display: flex; gap: 6px 18px; font-size: 15px; flex-wrap: wrap; }
-.toggles label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
-.toggles input { width: 22px; height: 22px; accent-color: var(--accent); margin: 0; }
-.toggles .why { align-self: center; flex: 1 1 12em; }
-/* the start panel: what the next take is, over what, on what, at what tempo */
-fieldset.start { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
-.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.label { font-size: 13px; font-weight: 600; color: var(--muted); }
-.why { font-size: 13px; color: var(--muted); }
-.why:empty { display: none; }
-.seg { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 12px; background: var(--meter-bg); }
-.seg button { flex: 1; min-height: 44px; border: 0; border-radius: 9px; background: transparent; color: var(--text);
-  font: inherit; font-weight: 600; cursor: pointer; }
-.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
-.seg button:disabled { opacity: .45; }
-.seg .n { font-weight: 400; }
-.tempo .bpm-box { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; }
-.tempo .bpm-box .why { font-size: 12px; line-height: 1.25; text-align: center; }
-.tempo .bpm.off { color: var(--muted); }
-fieldset:disabled .toggles label { cursor: default; }
-/* Record, and beside it the next take in a sentence; while recording, where the player is */
-.rec { display: flex; flex-direction: column; gap: 8px; padding: 2px 0; }
-.rec-row { display: flex; align-items: center; gap: 14px; }
-.rec-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-#summary { font-size: 14px; line-height: 1.35; }
-#recBtn {
-  width: 100px; height: 100px; flex: none; border-radius: 50%; border: 0; cursor: pointer;
-  background: var(--rec); color: var(--rec-text); font-size: 20px; font-weight: 600;
-  box-shadow: 0 2px 10px rgba(0,0,0,.15);
-}
-#recBtn.active { border-radius: 24px; animation: pulse 1.6s ease-in-out infinite; }
-@keyframes pulse { 50% { opacity: .82; } }
-#recBtn:disabled { opacity: .45; }
-#where { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.25; }
-#where.count { color: var(--rec); font-size: 34px; }
-#timer { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
-#where:empty, #timer:empty { display: none; }
-.meter { width: 100%; height: 12px; background: var(--meter-bg); border-radius: 6px; overflow: hidden; position: relative; }
-.meter > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ok); transition: width .12s linear; }
-.meter > b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: .6; left: 0; }
-#clip { color: var(--rec); font-weight: 600; font-size: 14px; text-align: center; }
-#clip:empty { display: none; }
-.now { display: none; border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
-.now.show { display: block; }
-.now-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
-.progress { height: 28px; display: flex; align-items: center; cursor: pointer; }
-.progress > div { flex: 1; height: 6px; background: var(--meter-bg); border-radius: 3px; position: relative; }
-.progress > div > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); border-radius: 3px; }
-.times { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-#error { display: none; border: 1px solid var(--rec); border-radius: 12px; padding: 10px; font-size: 14px;
-  background: color-mix(in srgb, var(--rec) 12%, var(--card)); }
-#error.show { display: block; }
-h2 { font-size: 14px; margin: 4px 0 0; color: var(--muted); font-weight: 600; }
-ul { list-style: none; margin: 0; padding: 0; }
-li.take { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
-li.take:first-child { border-top: 0; padding-top: 2px; }
-.take-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.take-when { font-weight: 600; font-size: 15px; }
-.take-len { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
-.take-info { font-size: 12px; color: var(--muted); }
-.take-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.take-actions .small { min-height: 38px; padding: 6px 10px; font-size: 14px; }
-a.small { text-decoration: none; display: inline-flex; align-items: center; border: 1px solid var(--line);
-  border-radius: 10px; color: var(--text); }
-.take-note { font-size: 13px; color: var(--muted); cursor: pointer; }
-.take-note:empty::before { content: "Add a note"; opacity: .7; }
-li.playing .take-when { color: var(--accent); }
-.empty { color: var(--muted); font-size: 14px; }
-.level { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-.level input { flex: 1; accent-color: var(--accent); }
-/* the exercise: what is chosen, and the picker */
-button.current { width: 100%; text-align: left; border: 1px solid var(--line); background: var(--card); color: var(--text);
-  border-radius: 12px; padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; min-height: 60px; font: inherit; }
-button.current:disabled { opacity: .55; }
-.cur-line { display: flex; align-items: baseline; gap: 8px; }
-.cur-num { font-size: 13px; color: var(--muted); white-space: nowrap; }
-.cur-title { font-weight: 600; font-size: 17px; flex: 1; }
-.chev { color: var(--muted); font-size: 22px; line-height: 1; }
-.cur-status { font-size: 13px; color: var(--muted); }
-.cur-status.good { color: var(--ok); } .cur-status.wanted { color: var(--warn-text); } .cur-status.review { color: var(--accent); }
-.picker { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 10; }
-.picker[hidden] { display: none; }
-.picker-box { background: var(--card); width: min(920px, 96vw); height: min(92dvh, 960px); border-radius: 16px; display: flex;
-  flex-direction: column; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
-.picker-head { display: flex; align-items: center; gap: 8px; padding: 12px 12px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-.tabs { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
-.tab, .chip { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 999px; font: inherit; cursor: pointer; }
-.tab { padding: 8px 16px; font-weight: 600; min-height: 44px; }
-.tab.on { background: var(--text); color: var(--card); border-color: var(--text); }
-.tab .count { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 10px; background: var(--warn); color: #1b1d22;
-  font-size: 12px; font-weight: 700; margin-left: 4px; text-align: center; }
-.filters { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-.chip { padding: 6px 12px; font-size: 14px; min-height: 38px; }
-.chip.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.ex-list { overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
-.ex-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); cursor: pointer; min-height: 62px; }
-.ex-row.selected { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.badge { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 15px; flex: none; box-sizing: border-box; }
-.badge.good { background: var(--ok); color: #fff; }
-.badge.wanted { background: var(--warn); color: #1b1d22; }
-.badge.review { background: var(--accent); color: #fff; }
-.badge.needed { border: 2px solid var(--muted); color: var(--muted); }
-.ex-num { font-variant-numeric: tabular-nums; color: var(--muted); width: 2.2em; flex: none; }
-.ex-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-.ex-title { font-weight: 600; font-size: 16px; }
-.ex-sub { font-size: 13px; color: var(--muted); }
-li.group { padding: 12px 16px 4px; font-size: 13px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); }
-@media (max-width: 860px) {  /* a phone, or the iPad held upright: controls under the score */
-  body { overflow: auto; }
-  .app { display: block; height: auto; }
-  .side { border-left: 0; border-top: 1px solid var(--line); }
-}
-@media (min-width: 600px) and (max-width: 860px) {  /* the iPad upright: the start panel in two columns */
-  fieldset.start { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; align-items: start; }
+@media (max-width: 700px) {
+  body { font-size: 16px; }
+  .top { padding: 8px 16px; }
+  .body { padding: 14px 16px 18px; }
+  .foot { padding: 12px 16px; }
+  .rec-head, .done-head, .live { padding-left: 16px; padding-right: 16px; }
+  .rec-grid, .done-grid { padding: 12px 16px 16px; }
+  .rec-bar { padding: 12px 16px; gap: 16px; }
+  .q h1 { font-size: 34px; }
+  .sentence { font-size: 24px; }
+  .rec-head .sentence, .done-head h1 { font-size: 30px; }
+  .rows .k { width: 100%; }
+  .stopbtn { min-width: 0; width: 100%; }
+  .chip { max-width: 160px; }
 }
 </style>
 </head>
 <body>
 <div class="app">
-  <main class="score" id="score"><div class="none">Choose an exercise.</div></main>
-
-  <aside class="side">
-    <header>
-      <div><a class="home" id="home" href="/">‹ Music room</a><h1>Exercises</h1></div>
-      <div class="status"><span class="dot" id="devDot"></span><span id="devText">connecting…</span><br><span id="free"></span></div>
-    </header>
-
-    <div id="error"></div>
-
-    <fieldset class="start" id="startPanel">
-      <legend class="vh">The next take</legend>
-
-      <div class="field">
-        <div class="seg" role="group" aria-label="What to record">
-          <button type="button" id="modeEx" aria-pressed="true">Exercise</button>
-          <button type="button" id="modeFree" aria-pressed="false">Free take</button>
-        </div>
-        <button type="button" class="current" id="exPick" aria-haspopup="dialog">
-          <span class="cur-line"><span class="cur-num" id="curNum"></span><span class="cur-title" id="curTitle">Choose an exercise</span><span class="chev">›</span></span>
-          <span class="cur-status" id="curStatus"></span>
-        </button>
-        <div class="meta" id="exMeta"></div>
-      </div>
-
-      <div class="field">
-        <div class="label" id="guideLabel">From the speakers</div>
-        <div class="seg" id="guideSeg" role="group" aria-labelledby="guideLabel">
-          <button type="button" id="guideClick" aria-pressed="true">The click</button>
-          <button type="button" id="guideBacking" aria-pressed="false">Backing track</button>
-        </div>
-        <select id="backingSel" aria-label="Which backing track" hidden></select>
-      </div>
-
-      <div class="field">
-        <label class="label" for="instrSel">Played on</label>
-        <select id="instrSel"></select>
-      </div>
-
-      <div class="field">
-        <div class="label">Tempo</div>
-        <div class="row tempo" id="tempoRow">
-          <button type="button" class="small" id="slower" aria-label="Slower">−</button>
-          <span class="bpm-box"><span class="bpm" id="bpm">–</span><span class="why" id="bpmWhy"></span></span>
-          <button type="button" class="small" id="faster" aria-label="Faster">+</button>
-          <button type="button" class="small" id="tempoReset" title="The score's tempo" aria-label="The score's tempo">↺</button>
-        </div>
-        <div class="toggles">
-          <label id="countInBox"><input type="checkbox" id="countIn" checked><span>Count-in</span></label>
-          <label id="clickBox"><input type="checkbox" id="click" checked><span>Click on every beat</span></label>
-          <span class="why" id="tempoWhy"></span>
-        </div>
-      </div>
-    </fieldset>
-
-    <div class="rec">
-      <div class="rec-row">
-        <button id="recBtn">Record</button>
-        <div class="rec-side">
-          <div id="summary"></div>
-          <div id="where"></div>
-          <div id="timer"></div>
-        </div>
-      </div>
-      <div class="meter" aria-label="input level"><i id="meterBar"></i><b id="peakMark"></b></div>
-      <div id="clip"></div>
-    </div>
-
-    <div class="now" id="now">
-      <div class="now-head"><span id="nowTitle"></span><button class="small" id="stopBtn">Stop</button></div>
-      <div class="progress" id="progress"><div><i id="progBar"></i></div></div>
-      <div class="times"><span id="pos">0:00</span><span id="dur">0:00</span></div>
-    </div>
-
-    <h2 id="takesHead">Takes</h2>
-    <ul id="takes"><li class="empty">No takes yet.</li></ul>
-
-    <div class="level">
-      <span>Speakers</span>
-      <input type="range" id="level" min="-30" max="12" step="1" value="0">
-      <span id="levelText">0 dB</span>
-    </div>
-  </aside>
+  <header class="top">
+    <a class="home" id="home" href="/"><svg class="svg-i" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span id="homeText">Music room</span></a>
+    <div class="mid" id="mid"></div>
+    <div class="end" id="end"></div>
+  </header>
+  <div class="banner" id="error" hidden><span id="errorText"></span><button type="button" data-act="dismiss">OK</button></div>
+  <div class="screen" id="screen"></div>
 </div>
 
-<div class="picker" id="picker" hidden>
-  <div class="picker-box" role="dialog" aria-label="Choose an exercise">
-    <div class="picker-head">
-      <div class="tabs" id="tabs"></div>
-      <button class="small primary" id="pickClose">Done</button>
-    </div>
-    <div class="filters" id="filters"></div>
-    <ul class="ex-list" id="exList"></ul>
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-box" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-head"><h2 id="sheetTitle">Takes</h2><button type="button" class="btn small" data-act="sheet-close">Done</button></div>
+    <div class="sheet-list" id="sheetList"></div>
   </div>
 </div>
 
 <script>
-document.getElementById("home").href = `http://${location.hostname}/`;
-const $ = (id) => document.getElementById(id);
-let status = null, takesVersion = -1, takes = [], pollTimer = null, exercises = [], backings = [];
-let backingsAt = Date.now(), backingsLoaded = false;  // when the backing tracks were last listed (one can be pushed while the page is open)
-let selectedId = null;  // the exercise chosen ("" for a free take)
-let instrumentsKnown = [];  // the instruments the project keeps notes on (status.json)
-const store = {
-  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ICON = {
+  check: '<svg class="svg-i" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#A78BFA" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  chev: '<svg class="svg-i chev" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="#7E768B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  back: '<svg class="svg-i" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="#F2EEF8" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  next: '<svg class="svg-i" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  restart: '<svg class="svg-i" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v4.5H9" fill="none" stroke="#F2EEF8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  swap: '<svg class="svg-i" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h14l-4-4M20 16H6l4 4" fill="none" stroke="#B9A0FF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  boxcheck: '<svg class="svg-i" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6" fill="#8B5CF6"></rect><path d="M6.5 12.5l3.5 3.5 7.5-8" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  roundcheck: '<svg class="svg-i" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#8B5CF6"></circle><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  play: '<svg class="svg-i" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"></path></svg>',
+  stop: '<svg class="svg-i" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"></rect></svg>',
+  ipad: '<svg class="svg-i" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"></rect><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>',
+  trash: '<svg class="svg-i" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5" fill="none" stroke="#F2EEF8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  speaker: '<svg class="svg-i" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="#F2EEF8"></path><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="#F2EEF8" stroke-width="2" stroke-linecap="round"></path></svg>',
 };
+$("#home").href = `http://${location.hostname}/`;
 
-function signedDb(v) { return (v > 0 ? `+${v}` : `${v}`) + " dB"; }  // the speakers' offset: a boost shows its sign
-function fmt(s) {
-  s = Math.max(0, Math.floor(s));
-  const m = Math.floor(s / 60), sec = String(s % 60).padStart(2, "0");
-  return `${m}:${sec}`;
-}
+// --- what the server has, and what is chosen
+const S = {
+  status: null, exercises: [], instruments: [], backings: [], inputs: [], takes: [],
+  choices: null,  // the next take (saved on the control unit, PUT /api/choices)
+  screen: "ready",  // on | sort | which | ready | record | recording | recorded
+  walk: false,  // walking the steps from the top: each one leads to the next
+  snapshot: null,  // the choices as they were when a step was opened from Ready
+  take: null,  // the take just recorded (the recorded screen)
+  showGood: false, showReadme: false, sheet: false, peaks: {}, error: "",
+};
+const DEFAULTS = { instruments: [], inputs: {}, kind: null, exercise: null, tempo: {}, countIn: true, clickThrough: true,
+  backing: null, backingCountIn: true, freeClick: false, freeBpm: 92, freeBpb: 4, freeCountIn: true };
+const C = () => S.choices;
+const ORDER = ["dobro", "bass", "guitar", "banjo"];
+const NAMES = { bass: "Bass", dobro: "Dobro", guitar: "Guitar", banjo: "Banjo" };
+const KIND_RE = /^[a-z][a-z0-9 -]{0,29}$/;
+function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
+function kindName(k) { return NAMES[k] || (k ? cap(k) : "Other"); }
+function article(kind) { return /^[aeiou]/.test(kind) ? "an" : "a"; }
+function notListed(kind) { return kind ? `${article(kind)} ${kind} (not listed)` : "an instrument (not listed)"; }
+function fmt(s) { s = Math.max(0, Math.floor(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
 function when(iso) {
-  const d = new Date(iso), now = new Date();
+  if (!iso) return "";
+  const d = new Date(iso), now = new Date(), y = new Date(now); y.setDate(now.getDate() - 1);
   const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  if (d.toDateString() === now.toDateString()) return `Today ${time}`;
-  return d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }) + ` ${time}`;
+  if (d.toDateString() === now.toDateString()) return `today ${time}`;
+  if (d.toDateString() === y.toDateString()) return `yesterday ${time}`;
+  return d.toLocaleDateString([], { day: "numeric", month: "short" }) + `, ${time}`;
 }
+function dbText(v) { return v == null || v <= -99 ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(Math.round(v))} dB`; }
 function meterPct(db) { return Math.max(0, Math.min(100, (db + 60) / 60 * 100)); }
+
+// instruments: the ones the project knows, and any kind not listed ("other:guitar")
+function instInfo(id) {
+  const k = S.instruments.find((i) => i.id === id);
+  if (k) return { ...k, the: `the ${k.short}` };
+  if (typeof id === "string" && id.startsWith("other:")) {
+    const kind = id.slice(6);
+    return { id, kind, short: cap(notListed(kind)), name: notListed(kind), the: notListed(kind), other: true };
+  }
+  return null;
+}
+function chosen() { return (C().instruments || []).map(instInfo).filter(Boolean); }
+function kinds() {
+  const rank = (k) => (ORDER.indexOf(k) < 0 ? 99 : ORDER.indexOf(k));
+  const all = new Set([...ORDER, ...S.instruments.map((i) => i.kind), ...S.exercises.map((e) => e.instrument || "")]);
+  return [...all].filter(Boolean).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+}
+function andList(xs) { return xs.length < 2 ? xs.join("") : xs.slice(0, -1).join(", ") + " and " + xs[xs.length - 1]; }
+
+// exercises: by number, and what the project still wants of each
+function exById(id) { return S.exercises.find((e) => e.id === id) || null; }
+function exNum(e) { const m = /^[a-z]+-(\d{3})-/.exec(e.id); return m ? m[1] : ""; }
+function shortTitle(e) { const m = /Exercise \d+:\s*(.*)$/.exec(e.title); return m ? m[1] : e.title; }
+function exName(e) { return exNum(e) ? `${kindName(e.instrument)} ${exNum(e)} ${shortTitle(e)}` : e.title; }
+function byNumber(a, b) { return (exNum(a) || "999").localeCompare(exNum(b) || "999") || a.title.localeCompare(b.title); }
+function exState(e) {
+  if (e.to_review > 0) return { key: "review", label: e.to_review === 1 ? "1 new take to review" : `${e.to_review} new takes to review` };
+  if (e.status === "wanted") return { key: "wanted", label: "Wanted again" };
+  if (e.status === "good") return { key: "good", label: "Good" };
+  return { key: "needed", label: "Needs a take" };
+}
+function todo(e) { const k = exState(e).key; return k === "needed" || k === "wanted"; }
+function exercisesFor(kind) { return S.exercises.filter((e) => (e.instrument || "") === kind).sort(byNumber); }
+function tempoOf(e) { return Number((C().tempo || {})[e.id] || e.tempo.bpm); }
+function nextExercise() {  // after this one: the next the project still wants
+  const e = exById(C().exercise);
+  if (!e || !exNum(e)) return null;
+  const list = exercisesFor(e.instrument).filter(exNum);
+  return list.find((x) => exNum(x) > exNum(e) && todo(x)) || list.find((x) => x.id !== e.id && todo(x)) || null;
+}
+
+// backings: newest first; one pushed in the last three days is new
+function backingById(id) { return S.backings.find((b) => b.id === id) || null; }
+function backingsNewest() { return [...S.backings].sort((a, b) => (b.added || "").localeCompare(a.added || "")); }
+function isNew(b) {
+  const last = S.takes.find((t) => t.kind ? t.kind === "playalong" : !t.exercise && t.backing);
+  return !!b.added && (last ? b.added > last.started : Date.now() - new Date(b.added).getTime() < 3 * 86400e3);
+}
+
+// the inputs: what each carries (an instrument's id, "room" or "none"); by default a pickup the
+// instrument of its kind, a room mic the one instrument without a pickup of its own (else the room)
+function defaultInputs(insts) {
+  const pickedUp = new Set(S.inputs.filter((i) => i.for).map((i) => i.for));
+  const unheard = insts.filter((i) => !pickedUp.has(i.kind));
+  const out = {};
+  for (const inp of S.inputs) {
+    if (inp.for) { const m = insts.find((i) => i.kind === inp.for); out[inp.input] = m ? m.id : "none"; }
+    else out[inp.input] = unheard.length === 1 ? unheard[0].id : "room";
+  }
+  return out;
+}
+function carries() {  // what each input carries now, checked against the instruments chosen
+  const ids = new Set(chosen().map((i) => i.id)), def = defaultInputs(chosen()), out = {};
+  for (const inp of S.inputs) {
+    const v = (C().inputs || {})[inp.input];
+    out[inp.input] = v && (ids.has(v) || v === (inp.for ? "none" : "room")) ? v : def[inp.input];
+  }
+  return out;
+}
+function inputsOf(id) { const c = carries(); return S.inputs.filter((i) => c[i.input] === id).sort((a, b) => a.input - b.input); }
+function inputLabel(i) { return `In ${i.input} · ${i.name}`; }
+
+// --- the steps, and whether each is answered
+const STEPS = ["on", "sort", "which"];
+function exerciseBlocked() {  // why an exercise cannot be the next take, or ""
+  const ins = chosen();
+  if (ins.length > 1) return "two";
+  if (!ins.length) return "none";
+  if (!ins[0].kind || !exercisesFor(ins[0].kind).length) return "noexercises";
+  return "";
+}
+function stepOk(step) {
+  const c = C();
+  if (step === "on") return chosen().length > 0;
+  if (step === "sort") return c.kind === "free" || (c.kind === "playalong" && S.backings.length > 0) || (c.kind === "exercise" && !exerciseBlocked());
+  if (step === "which") {
+    if (c.kind === "exercise") { const e = exById(c.exercise); return !!e && !exerciseBlocked() && (e.instrument || "") === chosen()[0].kind; }
+    if (c.kind === "playalong") return !!backingById(c.backing);
+    return c.kind === "free";
+  }
+  return true;
+}
+function firstOpen() { return STEPS.find((s) => !stepOk(s)) || null; }
+function readyOk() { return !firstOpen(); }
+function whichName() {
+  const k = C().kind;
+  return k === "exercise" ? "Which one" : k === "playalong" ? "Which backing" : k === "free" ? "From the speakers" : "Then";
+}
+function stepValue(step) {  // a step's answer, short, for its chip
+  const c = C();
+  if (step === "on") return chosen().map((i) => i.short).join(" + ");
+  if (step === "sort") return { exercise: "Exercise", playalong: "Play-along", free: "Free play" }[c.kind] || "";
+  const e = exById(c.exercise), b = backingById(c.backing);
+  if (c.kind === "exercise") return e ? (exNum(e) || shortTitle(e)) : "";
+  if (c.kind === "playalong") return b ? b.title : "";
+  return c.freeClick ? `Click at ${c.freeBpm}` : "Nothing";
+}
+
+// --- the next take in words: what, over what, on what
+function sentenceParts() {
+  const c = C(), ins = chosen(), on = andList(ins.map((i) => i.the));
+  if (c.kind === "exercise") {
+    const e = exById(c.exercise), bpm = e ? Math.round(tempoOf(e)) : 0;
+    const over = c.clickThrough ? `the click at ${bpm}` + (c.countIn ? "" : ", no count-in")
+      : c.countIn ? `a bar's count-in at ${bpm}, then no click` : "nothing";
+    return { what: e ? exName(e) : "an exercise", lead: "", over, overWord: c.clickThrough || c.countIn ? "over" : "with", on };
+  }
+  if (c.kind === "playalong") {
+    const b = backingById(c.backing);
+    return { what: b ? b.title : "a backing", lead: "Along with", over: b && b.tempo && c.backingCountIn ? "its count-in first" : "", on };
+  }
+  return { what: "Free play", lead: "", over: c.freeClick ? `a click at ${c.freeBpm}` : "", overWord: "with", on };
+}
+function sentenceHtml() {
+  const p = sentenceParts(), c = C();
+  if (c.kind === "playalong") return `Along with <b>${esc(p.what)}</b>${p.over ? `, ${esc(p.over)}` : ""}, on ${esc(p.on)}`;
+  if (c.kind === "free") return `<b>Free play</b> on ${esc(p.on)}${p.over ? `, with ${esc(p.over)}` : ""}`;
+  return `<b>${esc(p.what)}</b>, ${p.overWord} ${esc(p.over)}, on ${esc(p.on)}`;
+}
+
+// --- talking to the control unit
 async function api(method, path, body) {
-  const r = await fetch(path, {
-    method, headers: body ? { "Content-Type": "application/json" } : {},
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const r = await fetch(path, { method, headers: body !== undefined ? { "Content-Type": "application/json" } : {},
+    body: body !== undefined ? JSON.stringify(body) : undefined });
   if (!r.ok) {
     let msg = `${r.status}`;
     try { msg = (await r.json()).detail || msg; } catch (e) {}
@@ -336,141 +582,551 @@ async function api(method, path, body) {
   }
   return r.json();
 }
-function showError(msg) { $("error").textContent = msg || ""; $("error").classList.toggle("show", !!msg); }
+function showError(msg) { S.error = msg || ""; $("#errorText").textContent = S.error; $("#error").hidden = !S.error; }
 async function act(fn) { try { showError(""); await fn(); } catch (e) { showError(e.message); } poll(true); }
+let saveTimer = null;
+function save() {  // the choices, on the control unit (a moment after the last change)
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => api("PUT", "/api/choices", C()).catch(() => {}), 400);
+}
+function set(changes) { Object.assign(S.choices, changes); save(); render(); }
 
-// --- the exercise and its score
-function current() { return exercises.find((e) => e.id === selectedId) || null; }
-// what plays from the speakers: "click" (the click for an exercise, nothing for a free take) or a
-// backing's id; remembered apart for exercises and free takes
-let guide = "click";
-function guideKey() { return selectedId ? "guide:exercise" : "guide:free"; }
-function backing() { return backings.find((b) => b.id === guide) || null; }
-function tempoFor(ex) { return ex ? Number(store.get(`tempo:${ex.id}`, ex.tempo.bpm)) : null; }
-
-// what the project has of each exercise (status.json, from dobro-transcription), and what is here
-const ORDER = ["bass", "dobro", "guitar", "banjo"];
-const NAMES = { bass: "Bass", dobro: "Dobro", guitar: "Guitar", banjo: "Banjo" };
-function instName(i) { return NAMES[i] || (i ? i[0].toUpperCase() + i.slice(1) : "Other"); }
-function exNum(e) { const m = /^[a-z]+-(\d{3})-/.exec(e.id); return m ? m[1] : ""; }
-function shortTitle(e) { const m = /Exercise \d+:\s*(.*)$/.exec(e.title); return m ? m[1] : e.title; }
-function state(e) {
-  if (e.to_review > 0) return { key: "review", icon: "●", label: e.to_review === 1 ? "New take to review" : `${e.to_review} new takes to review` };
-  if (e.status === "wanted") return { key: "wanted", icon: "!", label: "Wants a new take" };
-  if (e.status === "good") return { key: "good", icon: "✓", label: "Good" };
-  return { key: "needed", icon: "", label: "Needs a take" };
-}
-function todo(e) { const k = state(e).key; return k === "needed" || k === "wanted"; }
-function byNumber(a, b) { return (exNum(a) || "999").localeCompare(exNum(b) || "999") || a.title.localeCompare(b.title); }
-function firstExercise() {  // with none remembered: the first of the first instrument (bass before the rest)
-  const inst = instruments()[0], exs = exercises.filter((e) => (e.instrument || "") === inst).sort(byNumber);
-  return exs[0] ? exs[0].id : "";
-}
-function instruments() {
-  const rank = (i) => (ORDER.indexOf(i) < 0 ? 99 : ORDER.indexOf(i));
-  return [...new Set(exercises.map((e) => e.instrument || ""))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
-}
-
-async function refreshExercises(first) {
-  let list;
-  try {
-    [exercises, list, instrumentsKnown] = await Promise.all(
-      [api("GET", "/api/exercises"), api("GET", "/api/backings"), api("GET", "/api/instruments")]);
-  } catch (e) { return; }
-  newBackings(list);
-  if (first || selectedId === null || (selectedId && !exercises.some((e) => e.id === selectedId))) {
-    const keep = first ? store.get("exercise", null) : null;
-    selectedId = keep === "" ? "" : exercises.some((e) => e.id === keep) ? keep : firstExercise();
-    showExercise();
-  } else { showCurrent(); renderGuide(); }
-  if (!$("picker").hidden) renderPicker();
-}
-// the backing tracks again, every so often: one pushed while the page is open shows up without a reload
-async function refreshBackings() {
-  backingsAt = Date.now();
-  let list;
-  try { list = await api("GET", "/api/backings"); } catch (e) { return; }
-  if (newBackings(list)) renderGuide();
-}
-function newBackings(list) {  // true when the list changed
-  backingsAt = Date.now();
-  if (backingsLoaded && JSON.stringify(list) === JSON.stringify(backings)) return false;
-  const had = new Set(backings.map((b) => b.id)), added = list.filter((b) => !had.has(b.id));
-  if (added.length && backingsLoaded) store.set("backing", added[0].id);  // the one just pushed is the one offered next
-  backings = list; backingsLoaded = true;
-  return true;
-}
-
-// which instrument the take is on: the known ones (the exercise's kind first), or one not listed,
-// by its kind, so the take says at least that ("a guitar (not listed)", as the server writes it)
-const KIND_RE = /^[a-z][a-z0-9 -]{0,29}$/;  // a kind the server takes in "other:<kind>"
-function instrKind() { const ex = current(); return ex ? (ex.instrument || "") : ""; }
-function notListed(kind) { return kind ? `${/^[aeiou]/.test(kind) ? "an" : "a"} ${kind} (not listed)` : "an instrument (not listed)"; }
-function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
-function instrKinds() {
-  const own = instrKind(), rank = (k) => (k === own ? -1 : ORDER.indexOf(k) < 0 ? 99 : ORDER.indexOf(k));
-  const all = new Set([...ORDER, ...instrumentsKnown.map((i) => i.kind), ...exercises.map((e) => e.instrument || "")]);
-  return [...all].filter(Boolean).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
-}
-function renderInstruments() {
-  const sel = $("instrSel"), own = instrKind();
-  sel.innerHTML = "";
-  for (const kind of instrKinds()) {
-    const g = document.createElement("optgroup"), mine = instrumentsKnown.filter((i) => i.kind === kind);
-    g.label = instName(kind);
-    for (const i of mine) {
-      const o = document.createElement("option");
-      o.value = i.id; o.textContent = i.short; o.title = [i.name, i.details].filter(Boolean).join(": ");
-      g.appendChild(o);
-    }
-    if (KIND_RE.test(kind)) {
-      const o = document.createElement("option");
-      o.value = `other:${kind}`; o.textContent = mine.length ? `Another ${kind} (not listed)` : cap(notListed(kind));
-      g.appendChild(o);
-    }
-    if (g.children.length) sel.appendChild(g);
+async function loadAll() {
+  const [ex, inst, bk, inputs, choices, takes] = await Promise.all([api("GET", "/api/exercises"), api("GET", "/api/instruments"),
+    api("GET", "/api/backings"), api("GET", "/api/inputs"), S.choices ? null : api("GET", "/api/choices"), api("GET", "/api/takes")]);
+  S.exercises = ex; S.instruments = inst; S.backings = bk; S.inputs = inputs; S.takes = takes;
+  if (choices) {
+    S.choices = { ...DEFAULTS, ...choices, tempo: { ...(choices.tempo || {}) } };
+    if (!S.choices.instruments.length) fromLastTake();
   }
-  const other = document.createElement("option");
-  other.value = "other:"; other.textContent = "Something else (not listed)";
-  sel.appendChild(other);
-  // remembered per kind; else the first of the exercise's kind (the first listed, for a free take)
-  const keep = store.get(`instr:${own}`, null), has = (v) => [...sel.options].some((o) => o.value === v);
-  const first = instrumentsKnown.find((i) => i.kind === own);
-  sel.value = has(keep) ? keep : first ? first.id : own && has(`other:${own}`) ? `other:${own}` : sel.options[0].value;
-  showInstrument();
 }
-function instrument() {  // what was chosen: a known one, or {kind} for one not listed
-  const v = $("instrSel").value || "";
-  return instrumentsKnown.find((i) => i.id === v) || (v.startsWith("other:") ? { kind: v.slice(6), other: true } : null);
-}
-function showInstrument() {
-  const i = instrument();
-  $("instrSel").title = !i ? "" : i.other ? `The take will say “${notListed(i.kind)}”` : [i.name, i.details].filter(Boolean).join(": ");
-  renderSummary();
+function fromLastTake() {  // no choices saved yet: start from the newest take, if any
+  const t = S.takes[0];
+  if (!t) return;
+  const ids = (t.instruments || []).map((i) => i.instrument_id).concat(t.instruments ? [] : t.instrument_id ? [t.instrument_id] : []);
+  Object.assign(S.choices, { instruments: ids.filter((i) => instInfo(i)),
+    kind: t.exercise ? "exercise" : t.backing ? "playalong" : "free", exercise: t.exercise || null });
+  if (t.backing) { const b = S.backings.find((x) => x.title === t.backing); if (b) S.choices.backing = b.id; }
 }
 
-function showCurrent() {
-  const ex = current(), st = ex ? state(ex) : null;
-  $("modeEx").setAttribute("aria-pressed", ex ? "true" : "false");
-  $("modeFree").setAttribute("aria-pressed", ex ? "false" : "true");
-  $("modeEx").disabled = !exercises.length;
-  $("modeEx").title = exercises.length ? "" : "No exercises on the control unit yet";
-  $("exPick").hidden = !ex; $("exMeta").hidden = !ex;
-  renderInstruments();
-  $("curNum").textContent = ex ? [instName(ex.instrument), exNum(ex)].filter(Boolean).join(" ") : "";
-  $("curTitle").textContent = ex ? shortTitle(ex) : "Free take";
-  $("curStatus").className = "cur-status" + (st ? " " + st.key : "");
-  $("curStatus").textContent = !ex ? "No score, no click (or along with a backing track)"
-    : (st.icon ? st.icon + " " : "") + st.label + (ex.status === "wanted" && ex.status_note ? ` — ${ex.status_note}` : "");
-  if (!ex) { $("exMeta").textContent = ""; return; }
-  const p = ex.tempo.pickup_beats;
-  $("exMeta").textContent = [`${ex.bars} bars`, `${ex.tempo.beats_per_bar}/4`, p ? `${p}-beat pickup` : "",
-    `score ♩ = ${Math.round(ex.tempo.bpm)}`, ex.takes ? `${ex.takes} take${ex.takes > 1 ? "s" : ""} here` : ""].filter(Boolean).join(" · ");
+// --- the screens
+const screenEl = () => $("#screen");
+function render() {
+  const keep = $$(".body, .score, .takes, .take-card, .live").map((el) => el.scrollTop);
+  const scr = S.screen;
+  $("#mid").innerHTML = ["on", "sort", "which", "ready"].includes(scr) ? stepsNav() : "";
+  $("#end").innerHTML = scr === "record" || scr === "recorded" ? devLine() : "";
+  if (scr === "on") screenEl().innerHTML = renderOn();
+  else if (scr === "sort") screenEl().innerHTML = renderSort();
+  else if (scr === "which") screenEl().innerHTML = C().kind === "exercise" ? renderExercises() : C().kind === "playalong" ? renderBackings() : renderFree();
+  else if (scr === "ready") screenEl().innerHTML = renderReady();
+  else if (scr === "record") screenEl().innerHTML = renderRecord();
+  else if (scr === "recording") screenEl().innerHTML = renderRecording();
+  else if (scr === "recorded") screenEl().innerHTML = renderRecorded();
+  $$(".body, .score, .takes, .take-card, .live").forEach((el, i) => { if (keep[i]) el.scrollTop = keep[i]; });
+  if (scr === "record" && S.showReadme) loadReadme();
+  if (scr === "recorded" && S.take) loadPeaks(S.take);
+  if (S.sheet) renderSheet();
+  live();
+}
+function go(screen, opts = {}) {
+  if (STEPS.includes(screen) && !STEPS.includes(S.screen)) { S.snapshot = JSON.parse(JSON.stringify(C())); S.entry = screen; }
+  if (opts.walk !== undefined) S.walk = opts.walk;
+  if (screen === "ready" || screen === "record") S.walk = false;
+  S.screen = screen;
+  S.sheet = false; $("#sheet").hidden = true;
+  if (screen !== "which") S.showGood = false;
+  if (screen === "which" && C().kind === "playalong" && !backingById(C().backing) && S.backings.length) {
+    S.choices.backing = backingsNewest()[0].id; save();  // the newest, to hear first
+  }
+  render();
+  const b = $(".body"); if (b && !opts.keepScroll) b.scrollTop = 0;
+  monitorTick();
+}
+function answered(step) {  // a step's choice made: on to the next step, or back to Ready
+  if (S.walk) {
+    const i = STEPS.indexOf(step);
+    if (i < STEPS.length - 1) { go(STEPS[i + 1]); return; }
+    go("ready"); return;
+  }
+  go(firstOpen() || "ready");
+}
+function restore() { if (S.snapshot) { S.choices = S.snapshot; save(); } go("ready"); }
+
+function stepsNav() {
+  const scr = S.screen, out = [];
+  const names = { on: "On what", sort: "What sort", which: whichName() };
+  STEPS.forEach((s, i) => {
+    const n = i + 1, val = stepValue(s), ok = stepOk(s);
+    if (s === scr) out.push(`<span class="chip now" aria-current="step">${n} ${esc(names[s])}</span>`);
+    else if (ok && val) out.push(`<button type="button" class="chip" data-act="step" data-step="${s}">${ICON.check}${esc(val)}</button>`);
+    else if (val && STEPS.slice(0, i).every(stepOk)) out.push(`<button type="button" class="chip again" data-act="step" data-step="${s}"><s>${esc(val)}</s> pick again</button>`);
+    else out.push(`<span class="chip todo">${n} ${esc(names[s])}</span>`);
+    out.push(ICON.chev);
+  });
+  out.push(scr === "ready" ? `<span class="chip now" aria-current="step">Ready</span>`
+    : readyOk() ? `<button type="button" class="chip" data-act="go" data-to="ready">Ready</button>` : `<span class="chip todo">Ready</span>`);
+  return `<nav class="steps" aria-label="Steps">${out.join("")}</nav>`;
+}
+function devLine() {
+  const s = S.status;
+  if (!s) return "";
+  const ok = s.devices.capture && s.devices.playback;
+  return `<span class="dev"><span class="dot${ok ? " on" : ""}"></span>${esc(ok ? s.devices.capture_name : "Mixer not found")}</span>`
+    + `<span>${(s.free_mb / 1000).toFixed(1)} GB free</span>`;
+}
+function leftButton() {
+  // walking the steps: the step before (from the first, Ready as it was); a step opened from
+  // Ready: back to it as it was (named by what it keeps when this is the step opened)
+  const i = STEPS.indexOf(S.screen);
+  if (S.walk && i > 0) return `<button type="button" class="btn" data-act="go" data-to="${STEPS[i - 1]}">${ICON.back} Back</button>`;
+  const snap = S.snapshot;
+  if (!snap) return "";
+  const cur = S.choices;
+  S.choices = snap;
+  const valid = readyOk();
+  const label = S.walk ? "Back to Ready" : S.screen !== S.entry ? "Back to Ready, as it was"
+    : S.screen === "on" ? `Keep ${andList(chosen().map((x) => x.the))}`
+    : S.screen === "sort" ? `Back to Ready, keep ${stepValue("sort").toLowerCase()}` : `Back to Ready, keep ${stepValue("which")}`;
+  S.choices = cur;
+  return valid ? `<button type="button" class="btn" data-act="restore">${ICON.back} ${esc(label)}</button>` : "";
 }
 
-// the exercise's README as HTML: a small Markdown reader (headings, paragraphs, lists, tables,
-// code), every bit of the text escaped first; links keep only their text (the paths are the project's)
-function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+// 1: on what
+function renderOn() {
+  const ids = C().instruments || [], car = carries();
+  const col = (kind) => {
+    const known = S.instruments.filter((i) => i.kind === kind);
+    if (!known.length) return "";
+    const cards = known.map((i) => instCard(i.id, i.short, ids)).join("")
+      + (KIND_RE.test(kind) ? instCard(`other:${kind}`, `Another ${kind} (not listed)`, ids, true) : "");
+    return `<div class="kind"><span class="label">${esc(kindName(kind))}</span>${cards}</div>`;
+  };
+  const unknownKinds = kinds().filter((k) => !S.instruments.some((i) => i.kind === k) && KIND_RE.test(k));
+  const other = unknownKinds.map((k) => instCard(`other:${k}`, cap(notListed(k)), ids, true)).join("") + instCard("other:", "Something else", ids, true);
+  const was = S.snapshot && !S.walk ? (S.snapshot.instruments || []).map(instInfo).filter(Boolean) : [];
+  const inputsHtml = S.inputs.slice().sort((a, b) => a.input - b.input).map((inp) => {
+    const opts = chosen().map((i) => [i.id, i.short])
+      .concat([[inp.for ? "none" : "room", inp.for ? "Not used" : "The room"]]);
+    return `<div class="input" role="radiogroup" aria-label="${esc(inputLabel(inp))} carries">
+      <div class="row"><span class="name">${esc(inputLabel(inp))}</span><span class="meter" data-meter="${inp.channel}"><i></i><b></b></span></div>
+      ${inp.details ? `<span class="det">${esc(inp.details)}</span>` : ""}
+      ${chosen().length ? `<div class="seg">${opts.map(([v, l]) => `<button type="button" aria-pressed="${car[inp.input] === v}" data-act="carry" data-input="${inp.input}" data-v="${esc(v)}">${esc(l)}</button>`).join("")}</div>` : ""}
+    </div>`;
+  }).join("");
+  const open = firstOpen();
+  let foot;
+  if (!chosen().length) foot = `<span class="hint">Choose one or two</span>`;
+  else if (S.walk) foot = `<button type="button" class="btn go" data-act="answered" data-step="on">Next: what sort of take ${ICON.next}</button>`;
+  else {
+    const note = open === "sort" && C().kind === "exercise" ? (chosen().length > 1 ? "<b>Two instruments:</b> an exercise is for one. Choose what sort of take next."
+        : `<b>No ${esc(chosen()[0].kind || "")} exercises.</b> Choose what sort of take next.`)
+      : open === "which" && C().kind === "exercise" && exById(C().exercise) ? `<b>${esc(exNum(exById(C().exercise)) || shortTitle(exById(C().exercise)))} is a ${esc(exById(C().exercise).instrument)} exercise.</b> Pick a ${esc(chosen()[0].kind)} one, then you are back at Ready.`
+      : "";
+    const label = !open ? "Back to Ready" : open === "sort" ? "Next: what sort of take" : C().kind === "exercise" ? `Next: ${article(chosen()[0].kind)} ${chosen()[0].kind} exercise` : "Next: which backing";
+    foot = `${note ? `<span class="note">${note}</span>` : ""}<button type="button" class="btn go" data-act="answered" data-step="on">${esc(label)} ${ICON.next}</button>`;
+  }
+  return `<div class="body"><div class="q"><h1>What are you recording on?</h1>
+      <p>One instrument, or two at once.${was.length ? ` Until now: ${esc(andList(was.map((i) => i.the)))}.` : ""}</p></div>
+    <div class="on-grid"><div class="kinds">${kinds().map(col).join("")}${`<div class="kind"><span class="label">${unknownKinds.length ? esc(unknownKinds.map(kindName).join(", ")) + ", other" : "Other"}</span>${other}</div>`}</div>
+      <aside class="panel" aria-label="Inputs"><div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px"><h2>Inputs</h2><span class="muted" style="font-size:15px">what each one carries</span></div>
+        <div class="inputs">${inputsHtml || '<span class="muted">No inputs named in the config.</span>'}</div><p class="muted" id="monNote" style="font-size:14px;margin-top:10px"></p></aside></div></div>
+    <div class="foot">${leftButton()}${foot}</div>`;
+}
+function instCard(id, label, ids, unlisted = false) {
+  const sel = ids.includes(id), was = S.snapshot && !S.walk && (S.snapshot.instruments || []).includes(id) && !sel;
+  const ins = sel ? inputsOf(id).map((i) => `In ${i.input}`).join(" + ") : "";
+  return `<button type="button" role="checkbox" aria-checked="${sel}" class="card${unlisted ? " unlisted" : ""}${sel ? " sel" : ""}" data-act="inst" data-id="${esc(id)}">
+    <span>${esc(label)}</span>${sel ? `<span class="sub"><span>${esc(ins || "no input")}</span>${ICON.boxcheck}</span>` : was ? `<span class="sub">until now</span>` : ""}</button>`;
+}
+function toggleInstrument(id) {
+  let ids = [...(C().instruments || [])];
+  if (ids.includes(id)) ids = ids.filter((x) => x !== id);
+  else { ids.push(id); if (ids.length > 2) ids = ids.slice(-2); }
+  S.choices.instruments = ids;
+  S.choices.inputs = defaultInputs(chosen());
+  save(); render();
+}
+
+// 2: what sort
+function renderSort() {
+  const c = C(), blocked = exerciseBlocked(), ins = chosen(), n = S.backings.length, nNew = S.backings.filter(isNew).length;
+  const lastFree = S.takes.find(isFree);
+  const why = blocked === "two" ? `<div class="why"><span><b>Not with two instruments.</b> Each exercise is written for one.</span>
+      ${ins.map((i) => `<button type="button" data-act="just" data-id="${esc(i.id)}">Just ${esc(i.the)}</button>`).join("")}</div>`
+    : blocked === "noexercises" ? `<div class="why"><span><b>No exercises for ${esc(ins[0].kind ? kindName(ins[0].kind).toLowerCase() : "this instrument")} yet.</b></span></div>` : "";
+  const staff = '<svg width="120" height="64" viewBox="0 0 120 64" aria-hidden="true"><path d="M4 14H116M4 24H116M4 34H116M4 44H116M4 54H116" stroke="#7E768B" stroke-width="1.6"></path><ellipse cx="34" cy="39" rx="6.5" ry="4.6" fill="#7E768B"></ellipse><path d="M40 38V12" stroke="#7E768B" stroke-width="1.8"></path><ellipse cx="70" cy="29" rx="6.5" ry="4.6" fill="#7E768B"></ellipse><path d="M76 28V4" stroke="#7E768B" stroke-width="1.8"></path></svg>';
+  const wave = '<svg width="120" height="64" viewBox="0 0 120 64" aria-hidden="true"><path d="M4 20V24M10 14V30M16 17V27M22 10V34M28 15V29M34 12V32M40 16V28M46 9V35M52 14V30M58 17V27M64 11V33M70 15V29M76 12V32M82 16V28M88 10V34M94 14V30M100 17V27M106 12V32M112 15V29" stroke="#F2EEF8" stroke-width="3" stroke-linecap="round"></path><path d="M4 50V52M10 45V57M16 48V54M22 42V60M28 47V55M34 44V58M40 49V53M46 43V59" stroke="#A78BFA" stroke-width="3" stroke-linecap="round"></path></svg>';
+  const squiggle = '<svg width="120" height="64" viewBox="0 0 120 64" aria-hidden="true"><path d="M4 40C16 14 26 14 34 32S52 56 62 30S82 6 92 28S108 50 116 24" fill="none" stroke="#F2EEF8" stroke-width="3" stroke-linecap="round"></path></svg>';
+  const ex = blocked ? `<div class="sort off" aria-disabled="true">${staff}<span class="t">Exercise</span><span class="d">A written exercise from the project, with its score and its click.</span><span style="flex:1"></span>${why}</div>`
+    : `<button type="button" class="sort${c.kind === "exercise" ? " sel" : ""}" data-act="sort" data-kind="exercise">${staff.replaceAll("#7E768B", "#F2EEF8")}<span class="t">Exercise</span><span class="d">A written exercise from the project, with its score and its click.</span><span class="end">${exercisesFor(ins[0].kind).filter(todo).length} want a take</span></button>`;
+  const pa = n ? `<button type="button" class="sort${c.kind === "playalong" ? " sel" : ""}" data-act="sort" data-kind="playalong">${wave}<span class="t">Play-along</span><span class="d">Over a backing track, a mix of earlier takes. Its tempo and count-in come with it.</span><span class="end">${n} backing${n > 1 ? "s" : ""}${nNew ? ` <span class="pill red">${nNew} new</span>` : ""}</span></button>`
+    : `<div class="sort off" aria-disabled="true">${wave}<span class="t">Play-along</span><span class="d">No backing tracks on the control unit yet (tools/push-backing).</span></div>`;
+  const fr = `<button type="button" class="sort${c.kind === "free" ? " sel" : ""}" data-act="sort" data-kind="free">${squiggle}<span class="t">Free play</span><span class="d">A noodle: no exercise, no score. Nothing from the speakers, or a click if you want one.</span><span class="end">${lastFree ? `Last free take: ${esc(when(lastFree.started))}` : ""}</span></button>`;
+  return `<div class="body"><div class="q"><h1>What sort of take?</h1><p>On ${esc(andList(ins.map((i) => i.the + (inputsOf(i.id).length ? ` (${inputsOf(i.id).map((x) => `In ${x.input}`).join(", ")})` : ""))))}.</p></div>
+    <div class="sorts">${ex}${pa}${fr}</div></div>
+    <div class="foot">${leftButton()}<span class="hint">Tap one to go on</span></div>`;
+}
+
+// 3: which exercise
+function exRow(e, big) {
+  const st = exState(e), sel = e.id === C().exercise, nx = nextExercise(), cur = exById(C().exercise);
+  const bits = [`${Math.round(e.tempo.bpm)} bpm`, `${e.bars} bars`];
+  if (st.key === "review") bits.push(e.to_review === 1 ? `1 new take, ${when(e.last_take)}` : `${e.to_review} new takes, ${when(e.last_take)}`);
+  const next = !sel && nx && nx.id === e.id && cur ? ` · <span class="p-ink" style="font-weight:700">next after ${esc(exNum(cur))}</span>` : "";
+  const note = st.key === "wanted" && e.status_note ? `<span class="info" style="color:var(--ink)">${esc(e.status_note)}</span>` : "";
+  return `<button type="button" class="ex${sel ? " sel" : ""}" data-act="exercise" data-id="${esc(e.id)}"${big ? "" : ' style="min-height:72px"'}>
+    <span class="num">${esc(exNum(e))}</span><span class="main"><span class="title">${esc(shortTitle(e))}</span>${note}<span class="info">${esc(bits.join(" · "))}${next}</span></span>
+    ${sel ? `<span class="now">Chosen now${ICON.roundcheck}</span>` : ""}</button>`;
+}
+function renderExercises() {
+  const kind = chosen()[0].kind, all = exercisesFor(kind), numbered = all.filter(exNum), tunes = all.filter((e) => !exNum(e));
+  const g = (k) => numbered.filter((e) => exState(e).key === k);
+  const wanted = g("wanted"), needed = g("needed"), review = g("review"), good = g("good");
+  // the good ones folded to four when the left column is long, the chosen one always shown
+  const shownGood = S.showGood || wanted.length + needed.length + review.length < 4 ? good
+    : good.slice(0, 4).concat(good.slice(4).filter((e) => e.id === C().exercise));
+  return `<div class="body"><div class="q"><h1>Which exercise?</h1><p>${esc(kindName(kind))}, in the order the project wants them. Pick one and you are back at Ready, with its click.</p></div>
+    <div class="ex-grid"><div class="col">
+      ${wanted.length ? `<h2 class="red">Wanted again · ${wanted.length}</h2>${wanted.map((e) => exRow(e, true)).join("")}` : `<div class="strip"><b>Wanted again</b> none for ${esc(kind)}</div>`}
+      ${needed.length ? `<h2 class="red">Needs a take · ${needed.length}</h2>${needed.map((e) => exRow(e, true)).join("")}` : `<div class="strip"><b>Needs a take</b> none for ${esc(kind)}</div>`}
+      ${review.length ? `<h2>New takes to review · ${review.length}</h2>${review.map((e) => exRow(e)).join("")}` : ""}
+    </div><div class="col">
+      ${good.length ? `<h2 style="margin-top:0">Good · ${good.length}</h2><div class="list">${shownGood.map((e) => `<button type="button" class="${e.id === C().exercise ? "sel" : ""}" data-act="exercise" data-id="${esc(e.id)}"><span class="n">${esc(exNum(e))}</span><span class="t">${esc(shortTitle(e))}</span><span class="r">${Math.round(e.tempo.bpm)}${e.last_take ? ` · ${esc(when(e.last_take))}` : ""}</span></button>`).join("")}
+        ${good.length > shownGood.length || (S.showGood && good.length > 4) ? `<button type="button" data-act="show-good"><span class="more">${S.showGood ? "Fewer" : `All ${good.length} good ones`}</span></button>` : ""}</div>` : ""}
+      ${tunes.length ? `<h2>Tunes · ${tunes.length}</h2><div class="tunes">${tunes.map((e) => `<button type="button" class="${e.id === C().exercise ? "sel" : ""}" data-act="exercise" data-id="${esc(e.id)}">${esc(e.title)}</button>`).join("")}</div>` : ""}
+    </div></div></div>
+    <div class="foot">${leftButton()}
+      <span class="hint">Tap one: ${S.walk ? "on to Ready" : "back to Ready with it"}</span></div>`;
+}
+
+// 3: which backing
+function speakersPanel(note) {
+  const v = S.status ? S.status.level_offset_db : 0;
+  return `<section class="speakers" aria-label="Speakers"><div style="display:flex;align-items:baseline;justify-content:space-between"><h2 class="display" style="font-size:26px">Speakers</h2>
+      <span class="lv tnum" data-level-text>${esc(dbText(v).replace(" dB", ""))} <small>dB</small></span></div>
+    ${note ? `<span style="font-size:16px;line-height:1.4;color:var(--ink2)">${esc(note)}</span>` : ""}
+    <input type="range" min="-30" max="12" step="1" value="${v}" data-level aria-label="Speaker level">
+    <div class="scale"><span>−30</span><span>−18</span><span>−6</span><span>0</span><span>+12</span></div>
+    <div class="pm"><button type="button" data-act="level" data-d="-1" aria-label="Quieter, 1 dB">−</button><button type="button" data-act="level" data-d="1" aria-label="Louder, 1 dB">+</button></div></section>`;
+}
+function hearButton(b) {
+  const pl = S.status && S.status.playing, on = pl && pl.backing === b.id;
+  return on ? `<button type="button" class="hear on" data-act="hear-stop">${ICON.stop} Stop</button>
+      <span class="prog" data-prog="backing:${esc(b.id)}"><span class="bar"><i></i></span><span class="tnum">On the speakers · <span data-pos>0:00</span> of ${esc(fmt(b.seconds))}</span></span>`
+    : `<button type="button" class="hear" data-act="hear" data-id="${esc(b.id)}">${ICON.play} Hear it</button>`;
+}
+function renderBackings() {
+  const c = C(), list = backingsNewest(), ins = chosen();
+  const bk = (b) => {
+    const sel = b.id === c.backing;
+    return `<div class="bk${sel ? " sel" : ""}"><div class="head"><div><span class="t">${esc(b.title)}</span>
+        <span class="i">${isNew(b) ? '<span class="pill red">New</span>' : ""}added ${esc(when(b.added))} · ${esc(fmt(b.seconds))}${b.tempo ? ` · ${Math.round(b.tempo.bpm)} bpm` : ""}</span></div>
+        ${sel ? ICON.roundcheck : ""}</div>
+      ${b.note ? `<span class="muted" style="font-size:15px">${esc(b.note)}</span>` : ""}
+      <div class="acts">${hearButton(b)}${sel ? "" : `<button type="button" class="use" data-act="backing" data-id="${esc(b.id)}">Use this one</button>`}</div></div>`;
+  };
+  const b = backingById(c.backing);
+  const countIn = b && b.tempo ? `<button type="button" class="switch" role="switch" aria-checked="${!!c.backingCountIn}" data-act="toggle" data-k="backingCountIn">Count-in from the backing<span class="track"><i></i></span></button>
+    <span class="muted" style="font-size:15px">Tempo ${Math.round(b.tempo.bpm)}, from the backing. No click: the backing keeps time.</span>`
+    : b ? `<span class="muted" style="font-size:15px">This backing's tempo is not known: no count-in.</span>` : "";
+  const what = andList(ins.map((i) => i.kind || "instrument").filter((v, i, a) => a.indexOf(v) === i));
+  return `<div class="body"><div class="q"><h1>Play along with what?</h1><p>Newest first. Hear one first, and set the speakers while it plays.</p></div>
+    <div class="bk-grid"><div class="col">${list.map(bk).join("")}${countIn}</div>
+      ${speakersPanel(`Loud enough to hear over the ${what}? Set it while the backing plays.`)}</div></div>
+    <div class="foot">${leftButton()}<button type="button" class="btn go" data-act="answered" data-step="which"${b ? "" : " disabled"}>${S.walk ? "Next: ready" : "Done: back to Ready"} ${ICON.next}</button></div>`;
+}
+
+// 3: free play, from the speakers
+function bpmControl(value, act, small) {
+  return `<div class="bpm${small ? " sm" : ""}"><button type="button" data-act="${act}" data-d="-2" aria-label="Slower">−</button>
+    <span class="bv tnum">${Math.round(value)} <small>bpm</small></span><button type="button" data-act="${act}" data-d="2" aria-label="Faster">+</button></div>`;
+}
+function bpbSeg(v) {
+  return `<div class="seg" role="radiogroup" aria-label="Beats in a bar">${[2, 3, 4, 6].map((n) => `<button type="button" role="radio" aria-pressed="${v === n}" data-act="bpb" data-v="${n}" style="font-size:19px">${n}</button>`).join("")}</div>`;
+}
+function renderFree() {
+  const c = C(), ins = chosen();
+  const on = andList(ins.map((i) => i.the + (inputsOf(i.id).length ? ` (${inputsOf(i.id).map((x) => `In ${x.input} ${x.name}`).join(", ")})` : "")));
+  return `<div class="body"><div class="q"><h1>Anything from the speakers?</h1><p>Free play on ${esc(on)}. No exercise, no score.</p></div>
+    <div class="fr-grid" role="radiogroup" aria-label="From the speakers">
+      <button type="button" role="radio" aria-checked="${!c.freeClick}" class="fr${!c.freeClick ? " sel" : ""}" data-act="free-click" data-v="0"><span class="t"><span class="radio"></span>Nothing</span><span class="d">Just record. This is what a free take starts with.</span></button>
+      <div class="fr${c.freeClick ? " sel" : ""}"><button type="button" role="radio" aria-checked="${!!c.freeClick}" data-act="free-click" data-v="1" style="background:transparent;border:0;padding:0;text-align:left"><span class="t"><span class="radio"></span>A click</span></button>
+        ${bpmControl(c.freeBpm, "free-bpm")}
+        <div class="kv"><span>Beats in a bar</span>${bpbSeg(c.freeBpb)}</div>
+        <button type="button" class="switch" role="switch" aria-checked="${!!c.freeCountIn}" data-act="toggle" data-k="freeCountIn" style="border:0;padding:0 2px">A bar of count-in first<span class="track"><i></i></span></button>
+        <div class="kv" style="border-top:1px solid var(--line-soft);padding-top:8px"><span>Speakers</span><input type="range" min="-30" max="12" step="1" value="${S.status ? S.status.level_offset_db : 0}" data-level aria-label="Speaker level"><span data-level-text class="tnum" style="width:64px;text-align:right">${esc(dbText(S.status ? S.status.level_offset_db : 0))}</span></div>
+      </div></div></div>
+    <div class="foot">${leftButton()}<button type="button" class="btn go" data-act="answered" data-step="which">${S.walk ? "Next: ready" : "Done: back to Ready"} ${ICON.next}</button></div>`;
+}
+
+// Ready: the next take, as left; one tap to record it, or to change one thing
+function renderReady() {
+  if (!readyOk()) return `<div class="body"><div class="q"><h1>Nothing chosen yet</h1><p>Four steps: what you are recording on, what sort of take, which one, and ready.</p></div></div>
+    <div class="foot"><button type="button" class="btn go" data-act="start-over">Start ${ICON.next}</button></div>`;
+  const c = C(), e = exById(c.exercise), b = backingById(c.backing), nx = c.kind === "exercise" ? nextExercise() : null;
+  let what, guide;
+  if (c.kind === "exercise") {
+    const st = exState(e), again = S.takes[0] && S.takes[0].exercise === e.id;
+    const status = (again ? `<span style="color:var(--ink);font-weight:700">Again</span> · ` : "")
+      + (st.key === "needed" ? `<span class="red-ink" style="font-weight:700">Needs a take</span>`
+      : st.key === "wanted" ? `<span class="red-ink" style="font-weight:700">Wanted again</span>${e.status_note ? `: ${esc(e.status_note)}` : ""}`
+      : st.key === "review" ? `last take ${esc(when(e.last_take))}, not reviewed yet`
+      : `good${e.last_take ? ` · last take ${esc(when(e.last_take))}` : ""}`);
+    what = `<span class="big">${esc(exName(e))}</span><span class="sm">${status} · ${e.tempo.beats_per_bar}/4 · ${e.bars} bars</span>`;
+    const bpm = tempoOf(e), score = Math.round(e.tempo.bpm);
+    guide = `<div><span class="k">Click</span>${bpmControl(bpm, "ex-bpm", true)}
+      <span class="muted" style="font-size:15px;width:96px;line-height:1.3">${Math.round(bpm) === score ? "the score's tempo" : `the score's: ${score} <button type="button" class="change" data-act="ex-bpm-reset" style="padding:0;min-height:32px;font-size:15px">reset</button>`}</span>
+      <div class="toggles"><button type="button" class="switch" role="switch" aria-checked="${!!c.countIn}" data-act="toggle" data-k="countIn">Count-in<span class="track"><i></i></span></button>
+        <button type="button" class="switch" role="switch" aria-checked="${!!c.clickThrough}" data-act="toggle" data-k="clickThrough">Click all through<span class="track"><i></i></span></button></div></div>`;
+  } else if (c.kind === "playalong") {
+    what = `<span class="big">${esc(b.title)}</span><span class="sm">Play-along · ${esc(fmt(b.seconds))}${b.tempo ? ` · ${Math.round(b.tempo.bpm)} bpm` : ""} · added ${esc(when(b.added))}</span>`;
+    guide = `<div><span class="k">Backing</span><div class="acts">${hearButton(b)}</div>
+      ${b.tempo ? `<div class="toggles"><button type="button" class="switch" role="switch" aria-checked="${!!c.backingCountIn}" data-act="toggle" data-k="backingCountIn">Count-in from the backing<span class="track"><i></i></span></button></div>` : `<span class="muted">No count-in: its tempo is not known</span>`}</div>`;
+  } else {
+    what = `<span class="big">Free play</span><span class="sm">No exercise, no score</span>`;
+    guide = `<div><span class="k">Click</span><div class="seg" style="min-width:240px"><button type="button" aria-pressed="${!c.freeClick}" data-act="free-click" data-v="0">Nothing</button><button type="button" aria-pressed="${!!c.freeClick}" data-act="free-click" data-v="1">A click</button></div>
+      ${c.freeClick ? `${bpmControl(c.freeBpm, "free-bpm", true)}<div style="min-width:200px">${bpbSeg(c.freeBpb)}</div>
+        <button type="button" class="switch" role="switch" aria-checked="${!!c.freeCountIn}" data-act="toggle" data-k="freeCountIn">Count-in<span class="track"><i></i></span></button>` : ""}</div>`;
+  }
+  const car = carries(), used = S.inputs.slice().sort((a, x) => a.input - x.input);
+  const unused = used.filter((i) => car[i.input] === "none");
+  const onLines = chosen().map((i) => `<span class="ins-line"><b>${esc(i.short)}</b>${inputsOf(i.id).map((x) => `<span>In ${x.input} ${esc(x.name)}</span><span class="meter" data-meter="${x.channel}"><i></i><b></b></span>`).join("") || '<span class="red-ink">no input carries it</span>'}</span>`).join("");
+  const room = used.filter((i) => car[i.input] === "room").map((x) => `<span class="ins-line"><span>In ${x.input} ${esc(x.name)}: the room</span><span class="meter" data-meter="${x.channel}"><i></i><b></b></span></span>`).join("");
+  const level = S.status ? S.status.level_offset_db : 0;
+  return `<div class="body ready-body">
+    <span class="label">Next take${c.saved ? ` · as you left it, ${esc(when(c.saved))}` : ""}</span>
+    <p class="sentence" style="margin-top:-8px">${sentenceHtml()}</p>
+    ${nx ? `<div class="ornext"><span class="label" style="width:120px;font-size:15px">Or next</span>
+      <span style="flex:1;min-width:200px;font-size:18px;color:var(--ink2)"><b style="color:var(--ink)">${esc(exName(nx))}</b> · <b class="red-ink">${esc(exState(nx).label.toLowerCase())}</b> · ${Math.round(nx.tempo.bpm)} bpm · ${nx.bars} bars</span>
+      <button type="button" class="btn small outline-p" data-act="swap" data-id="${esc(nx.id)}">${ICON.swap} Swap to ${esc(exNum(nx))}</button></div>` : ""}
+    <div class="rows">
+      <div><span class="k">What</span><span class="v">${what}</span><button type="button" class="change" data-act="step" data-step="${c.kind === "free" ? "sort" : "which"}">Change</button></div>
+      ${guide}
+      <div><span class="k">On</span><span class="v" style="gap:6px">${onLines}${room}${unused.length ? `<span class="muted" style="font-size:15px">${esc(andList(unused.map((x) => `In ${x.input} ${x.name}`)))} not used</span>` : ""}</span><button type="button" class="change" data-act="step" data-step="on">Change</button></div>
+      <div style="min-height:76px"><label class="k" for="readyLevel">Speakers</label><input id="readyLevel" type="range" min="-30" max="12" step="1" value="${level}" data-level style="flex:1;min-width:200px"><span data-level-text class="tnum" style="font-size:19px;font-weight:700;width:76px;text-align:right">${esc(dbText(level))}</span></div>
+    </div>
+    <p class="muted" id="monNote" style="font-size:14px"></p>
+  </div>
+  <div class="foot"><button type="button" class="btn" data-act="start-over">${ICON.restart} Start from the top</button>
+    <button type="button" class="btn go big" data-act="go" data-to="record"><svg class="svg-i" width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="#FF5147" stroke="#FFFFFF" stroke-width="2"></circle></svg> Ready to record ${ICON.next}</button></div>`;
+}
+
+// --- recording: the record screen (the score, the inputs, Record)
+function recSentence(link) {
+  const p = sentenceParts(), c = C();
+  const part = (text, step) => link ? `<button type="button" data-act="step" data-step="${step}">${esc(text)}</button>` : `<b>${esc(text)}</b>`;
+  if (c.kind === "playalong") return `Play along with ${part(p.what, "which")}${p.over ? `, ${esc(p.over)}` : ""}, on ${part(p.on, "on")}.`;
+  if (c.kind === "free") return `${link ? "Record " : ""}${part(link ? "free play" : "Free play", "sort")} on ${part(p.on, "on")}${p.over ? `, with ${part(p.over, "which")}` : ""}.`;
+  return `${link ? "Record " : ""}${part(p.what, "which")} ${p.overWord} ${link ? `<button type="button" data-act="go" data-to="ready">${esc(p.over)}</button>` : `<b>${esc(p.over)}</b>`} on ${part(p.on, "on")}.`;
+}
+function isFree(t) { return t.kind ? t.kind === "free" : !t.exercise && !t.backing; }
+function takeOn(t) {  // what a take was played on, short
+  const ids = t.instruments ? t.instruments.map((i) => i.instrument_id) : t.instrument_id ? [t.instrument_id] : [];
+  return ids.length ? andList(ids.map((id) => (instInfo(id) || { short: id }).short)) : t.instrument_name || "";
+}
+function takesFor() {  // the takes like the next one: of its exercise, with its backing, or free
+  const c = C();
+  if (c.kind === "exercise") return S.takes.filter((t) => t.exercise === c.exercise);
+  if (c.kind === "playalong") { const b = backingById(c.backing); return S.takes.filter((t) => !t.exercise && b && t.backing === b.title); }
+  return S.takes.filter(isFree);
+}
+function scoreHtml(e, controls) {
+  if (!e.pages.length) return `<div class="none">This exercise has no pages.</div>`;
+  const pages = e.pages.map((_, i) => `<img src="/api/exercises/${encodeURIComponent(e.id)}/pages/${i + 1}" alt="${esc(e.title)}, page ${i + 1}">`).join("");
+  return (controls ? `<div class="bar"><span>${e.pages.length > 1 ? `${e.pages.length} pages` : "1 page"}</span>${e.readme ? `<button type="button" data-act="readme">${S.showReadme ? "Hide the instructions" : "Instructions"}</button>` : ""}</div>
+    <div class="readme" id="readme" ${S.showReadme ? "" : "hidden"}></div>` : "") + pages;
+}
+function renderRecord() {
+  if (!readyOk()) { S.screen = "ready"; return renderReady(); }
+  const c = C(), e = exById(c.exercise), b = backingById(c.backing), mine = takesFor(), s = S.status;
+  let meta = "", main;
+  if (c.kind === "exercise") {
+    const st = exState(e);
+    meta = `<span class="pill ${st.key === "good" ? "purple" : "red"}">${esc(st.label)}</span>${st.key === "wanted" && e.status_note ? `<span>${esc(e.status_note)}</span>` : ""}
+      <span class="muted">${e.tempo.beats_per_bar}/4 · ${e.bars} bars${e.last_take ? ` · last take ${esc(when(e.last_take))}` : ""}</span>`;
+    main = `<div class="score">${scoreHtml(e, true)}</div>`;
+  } else if (c.kind === "playalong") {
+    meta = `<span class="muted">${esc(fmt(b.seconds))}${b.tempo ? ` · ${Math.round(b.tempo.bpm)} bpm` : ""}${b.note ? ` · ${esc(b.note)}` : ""}</span>`;
+    main = `<div class="score"><div class="bigtime"><span class="s">The backing plays from the speakers${b.tempo && c.backingCountIn ? ", after its count-in" : ""}; the take ends ${2} s after it.</span><div class="acts">${hearButton(b)}</div></div></div>`;
+  } else {
+    main = `<div class="score"><div class="bigtime"><span class="s">${c.freeClick ? `A click at ${c.freeBpm}, ${c.freeBpb} to a bar${c.freeCountIn ? ", after a bar's count-in" : ""}, until you stop.` : "Nothing plays. Stop when you are done."}</span></div></div>`;
+  }
+  const used = S.inputs.filter((i) => carries()[i.input] !== "none").sort((a, x) => a.input - x.input);
+  const level = s ? s.level_offset_db : 0;
+  return `<div class="rec-head"><p class="sentence display">${recSentence(true)}</p><div class="meta">${meta}</div></div>
+    <div class="rec-grid">${main}
+      <div class="side"><div class="box"><span class="label">Listening</span>${used.map((i) => `<div class="row"><span>${esc(i.name)}${carries()[i.input] === "room" ? " (room)" : ""}</span><span class="tnum" data-meter-text="${i.channel}">–</span></div><span class="meter" data-meter="${i.channel}"><i></i><b></b></span>`).join("")}<span class="muted" id="monNote" style="font-size:14px"></span></div>
+        <div class="box"><div class="row"><label for="recLevel" style="font-weight:700">Speakers</label><span data-level-text class="tnum">${esc(dbText(level))}</span></div><input id="recLevel" type="range" min="-30" max="12" step="1" value="${level}" data-level></div>
+        <button type="button" class="btn small" data-act="sheet" style="justify-content:center">Takes of this ${c.kind === "exercise" ? "exercise" : c.kind === "playalong" ? "backing" : "kind"} (${mine.length})</button>
+        <button type="button" class="recbtn" data-act="record" ${s && s.devices.capture ? "" : "disabled"}><i></i>Record</button></div></div>`;
+}
+
+// --- recording: the take
+function position(rec) {  // where the player is: {big, of, beat, beats, counting}
+  const bk = rec && rec.backing;
+  if (!bk) return null;
+  if (bk.kind === "backing") {
+    if (bk.tempo && bk.position < bk.count_in_s) return { big: String(Math.max(1, Math.ceil((bk.count_in_s - bk.position) / (60 / bk.tempo.bpm) - 0.02))), counting: true };
+    return null;
+  }
+  if (!bk.tempo || bk.beat0_s == null) return null;
+  const spb = 60 / bk.tempo.bpm, bpb = bk.tempo.beats_per_bar || 4, pickup = bk.tempo.pickup_beats || 0;
+  const beat = (bk.position - bk.beat0_s) / spb, fromBar1 = beat - pickup;
+  const startsAt = pickup > 0 ? -bpb * Math.ceil(pickup / bpb - 1e-9) : 0;
+  if (fromBar1 < startsAt - 0.02) return { big: String(Math.ceil(startsAt - fromBar1 - 0.02)), counting: true, beats: bpb };
+  const inBar = (x) => Math.floor(x + 1e-6) + 1;
+  if (beat < -0.02) return { big: "Pickup", beat: inBar(fromBar1 - startsAt), beats: bpb };
+  const bar = Math.floor(fromBar1 / bpb + 1e-6) + 1;
+  return { big: `Bar ${bar}`, beat: inBar(fromBar1 - (bar - 1) * bpb), beats: bpb };
+}
+function renderRecording() {
+  const c = C(), rec = S.status && S.status.recording, e = c.kind === "exercise" ? exById(c.exercise) : null;
+  const used = S.inputs.filter((i) => carries()[i.input] !== "none").sort((a, x) => a.input - x.input);
+  const main = e ? `<div class="score">${scoreHtml(e, false)}</div>`
+    : `<div class="bigtime"><span class="v tnum" data-rec-time>0:00</span><span class="s" data-rec-what>${c.kind === "playalong" ? "Along with the backing" : "Free play"}</span>
+        ${c.kind === "playalong" ? `<span class="prog"><span class="bar"><i data-rec-prog></i></span></span>` : ""}</div>`;
+  return `<div class="rec-head" style="flex-direction:row;align-items:center;gap:16px;padding-bottom:12px"><span class="recording-chip"><i></i>Recording</span>
+      <p class="sentence display" style="font-size:30px">${recSentence(false)}</p></div>
+    <div class="live">${main}</div>
+    <div class="rec-bar">
+      <div class="where"><span class="v" data-where>${rec && rec.backing ? "" : "Recording"}</span><span class="of" data-where-of>${e ? `of ${e.bars}` : ""}</span></div>
+      <div class="beats" data-beats hidden><span class="dots"></span><span data-beat-text></span></div>
+      <div class="clock"><span class="v tnum" data-clock>0:00</span><span data-clock-of></span></div>
+      <div class="meters">${used.map((i) => `<div class="row"><span>${esc(i.name)}</span><span class="meter big" data-meter="${i.channel}"><i></i><b></b></span></div>`).join("")}
+        <span class="peak" data-peak>No clipping</span></div>
+      <button type="button" class="stopbtn" data-act="stop-rec"><i></i>Stop</button></div>`;
+}
+
+// --- recording: what was just recorded
+function renderRecorded() {
+  const t = S.takes.find((x) => x.id === S.take);
+  if (!t) return `<div class="body"><div class="q"><h1>${S.status && S.status.state === "analyzing" ? "Lining up…" : "The take is gone"}</h1></div></div>
+    <div class="foot"><button type="button" class="btn go" data-act="go" data-to="ready">Back to Ready ${ICON.next}</button></div>`;
+  const e = t.exercise ? exById(t.exercise) : null;
+  const guide = (t.kind ? t.kind !== "playalong" : !!t.exercise) ? "click" : "backing";
+  const what = e ? exName(e) : t.exercise_title || (!isFree(t) && t.backing ? `along with ${t.backing}` : "a free take");
+  const over = guide === "click" && t.tempo_bpm ? `over ${t.exercise ? "the" : "a"} click at ${Math.round(t.tempo_bpm)}` : "";
+  const on = t.instruments ? andList(t.instruments.map((i) => instInfo(i.instrument_id) ? instInfo(i.instrument_id).the : i.instrument_name)) : t.instrument_name || "";
+  const lined = !(t.exercise || t.backing || t.tempo_bpm) ? "" : !t.playalong ? `<span class="lined">Lining up with the ${guide}…</span>`
+    : t.playalong.found ? `<span class="lined">${ICON.roundcheck.replace('width="26" height="26"', 'width="22" height="22"')} Lined up with the ${guide}${t.beat0_s != null ? `: beat 0 at ${t.beat0_s.toFixed(2)} s` : ""}</span>`
+    : `<span class="lined red-ink">The ${guide} was not found in the take</span>`;
+  const others = S.takes.filter((x) => x.id !== t.id && (t.exercise ? x.exercise === t.exercise : isFree(t) ? isFree(x) : !x.exercise && x.backing === t.backing)).slice(0, 8);
+  const pl = S.status && S.status.playing, playingThis = pl && pl.take === t.id;
+  const proj = e ? e.project_takes || [] : [];
+  const tip = e ? (() => { const nx = exercisesFor(e.instrument).filter(exNum).find((x) => todo(x) && x.id !== e.id); return nx ? `Next wanted for ${esc(e.instrument)}: ${esc(exName(nx))}.` : `Nothing else wanted for ${esc(e.instrument)} now.`; })() : "";
+  const tk = (x, label) => {
+    const on = pl && pl.take === x.id;
+    return `<button type="button" class="tk${on ? " on" : ""}" data-act="${on ? "stop-play" : "play"}" data-id="${esc(x.id)}"><span class="play">${on ? ICON.stop : ICON.play}</span>
+      <span class="m"><b>${esc(cap(when(x.started)))} · ${esc(fmt(x.seconds))}</b><span>${esc([label || takeOn(x), x.tempo_bpm ? `click ${Math.round(x.tempo_bpm)}` : "", proj.includes(x.id) ? "in the project" : "new, to review"].filter(Boolean).join(" · "))}</span>${x.note ? `<em>“${esc(x.note)}”</em>` : ""}</span></button>`;
+  };
+  return `<div class="done-head"><h1>You recorded <b>${esc(what)}</b>${over ? ` ${esc(over)}` : ""}${on ? ` on <b>${esc(on)}</b>` : ""}: ${esc(fmt(t.seconds))}, at ${esc(new Date(t.started).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }))}.</h1>${lined}</div>
+    <div class="done-grid"><div class="take-card">
+        <div class="wave" data-wave="${esc(t.id)}" data-seconds="${t.seconds}"><svg viewBox="0 0 400 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+          ${t.beat0_s != null && t.seconds ? `<span class="b0" style="left:${(100 * t.beat0_s / t.seconds).toFixed(2)}%"></span>` : ""}<span class="head"></span></div>
+        <div class="wave-times"><span>0:00</span>${t.beat0_s != null ? `<b>beat 0 at ${t.beat0_s.toFixed(2)} s</b>` : ""}<span>${esc(fmt(t.seconds))}</span></div>
+        <div class="acts">${playingThis ? `<button type="button" class="btn fill" data-act="stop-play">${ICON.stop} Stop the speakers</button>` : `<button type="button" class="btn fill" data-act="play" data-id="${esc(t.id)}">${ICON.play} Play on the speakers</button>`}
+          <a class="btn" href="/api/takes/${esc(t.id)}/audio" style="text-decoration:none;color:var(--ink)">${ICON.ipad} Play on this iPad</a>
+          <span class="muted tnum" data-play-pos></span></div>
+        ${t.peak_dbfs != null && t.peak_dbfs > -1 ? `<span class="red-ink">Peaked at ${esc(dbText(t.peak_dbfs))}: it may have clipped. Turn that channel's gain down a little.</span>` : ""}
+        <div class="notefield"><label for="note">Note</label><input id="note" type="text" maxlength="500" value="${esc(t.note)}" placeholder="What to listen for in this take" data-note="${esc(t.id)}"></div>
+        <div class="next-acts"><button type="button" class="again" data-act="record"><i></i>Record it again</button>
+          <button type="button" class="else" data-act="go" data-to="ready">Record something else</button>
+          <button type="button" class="del" data-act="delete" data-id="${esc(t.id)}" aria-label="Delete this take">${ICON.trash}</button></div></div>
+      <div class="takes"><h2>${esc(e ? `Takes of the ${shortTitle(e)}` : isFree(t) ? "Free takes" : "Takes with this backing")}</h2>
+        ${tk(t)}${others.map((x) => tk(x)).join("")}${tip ? `<div class="tip">${tip}</div>` : ""}</div></div>`;
+}
+
+// --- the takes, from the record screen
+function renderSheet() {
+  const mine = takesFor(), pl = S.status && S.status.playing;
+  $("#sheetTitle").textContent = `Takes (${mine.length})`;
+  $("#sheetList").innerHTML = mine.length ? mine.map((t) => {
+    const on = pl && pl.take === t.id;
+    return `<div class="tk${on ? " on" : ""}"><button type="button" class="play" data-act="${on ? "stop-play" : "play"}" data-id="${esc(t.id)}" aria-label="${on ? "Stop" : "Play on the speakers"}" style="background:transparent;color:inherit">${on ? ICON.stop : ICON.play}</button>
+      <span class="m"><b>${esc(cap(when(t.started)))} · ${esc(fmt(t.seconds))}</b><span>${esc([takeOn(t), t.tempo_bpm ? `click ${Math.round(t.tempo_bpm)}` : "", t.playalong ? (t.playalong.found ? "lined up" : "not lined up") : ""].filter(Boolean).join(" · "))}</span>${t.note ? `<em>“${esc(t.note)}”</em>` : ""}</span>
+      <span class="x"><a href="/api/takes/${esc(t.id)}/audio">On this iPad</a><button type="button" data-act="note" data-id="${esc(t.id)}">Note</button><button type="button" data-act="delete" data-id="${esc(t.id)}">Delete</button></span></div>`;
+  }).join("") : '<p class="empty">No takes yet.</p>';
+}
+
+// --- live: meters, playing, where the player is (every status)
+function live() {
+  const s = S.status;
+  if (!s) return;
+  const rec = s.recording, mon = s.monitor;
+  $$("[data-act=record]").forEach((b) => { b.disabled = !s.devices.capture; });
+  const meters = rec ? rec.meters_dbfs : mon ? mon.meters_dbfs : null, peaks = rec ? rec.peaks_dbfs : mon ? mon.peaks_dbfs : null;
+  $$("[data-meter]").forEach((el) => {
+    const ch = Number(el.dataset.meter), v = meters ? meters[ch] : null, i = el.firstElementChild, b = el.lastElementChild;
+    i.style.width = v == null ? "0" : meterPct(v) + "%";
+    i.style.background = v > -6 ? "var(--red-dot)" : v > -12 ? "var(--amber)" : "var(--ink2)";
+    if (peaks && peaks[ch] != null && rec) { b.style.display = "block"; b.style.left = `calc(${meterPct(peaks[ch])}% - 2px)`; } else b.style.display = "none";
+  });
+  $$("[data-meter-text]").forEach((el) => { const v = meters ? meters[Number(el.dataset.meterText)] : null; el.textContent = v == null ? "–" : dbText(v); });
+  const note = $("#monNote");
+  if (note) note.textContent = rec ? "" : s.monitor_error ? `Not listening: ${s.monitor_error}.` : !mon && listening() ? "Listening…" : !listening() ? "Not listening (idle a while): tap anywhere to listen again." : "";
+  const pl = s.playing;
+  $$("[data-prog]").forEach((el) => {
+    const on = pl && `backing:${pl.backing}` === el.dataset.prog;
+    el.querySelector("i").style.width = on && pl.seconds ? `${100 * pl.position / pl.seconds}%` : "0";
+    const pos = el.querySelector("[data-pos]"); if (pos && on) pos.textContent = fmt(pl.position);
+  });
+  const wave = $("[data-wave]");
+  if (wave) {
+    const on = pl && pl.take === wave.dataset.wave, head = wave.querySelector(".head");
+    head.style.display = on ? "block" : "none";
+    if (on && pl.seconds) head.style.left = `${100 * pl.position / pl.seconds}%`;
+    const pp = $("[data-play-pos]"); if (pp) pp.textContent = on ? `On the speakers · ${fmt(pl.position)}` : "";
+  }
+  if (S.screen === "recording" && rec) {
+    const p = position(rec), bk = rec.backing;
+    const w = $("[data-where]"), of = $("[data-where-of]"), beats = $("[data-beats]");
+    if (w) {
+      w.textContent = p ? p.big : bk && bk.kind === "backing" ? fmt(bk.position - bk.count_in_s) : "Recording";
+      w.classList.toggle("count", !!(p && p.counting));
+      if (of) of.hidden = !(p && p.big.startsWith("Bar"));
+    }
+    if (beats) {
+      beats.hidden = !(p && p.beats && !p.counting);
+      if (p && p.beats) {
+        beats.querySelector(".dots").innerHTML = Array.from({ length: p.beats }, (_, k) => `<i class="${k < p.beat ? "on" : ""}"></i>`).join("");
+        beats.querySelector("[data-beat-text]").textContent = `beat ${p.beat} of ${p.beats}`;
+      }
+    }
+    $("[data-clock]").textContent = fmt(rec.seconds);
+    const total = bk && bk.seconds ? bk.seconds + 2 : null;
+    $("[data-clock-of]").textContent = total ? `of about ${fmt(total)}` : "";
+    const rt = $("[data-rec-time]"); if (rt) rt.textContent = bk && bk.kind === "backing" ? fmt(Math.max(0, bk.position - bk.count_in_s)) : fmt(rec.seconds);
+    const rp = $("[data-rec-prog]"); if (rp && bk && bk.seconds) rp.style.width = `${100 * bk.position / bk.seconds}%`;
+    const peak = $("[data-peak]");
+    if (peak) { peak.textContent = rec.clipped ? "Clipping: turn that channel's gain down a little" : `Peak ${dbText(rec.peak_dbfs)} · no clipping`; peak.classList.toggle("clip", rec.clipped); }
+  }
+  if (!dragging) $$("[data-level-text]").forEach((el) => {
+    el.innerHTML = el.classList.contains("lv") ? `${esc(dbText(s.level_offset_db).replace(" dB", ""))} <small>dB</small>` : esc(dbText(s.level_offset_db)); });
+  $$("[data-level]").forEach((el) => { if (document.activeElement !== el && !dragging) el.value = s.level_offset_db; });
+}
+
+// --- the waveform and the instructions, fetched when shown
+async function loadPeaks(id) {
+  if (!S.peaks[id]) {
+    try { S.peaks[id] = (await api("GET", `/api/takes/${id}/peaks?n=400`)).peaks; } catch (e) { return; }
+  }
+  const svg = $(`[data-wave="${id}"] svg`);
+  if (!svg) return;
+  const p = S.peaks[id], beat0 = (S.takes.find((t) => t.id === id) || {}).beat0_s, secs = (S.takes.find((t) => t.id === id) || {}).seconds || 1;
+  const b0 = beat0 != null ? beat0 / secs * p.length : -1;
+  svg.innerHTML = p.map((v, i) => { const h = Math.max(1, Math.sqrt(v) * 96); return `<rect x="${i}" y="${50 - h / 2}" width="0.6" height="${h}" fill="${i < b0 ? "#7E768B" : "#F2EEF8"}"></rect>`; }).join("");
+}
+async function loadReadme() {
+  const e = exById(C().exercise), el = $("#readme");
+  if (!e || !el || el.dataset.for === e.id) return;
+  try {
+    const r = await fetch(`/api/exercises/${encodeURIComponent(e.id)}/readme`);
+    if (!r.ok) return;
+    el.innerHTML = markdown(await r.text()); el.dataset.for = e.id;
+  } catch (err) {}
+}
+// the exercise's README as HTML: headings, paragraphs, lists, tables, code; every bit of text escaped
 function inline(s) {
   return s.split(/(`[^`]+`)/).map((part) => /^`[^`]+`$/.test(part) ? `<code>${esc(part.slice(1, -1))}</code>`
     : esc(part).replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
@@ -481,23 +1137,21 @@ function markdown(text) {
   const lines = text.replace(/\r/g, "").split("\n"), out = [];
   let i = 0;
   while (i < lines.length && !lines[i].trim()) i++;
-  if (/^#\s/.test(lines[i] || "")) i++;  // its title: the card already says which exercise
+  if (/^#\s/.test(lines[i] || "")) i++;
   while (i < lines.length) {
     const line = lines[i];
     if (!line.trim()) { i++; continue; }
     if (/^```/.test(line)) {
       const buf = [];
       for (i++; i < lines.length && !/^```/.test(lines[i]); i++) buf.push(lines[i]);
-      i++;
-      out.push(`<pre>${esc(buf.join("\n"))}</pre>`);
-      continue;
+      i++; out.push(`<pre>${esc(buf.join("\n"))}</pre>`); continue;
     }
     const h = /^(#{1,6})\s+(.*)$/.exec(line);
     if (h) { const n = Math.min(h[1].length + 1, 4); out.push(`<h${n}>${inline(h[2])}</h${n}>`); i++; continue; }
     if (/^\s*\|/.test(line)) {
       const rows = [];
       for (; i < lines.length && /^\s*\|/.test(lines[i]); i++) {
-        if (/^\s*\|[\s:|-]+\|?\s*$/.test(lines[i])) continue;  // the line under the header
+        if (/^\s*\|[\s:|-]+\|?\s*$/.test(lines[i])) continue;
         rows.push(lines[i].trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => inline(c.trim())));
       }
       out.push("<table>" + rows.map((r, n) => "<tr>" + r.map((c) => n ? `<td>${c}</td>` : `<th>${c}</th>`).join("") + "</tr>").join("") + "</table>");
@@ -523,358 +1177,163 @@ function markdown(text) {
   }
   return out.join("\n");
 }
-async function showReadme(ex) {
-  let text;
+
+// --- recording
+function startBody() {
+  const c = C(), body = { instruments: chosen().map((i) => i.id), inputs: carries() };
+  if (c.kind === "exercise") Object.assign(body, { exercise: c.exercise, tempo_bpm: tempoOf(exById(c.exercise)), click: !!c.clickThrough, count_in: !!c.countIn });
+  else if (c.kind === "playalong") { const b = backingById(c.backing); Object.assign(body, { backing: c.backing, count_in: !!(c.backingCountIn && b && b.tempo) }); }
+  else if (c.freeClick) Object.assign(body, { click: true, tempo_bpm: c.freeBpm, beats_per_bar: c.freeBpb, count_in: !!c.freeCountIn });
+  else Object.assign(body, { click: false, count_in: false });
+  return body;
+}
+let recordingId = null;
+async function record() {
+  const r = await api("POST", "/api/record/start", startBody());
+  recordingId = r.take; S.screen = "recording"; render(); wakeLock(true);
+}
+let lock = null;
+async function wakeLock(on) {  // the screen stays on while recording (where the browser can)
   try {
-    const r = await fetch(`/api/exercises/${ex.id}/readme`);
-    if (!r.ok) return;
-    text = await r.text();
-  } catch (e) { return; }
-  // another exercise chosen meanwhile, or this one shown again and its instructions already there
-  if (selectedId !== ex.id || $("score").querySelector(".readme")) return;
-  const d = document.createElement("details");
-  d.className = "readme";
-  d.open = store.get("readmeOpen", "1") !== "0";
-  d.innerHTML = '<summary>Instructions</summary><div class="body"></div>';
-  d.querySelector(".body").innerHTML = markdown(text);
-  d.ontoggle = () => store.set("readmeOpen", d.open ? "1" : "0");
-  $("score").prepend(d);
+    if (on && "wakeLock" in navigator && !lock) lock = await navigator.wakeLock.request("screen");
+    if (!on && lock) { await lock.release(); lock = null; }
+  } catch (e) { lock = null; }
 }
 
-function showExercise() {
-  const ex = current();
-  store.set("exercise", ex ? ex.id : "");
-  if (ex) store.set("lastExercise", ex.id);
-  const score = $("score");
-  score.innerHTML = "";
-  if (!ex) {
-    score.innerHTML = '<div class="none">A free take: no score. Play anything, alone or along with a backing track.</div>';
-  } else {
-    if (ex.readme) showReadme(ex);
-    ex.pages.forEach((_, i) => {
-      const img = document.createElement("img");
-      img.src = `/api/exercises/${ex.id}/pages/${i + 1}`;
-      img.alt = `${ex.title}, page ${i + 1}`;
-      score.appendChild(img);
-    });
-    if (!ex.pages.length) score.innerHTML = '<div class="none">This exercise has no pages.</div>';
-    score.scrollTop = 0;
-  }
-  showCurrent();
-  renderGuide();
-  takesVersion = -1; poll(true);
-}
-// the start panel's switch: an exercise (the last one chosen) or a free take, in one tap
-function setMode(exercise) {
-  if (!!selectedId === exercise) return;
-  if (!exercise) { selectedId = ""; showExercise(); return; }
-  const keep = store.get("lastExercise", null);
-  selectedId = exercises.some((e) => e.id === keep) ? keep : firstExercise();
-  if (selectedId) showExercise(); else openPicker();
-}
-
-// --- the picker: by instrument, each exercise with what it still wants
-let pickTab = store.get("pickTab", null), pickFilter = store.get("pickFilter", "all");
-function openPicker() {
-  const ex = current(), insts = instruments();
-  if (ex) pickTab = ex.instrument || "";
-  if (!insts.includes(pickTab)) pickTab = insts[0] || "";
-  $("picker").hidden = false;
-  renderPicker();
-  const sel = $("exList").querySelector(".selected");
-  if (sel) sel.scrollIntoView({ block: "center" });
-}
-function closePicker() { $("picker").hidden = true; }
-function choose(id) { selectedId = id; closePicker(); showExercise(); }
-function renderPicker() {
-  const tabs = $("tabs"); tabs.innerHTML = "";
-  for (const inst of instruments()) {
-    const n = exercises.filter((e) => (e.instrument || "") === inst && (todo(e) || state(e).key === "review")).length;
-    const b = document.createElement("button");
-    b.className = "tab" + (inst === pickTab ? " on" : "");
-    b.textContent = instName(inst);
-    if (n) { const c = document.createElement("span"); c.className = "count"; c.textContent = n; c.title = "Need a take or a review"; b.appendChild(c); }
-    b.onclick = () => { pickTab = inst; store.set("pickTab", inst); renderPicker(); $("exList").scrollTop = 0; };
-    tabs.appendChild(b);
-  }
-  const exs = exercises.filter((e) => (e.instrument || "") === pickTab)
-    .sort(byNumber);
-  const groups = { all: exs, todo: exs.filter(todo), review: exs.filter((e) => state(e).key === "review"),
-    good: exs.filter((e) => state(e).key === "good") };
-  const labels = { all: "All", todo: "Needs a take", review: "To review", good: "Good" };
-  const f = $("filters"); f.innerHTML = "";
-  for (const k of Object.keys(labels)) {
-    const b = document.createElement("button");
-    b.className = "chip" + (k === pickFilter ? " on" : "");
-    b.textContent = `${labels[k]} · ${groups[k].length}`;
-    b.onclick = () => { pickFilter = k; store.set("pickFilter", k); renderPicker(); };
-    f.appendChild(b);
-  }
-  const ul = $("exList"); ul.innerHTML = "";
-  const shown = groups[pickFilter] || exs;
-  if (!shown.length) { ul.innerHTML = '<li class="empty" style="padding:16px">Nothing here.</li>'; return; }
-  let tunesHead = false;
-  for (const e of shown) {
-    if (!exNum(e) && !tunesHead) {
-      tunesHead = true;
-      const h = document.createElement("li"); h.className = "group"; h.textContent = "Tunes"; ul.appendChild(h);
-    }
-    const st = state(e), li = document.createElement("li");
-    li.className = "ex-row" + (e.id === selectedId ? " selected" : "");
-    li.innerHTML = '<span class="badge"></span><span class="ex-num"></span><span class="ex-main"><span class="ex-title"></span>'
-      + '<span class="ex-sub"></span></span><span class="chev">›</span>';
-    li.querySelector(".badge").className = "badge " + st.key;
-    li.querySelector(".badge").textContent = st.icon;
-    li.querySelector(".ex-num").textContent = exNum(e);
-    li.querySelector(".ex-title").textContent = shortTitle(e);
-    const bits = [st.label + (e.status === "wanted" && e.status_note ? `: ${e.status_note}` : ""),
-      `♩ ${Math.round(e.tempo.bpm)}`, `${e.bars} bars`];
-    if (e.last_take) bits.push(`last take ${when(e.last_take)}`);
-    li.querySelector(".ex-sub").textContent = bits.join(" · ");
-    li.onclick = () => choose(e.id);
-    ul.appendChild(li);
-  }
-}
-
-// --- what plays from the speakers: the click (nothing, for a free take) or a backing track
-let backingsStale = false;  // the list changed while its select was open
-function renderGuide() {
-  const keep = store.get(guideKey(), null) || "click";
-  guide = keep !== "click" && backings.some((b) => b.id === keep) ? keep : "click";
-  renderBackings();
-  showGuide();
-}
-function renderBackings() {
-  const sel = $("backingSel");
-  if (document.activeElement === sel) { backingsStale = true; return; }
-  backingsStale = false;
-  sel.innerHTML = "";
-  for (const b of backings) {
-    const o = document.createElement("option");
-    o.value = b.id; o.textContent = b.title;
-    sel.appendChild(o);
-  }
-  const want = backing() ? guide : store.get("backing", null);
-  if (backings.length) sel.value = backings.some((b) => b.id === want) ? want : backings[0].id;
-}
-function setGuide(value) {
-  guide = value;
-  store.set(guideKey(), value);
-  if (value !== "click") store.set("backing", value);
-  showGuide();
-}
-// the tempo, the count-in and the click: on or off for what plays, and why when off
-function showGuide() {
-  const ex = current(), bk = backing(), n = backings.length;
-  $("guideClick").textContent = ex ? "The click" : "Nothing";
-  $("guideClick").setAttribute("aria-pressed", bk ? "false" : "true");
-  $("guideBacking").setAttribute("aria-pressed", bk ? "true" : "false");
-  $("guideBacking").disabled = !n;
-  $("guideBacking").innerHTML = n ? `Backing track <span class="n">(${n})</span>` : "No backing tracks";
-  $("backingSel").hidden = !bk;
-  // a control that does not apply over this is off, and hidden behind the reason
-  const clickable = !!ex && !bk, countable = clickable || !!(bk && bk.tempo);
-  for (const id of ["slower", "faster", "tempoReset"]) $(id).disabled = !clickable;
-  $("click").disabled = !clickable; $("clickBox").hidden = !clickable;
-  $("countIn").disabled = !countable; $("countInBox").hidden = !countable;
-  const bpm = clickable ? tempoFor(ex) : bk && bk.tempo ? bk.tempo.bpm : null;
-  $("bpm").innerHTML = bpm ? `${Math.round(bpm)} <small>bpm</small>` : "–";
-  $("bpm").classList.toggle("off", !clickable);
-  $("bpmWhy").textContent = clickable ? "" : bk ? (bk.tempo ? "set by the backing" : "the backing's is not known") : "none: no click";
-  $("tempoWhy").textContent = clickable ? (!$("click").checked && !$("countIn").checked ? "Nothing plays: no count-in, no click." : "")
-    : bk ? (bk.tempo ? "No click: the backing plays instead." : "No count-in (the backing's tempo is not known), no click (the backing plays instead).")
-    : "A free take has no click or count-in; a backing track with a tempo has a count-in.";
-  renderSummary();
-}
-// the next take in a sentence: what, over what, on what
-function renderSummary() {
-  const ex = current(), bk = backing(), i = instrument();
-  const countIn = $("countIn").checked && !$("countIn").disabled;
-  let over;
-  if (bk) over = `along with “${bk.title}” (${fmt(bk.seconds)})` + (countIn ? `, after a count-in at ${Math.round(bk.tempo.bpm)}` : "");
-  else if (ex) {
-    const bpm = Math.round(tempoFor(ex)), click = $("click").checked;
-    over = click && countIn ? `over the click at ${bpm}, after a bar's count-in` : click ? `over the click at ${bpm}, no count-in`
-      : countIn ? `after a bar's count-in at ${bpm}, then no click` : "with nothing playing";
-  } else over = "with nothing playing";
-  const what = !ex ? "A free take" : exNum(ex) ? `${instName(ex.instrument)} ${exNum(ex)}, ${shortTitle(ex)}` : ex.title;
-  const on = !i ? "" : i.other ? notListed(i.kind) : `the ${i.short}`;
-  const s = $("summary");
-  s.innerHTML = "<b>Next take:</b> ";
-  s.append(`${what}, ${over}` + (on ? `, on ${on}.` : "."));
-}
-function nudge(d) {
-  const ex = current(); if (!ex) return;
-  const bpm = Math.max(30, Math.min(260, Math.round(tempoFor(ex)) + d));
-  store.set(`tempo:${ex.id}`, bpm); showGuide();
-}
-
-// --- where the player is, while recording over the click
-function where(rec) {
-  const bk = rec && rec.backing;
-  if (!bk || !bk.tempo || bk.beat0_s == null) return bk && bk.kind === "backing"
-    ? (bk.position < bk.count_in_s ? ["Count-in…", true] : [`${fmt(bk.position - bk.count_in_s)} of ${fmt(bk.seconds - bk.count_in_s)}`, false])
-    : ["", false];
-  const spb = 60 / bk.tempo.bpm, bpb = bk.tempo.beats_per_bar || 4, pickup = bk.tempo.pickup_beats || 0;
-  const beat = (bk.position - bk.beat0_s) / spb;  // from the first note
-  const fromBar1 = beat - pickup;  // from bar 1's downbeat
-  const startsAt = pickup > 0 ? -bpb * Math.ceil(pickup / bpb - 1e-9) : 0;  // the bar the music starts in
-  if (fromBar1 < startsAt - 0.02) {  // the count-in bar: count the beats down
-    const left = Math.ceil(startsAt - fromBar1 - 0.02);
-    return [`${left}`, true];
-  }
-  if (beat < -0.02) return [`${Math.floor(fromBar1 - startsAt) + 1}`, true];  // the pickup bar, before the note
-  const bar = Math.floor(fromBar1 / bpb + 1e-6) + 1, inBar = Math.floor(fromBar1 - (bar - 1) * bpb + 1e-6) + 1;
-  return [bar >= 1 ? `Bar ${bar} · ${inBar}` : `Pickup · ${Math.floor(fromBar1 - startsAt) + 1}`, false];
-}
-
-// --- takes
-async function refreshTakes() {
-  const ex = current();
-  const all = await api("GET", "/api/takes" + (ex ? `?exercise=${encodeURIComponent(ex.id)}` : ""));
-  takes = ex ? all : all.filter((t) => !t.exercise);
-  $("takesHead").textContent = ex ? `Takes of this exercise` : "Free takes";
-  renderTakes();
-}
-function renderTakes() {
-  const ul = $("takes");
-  ul.innerHTML = "";
-  const playingId = status && status.playing && status.playing.take;
-  const recordingId = status && status.recording && status.recording.take;
-  const shown = takes.filter((t) => t.id !== recordingId);
-  if (!shown.length) { ul.innerHTML = '<li class="empty">No takes yet.</li>'; return; }
-  for (const t of shown) {
-    const li = document.createElement("li");
-    li.className = "take" + (t.id === playingId ? " playing" : "");
-    li.innerHTML = `
-      <div class="take-top"><span class="take-when"></span><span class="take-len"></span></div>
-      <div class="take-info"></div>
-      <div class="take-note" title="Edit note"></div>
-      <div class="take-actions">
-        <button class="small primary" data-act="play">▶ Speakers</button>
-        <a class="small" data-act="here" style="padding:6px 10px;font-size:14px">On this iPad</a>
-        <button class="small" data-act="del">Delete</button>
-      </div>`;
-    li.querySelector(".take-when").textContent = when(t.started);
-    li.querySelector(".take-len").textContent = fmt(t.seconds) + (t.peak_dbfs != null && t.peak_dbfs > -1 ? " · clipped?" : "");
-    const pa = t.playalong, bits = [];
-    if (t.instrument_name) bits.push(t.instrument_name);
-    if (t.tempo_bpm) bits.push(`♩ = ${Math.round(t.tempo_bpm)}`);
-    if (t.backing && t.backing !== t.exercise_title) bits.push(`with ${t.backing}`);
-    if (pa) bits.push(pa.found ? "lined up" : "the click was not found in the take");
-    else if (t.exercise || t.backing) bits.push("lining up…");
-    li.querySelector(".take-info").textContent = bits.join(" · ");
-    li.querySelector(".take-note").textContent = t.note || "";
-    li.querySelector('[data-act="here"]').href = `/api/takes/${t.id}/audio`;
-    li.querySelector('[data-act="play"]').onclick = () => act(() => api("POST", `/api/takes/${t.id}/play`, { start: 0 }));
-    li.querySelector('[data-act="del"]').onclick = () => {
-      if (confirm(`Delete the take from ${when(t.started)} (${fmt(t.seconds)})?`)) act(() => api("DELETE", `/api/takes/${t.id}`));
-    };
-    li.querySelector(".take-note").onclick = () => {
-      const note = prompt("Note for this take:", t.note || "");
-      if (note !== null) act(() => api("PUT", `/api/takes/${t.id}/note`, { note }));
-    };
-    ul.appendChild(li);
-  }
-}
-
-// --- status
-function render(s) {
-  const prev = status; status = s;
-  const devOk = s.devices.capture && s.devices.playback;
-  $("devDot").classList.toggle("on", devOk);
-  $("devText").textContent = devOk ? "Mixer connected" : "Mixer not found";
-  $("free").textContent = `${(s.free_mb / 1000).toFixed(1)} GB free`;
-  if (s.error) showError(s.error);
-  const rec = s.recording;
-  const btn = $("recBtn");
-  btn.textContent = rec ? "Stop" : "Record";
-  btn.classList.toggle("active", !!rec);
-  btn.disabled = !s.devices.capture && !rec;
-  $("startPanel").disabled = !!rec;
-  $("summary").hidden = !!rec || s.state === "analyzing";  // the take may have been started elsewhere
-  const [w, counting] = rec ? where(rec) : [s.state === "analyzing" ? "Lining up…" : "", false];
-  $("where").textContent = w;
-  $("where").classList.toggle("count", counting);
-  $("timer").textContent = rec ? fmt(rec.seconds) : "";
-  $("meterBar").style.width = rec ? meterPct(rec.meter_dbfs) + "%" : "0";
-  $("meterBar").style.background = rec && rec.meter_dbfs > -6 ? "var(--rec)" : rec && rec.meter_dbfs > -12 ? "var(--warn)" : "var(--ok)";
-  $("peakMark").style.left = rec ? `calc(${meterPct(rec.peak_dbfs)}% - 2px)` : "0";
-  $("peakMark").style.display = rec ? "block" : "none";
-  $("clip").textContent = rec && rec.clipped ? "Clipping: turn the channel's gain down a little." : "";
-  const pl = s.playing;
-  $("now").classList.toggle("show", !!pl || s.state === "preparing");
-  if (pl) {
-    const t = takes.find((x) => x.id === pl.take);
-    $("nowTitle").textContent = (s.state === "preparing" ? "Preparing " : "Playing ") + (t ? when(t.started) : pl.take);
-    $("progBar").style.width = pl.seconds ? (100 * pl.position / pl.seconds) + "%" : "0";
-    $("pos").textContent = fmt(pl.position);
-    $("dur").textContent = fmt(pl.seconds);
-  }
-  if (document.activeElement !== $("level")) {
-    $("level").value = s.level_offset_db;
-    $("levelText").textContent = signedDb(s.level_offset_db);
-  }
-  const playingChanged = (prev && prev.playing && prev.playing.take) !== (pl && pl.take);
-  const recChanged = !!(prev && prev.recording) !== !!rec;
-  if (s.takes_version !== takesVersion) { takesVersion = s.takes_version; refreshTakes(); refreshExercises(false); }
-  else if (playingChanged || recChanged) renderTakes();
+// --- the status, often while something happens
+let pollTimer = null, takesVersion = -1, dragging = false, lastTouch = Date.now(), monitorAt = 0;
+const LISTEN_IDLE_MS = 10 * 60e3;  // the inputs are listened to until the page has been left alone this long
+function listening() { return !document.hidden && Date.now() - lastTouch < LISTEN_IDLE_MS; }
+function monitorTick() {
+  const s = S.status;
+  if (!s || s.recording || !["on", "ready", "record"].includes(S.screen) || !listening()) return;
+  if (Date.now() - monitorAt < 2000) return;
+  monitorAt = Date.now();
+  api("POST", "/api/monitor").catch(() => {});
 }
 async function poll(once) {
   clearTimeout(pollTimer);
-  try { render(await api("GET", "/api/status")); }
-  catch (e) { $("devDot").classList.remove("on"); $("devText").textContent = "Not reachable"; }
-  const busy = status && status.state !== "idle";
-  if (status && !busy && !document.hidden && Date.now() - backingsAt > 8000) refreshBackings();
-  pollTimer = setTimeout(poll, busy ? 120 : 1500);
+  let s;
+  try { s = await api("GET", "/api/status"); } catch (e) { s = null; }
+  if (s) {
+    const prev = S.status; S.status = s;
+    if (s.error && s.error !== S.lastServerError) { S.lastServerError = s.error; showError(s.error); }
+    if (s.recording && S.screen !== "recording") { recordingId = s.recording.take; S.screen = "recording"; render(); wakeLock(true); }
+    else if (!s.recording && S.screen === "recording") {
+      S.take = recordingId || (prev && prev.recording && prev.recording.take); S.screen = "recorded"; wakeLock(false);
+      await refresh(); render();
+    }
+    if (s.takes_version !== takesVersion) {
+      const first = takesVersion < 0; takesVersion = s.takes_version;
+      if (!first) { await refresh(); if (S.screen !== "recording") render(); }
+    } else if (prev && JSON.stringify(prev.playing && [prev.playing.take, prev.playing.backing]) !== JSON.stringify(s.playing && [s.playing.take, s.playing.backing])) {
+      if (S.screen !== "recording") render();
+    }
+    live();
+    monitorTick();
+  } else {
+    S.status = null;
+    $("#end").innerHTML = '<span class="dev"><span class="dot"></span>Not reachable</span>';
+  }
+  const busy = s && (s.state !== "idle" || s.monitor);
+  pollTimer = setTimeout(poll, s && s.state !== "idle" ? 120 : busy ? 300 : 1500);
+}
+async function refresh() {
+  try {
+    const [ex, takes, bk] = await Promise.all([api("GET", "/api/exercises"), api("GET", "/api/takes"), api("GET", "/api/backings")]);
+    S.exercises = ex; S.takes = takes; S.backings = bk;
+  } catch (e) {}
 }
 
-function start() {
-  const ex = current(), bk = backing();
-  const body = { exercise: ex ? ex.id : null, count_in: $("countIn").checked && !$("countIn").disabled,
-    instrument_id: $("instrSel").value || null };
-  if (bk) body.backing = bk.id;
-  else if (ex) { body.click = $("click").checked; body.tempo_bpm = tempoFor(ex); }
-  else { body.click = false; body.count_in = false; }
-  return api("POST", "/api/record/start", body);
+// --- taps
+document.addEventListener("click", (ev) => {
+  lastTouch = Date.now();
+  const el = ev.target.closest("[data-act]");
+  if (!el || el.disabled) return;
+  const a = el.dataset.act, d = el.dataset, c = C();
+  if (a === "dismiss") showError("");
+  else if (a === "go") {
+    if (d.to === "record") S.showReadme = false;
+    go(d.to);
+  }
+  else if (a === "step") go(d.step, { walk: false });
+  else if (a === "start-over") go("on", { walk: true });
+  else if (a === "restore") restore();
+  else if (a === "answered") answered(d.step);
+  else if (a === "inst") toggleInstrument(d.id);
+  else if (a === "carry") { S.choices.inputs = { ...carries(), [d.input]: d.v }; save(); render(); }
+  else if (a === "just") { S.choices.instruments = [d.id]; S.choices.inputs = defaultInputs(chosen()); S.choices.kind = "exercise"; save(); answered("sort"); }
+  else if (a === "sort") { S.choices.kind = d.kind; save(); answered("sort"); }
+  else if (a === "exercise") { S.choices.exercise = d.id; save(); answered("which"); }
+  else if (a === "show-good") { S.showGood = !S.showGood; render(); }
+  else if (a === "backing") set({ backing: d.id });
+  else if (a === "hear") act(() => api("POST", `/api/backings/${encodeURIComponent(d.id)}/play`, { start: 0 }));
+  else if (a === "hear-stop" || a === "stop-play") act(() => api("POST", "/api/stop"));
+  else if (a === "toggle") set({ [d.k]: !c[d.k] });
+  else if (a === "free-click") set({ freeClick: d.v === "1" });
+  else if (a === "free-bpm") set({ freeBpm: Math.max(30, Math.min(260, c.freeBpm + Number(d.d))) });
+  else if (a === "bpb") set({ freeBpb: Number(d.v) });
+  else if (a === "ex-bpm") { const e = exById(c.exercise); set({ tempo: { ...c.tempo, [e.id]: Math.max(30, Math.min(260, Math.round(tempoOf(e)) + Number(d.d))) } }); }
+  else if (a === "ex-bpm-reset") { const t = { ...c.tempo }; delete t[c.exercise]; set({ tempo: t }); }
+  else if (a === "swap") set({ exercise: d.id });
+  else if (a === "level") setLevel((S.status ? S.status.level_offset_db : 0) + Number(d.d));
+  else if (a === "readme") { S.showReadme = !S.showReadme; render(); }
+  else if (a === "record") act(record);
+  else if (a === "stop-rec") act(() => api("POST", "/api/record/stop"));
+  else if (a === "play") act(() => api("POST", `/api/takes/${encodeURIComponent(d.id)}/play`, { start: 0 }));
+  else if (a === "sheet") { S.sheet = true; $("#sheet").hidden = false; renderSheet(); }
+  else if (a === "sheet-close") { S.sheet = false; $("#sheet").hidden = true; }
+  else if (a === "note") {
+    const t = S.takes.find((x) => x.id === d.id), note = prompt("Note for this take:", (t && t.note) || "");
+    if (note !== null) act(async () => { await api("PUT", `/api/takes/${encodeURIComponent(d.id)}/note`, { note }); await refresh(); render(); });
+  }
+  else if (a === "delete") {
+    const t = S.takes.find((x) => x.id === d.id);
+    if (t && confirm(`Delete the take from ${when(t.started)} (${fmt(t.seconds)})?`))
+      act(async () => { await api("DELETE", `/api/takes/${encodeURIComponent(d.id)}`); await refresh();
+        if (S.screen === "recorded" && S.take === d.id) { S.take = null; go("ready"); } else render(); });
+  }
+});
+$("#sheet").addEventListener("click", (ev) => { if (ev.target.id === "sheet") { S.sheet = false; $("#sheet").hidden = true; } });
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && S.sheet) { S.sheet = false; $("#sheet").hidden = true; } });
+// the waveform: tap to play from there
+document.addEventListener("click", (ev) => {
+  const w = ev.target.closest("[data-wave]");
+  if (!w) return;
+  const r = w.getBoundingClientRect(), at = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)) * Number(w.dataset.seconds);
+  act(() => api("POST", `/api/takes/${encodeURIComponent(w.dataset.wave)}/play`, { start: at }));
+});
+// the speakers' level: shown while dragged, sent when let go
+function setLevel(v) {
+  v = Math.max(-30, Math.min(12, Math.round(v)));
+  act(async () => { const r = await api("PUT", "/api/settings", { level_offset_db: v }); if (S.status) S.status.level_offset_db = r.level_offset_db; live(); });
 }
+document.addEventListener("input", (ev) => {
+  if (ev.target.dataset.level === undefined) return;
+  dragging = true;
+  const v = Number(ev.target.value);
+  $$("[data-level-text]").forEach((el) => { el.innerHTML = el.classList.contains("lv") ? `${esc(dbText(v).replace(" dB", ""))} <small>dB</small>` : esc(dbText(v)); });
+});
+document.addEventListener("change", (ev) => {
+  if (ev.target.dataset.level !== undefined) { dragging = false; setLevel(Number(ev.target.value)); }
+  if (ev.target.dataset.note) { const id = ev.target.dataset.note, note = ev.target.value;
+    act(async () => { await api("PUT", `/api/takes/${encodeURIComponent(id)}/note`, { note }); await refresh(); }); }
+});
+document.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.target.dataset.note) ev.target.blur(); });
+document.addEventListener("pointerdown", () => { const was = listening(); lastTouch = Date.now(); if (!was) monitorTick(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { lastTouch = Date.now(); refresh().then(render); poll(true); } });
+// a screen named in the address (#ready, #on, ...): for trying the page out
+window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (["on", "sort", "which", "ready", "record"].includes(h)) go(h); });
 
-$("recBtn").onclick = () => act(() => status && status.recording ? api("POST", "/api/record/stop") : start());
-$("stopBtn").onclick = () => act(() => api("POST", "/api/stop"));
-$("exPick").onclick = openPicker;
-$("modeEx").onclick = () => setMode(true);
-$("modeFree").onclick = () => setMode(false);
-$("instrSel").onchange = () => { store.set(`instr:${instrKind()}`, $("instrSel").value); showInstrument(); };
-$("pickClose").onclick = closePicker;
-$("picker").onclick = (ev) => { if (ev.target === $("picker")) closePicker(); };
-document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !$("picker").hidden) closePicker(); });
-$("guideClick").onclick = () => setGuide("click");
-$("guideBacking").onclick = () => { if (backings.length) setGuide($("backingSel").value || backings[0].id); };
-$("backingSel").onchange = () => setGuide($("backingSel").value);
-$("backingSel").onblur = () => { if (backingsStale) { renderBackings(); showGuide(); } };
-// and the backing tracks listed again when the choice is touched (else every 8 s, in poll)
-const touchedGuide = () => { if (Date.now() - backingsAt > 2000) refreshBackings(); };
-$("guideSeg").addEventListener("pointerdown", touchedGuide);
-$("backingSel").addEventListener("focus", touchedGuide);
-$("slower").onclick = () => nudge(-4);
-$("faster").onclick = () => nudge(4);
-$("tempoReset").onclick = () => { const ex = current(); if (ex) { store.set(`tempo:${ex.id}`, ex.tempo.bpm); showGuide(); } };
-for (const id of ["countIn", "click"]) {
-  $(id).checked = store.get(id, "1") !== "0";
-  $(id).onchange = () => { store.set(id, $(id).checked ? "1" : "0"); showGuide(); };
-}
-$("progress").onclick = (ev) => {
-  const pl = status && status.playing;
-  if (!pl || !pl.seconds) return;
-  const r = $("progress").firstElementChild.getBoundingClientRect();
-  act(() => api("POST", `/api/takes/${pl.take}/play`, { start: Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)) * pl.seconds }));
-};
-$("level").oninput = () => { $("levelText").textContent = signedDb(Number($("level").value)); };
-$("level").onchange = () => act(() => api("PUT", "/api/settings", { level_offset_db: Number($("level").value) }));
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { poll(true); refreshExercises(false); } });
-
-refreshExercises(true);
-poll(true);
+(async function startUp() {
+  try { await loadAll(); } catch (e) { showError(`Could not load: ${e.message}`); S.choices = S.choices || { ...DEFAULTS }; }
+  const h = location.hash.slice(1);
+  S.screen = ["on", "sort", "which", "ready", "record"].includes(h) && (h !== "record" || readyOk()) ? h : readyOk() ? "ready" : "on";
+  S.walk = !readyOk();
+  if (STEPS.includes(S.screen)) S.snapshot = readyOk() ? JSON.parse(JSON.stringify(C())) : null;
+  render();
+  poll(true);
+})();
 </script>
 </body>
 </html>

@@ -727,6 +727,14 @@ either part is swapped.
     port 8002; PLAN.md step 6). It records like the practice recorder and
     takes turns the same way: it asks 8000 and 8001 to let go, and they
     list it among their peers.
+  - **The exercise app listens between takes** (2026-10-16): while its page
+    is on a choosing step or the record screen, it opens the capture to
+    show each input's level, until 5 s after the page last asked
+    (`/api/monitor`; the page stops asking when hidden, or after 10 minutes
+    untouched). The capture device is the practice recorder's too, so a
+    yield (`POST /api/yield`) closes it and keeps it closed for 10 s: a
+    peer that asks to record gets the inputs. If they are busy anyway, the
+    page says so and tries again 10 s later.
 
 ## Tests
 
