@@ -70,8 +70,7 @@ yet.
     -31 dBFS, the loudest 50 ms -39 to -43, floor -82. See PLAN.md step 5.
 - **Room mic since 2026-10-17: an MXL 990** (the player), on the 18i8's input 4 in place of the
   small-diaphragm condenser, gain knob about halfway, phantom on. Cardioid only, about 20 dB(A)
-  self-noise as listed (the note below had passed it over for that). T5 and T8 due; its room
-  tone at this gain to measure (T4).
+  self-noise as listed (the note below had passed it over for that). T4 and T5 done (swap log); T8 due.
 - **Wanted, when a good used one turns up locally (not a priority):** a
   room mic, for what a listener hears (the instruments and the room
   together), beside the close mics and pickups. It needs its own input:
@@ -810,6 +809,7 @@ someone in the room.
 | 2026-10-17 | 5, 6, 7 | the ECS LIVA (Celeron N2807, 2 cores, 1.8 GB) | an ASUS Chromebox 2 (CN62: Core i7-5500U, 2 cores and 4 threads, 3.7 GB, 16 GB SSD; MrChromebox UEFI firmware 4.12, from an earlier install), Debian 13.7 fresh, hostname `practice`, Wi-Fi (Intel 7260), its address reserved on the router; the 18i8 on its USB, `snd_usb_audio lowlatency=0` as on the LIVA; the LIVA switched off | Why: the band player (ambient-room, "The band player") left little room on the LIVA (silent replay: the band ~400 ms and its engine ~250 ms of CPU a second, engine stalls to 60-100 ms, 5-10 underruns a take at a 16 ms buffer); on the Chromebox ~185 and ~92 ms, 1 underrun a take. Services deployed fresh (`tools/deploy`'s steps; configs from `config/`, not copied from the LIVA), the exercises and five backings pushed from the repos, no takes copied (the player). All five services answer after a reboot. Throughput over SSH, 15 MB: desktop to box 13-21 MB/s, box to desktop 12 MB/s; ping 2-120 ms (Wi-Fi power saving, to look at) | T10 in part (back by itself after a reboot); T1-T4, T6, T9, T11 due |
 | 2026-10-17 | 2, 3, 5 | | scarlett-18i8-gen3 on the Chromebox | hwcheck T1-T3; T4 floor (10 s, inputs as left: the 8 analog channels -67 to -100 dBFS rms, the loopback channels 8-19 silent); T7: 1 kHz at -20 dBFS back at -58.4 dBFS through the air (heard in the room, the player); T9 duplex 30 min: 0 xruns, 0 kernel USB errors (xruns only: not the LIVA's sample-exact sine check). The 18i8 on a USB 2 port (black); the box has one xHCI controller. T6 and T11 skipped by the player ("if there are problems they'll turn up during normal use") | pass |
 | 2026-10-17 | 1, 2 | the small-diaphragm condenser on input 4 | an MXL 990 on input 4, gain about halfway, phantom on | T4 (hwcheck, 10 s, the room quiet): input 4 -67.0 dBFS rms, peak -52.1, the same as the condenser's that morning (-67.2, peak -53.4): the room's tone, not the mic's own noise, sets the floor at this gain. T5 and T8 due | pass |
+| 2026-10-17 | 1, 2 | | the MXL 990 on input 4, gain about halfway | T5 from a free take (2026-10-17_143232, 89 s, the Martin D-1 strummed and sung, the player: "levels were good i think"): peak -11.4 dBFS, no clipping; 50 ms peaks -23.7 (median), -18.4 (90%), -14.5 (99%); 50 ms rms -32.9 median, against the room's -67 (T4): about 34 dB over it | pass |
 
 ## Sources
 
