@@ -99,15 +99,18 @@ def find_lag(take: np.ndarray, played: np.ndarray, max_lag: int, min_lag: int = 
     """The capture sample where `played` starts, by phase-transform cross-correlation
     (sharp peaks whatever the backing's spectrum), searched from min_lag (it may be negative:
     the backing can start before the capture's first sample) to max_lag. Returns the lag and
-    how far its peak stands above the median of the others."""
+    how far its peak stands above the median of the others. In single precision, each array
+    freed when done: a three-minute take's transforms (2^24 points) in double precision took
+    more memory than the control unit has (2026-10-16)."""
     n = _next_pow2(len(take) + len(played) + abs(min(min_lag, 0)))
-    X = np.fft.rfft(take.astype(np.float64), n)
-    P = np.fft.rfft(played.astype(np.float64), n)
-    cross = X * np.conj(P)
-    cross /= np.abs(cross) + 1e-12
-    cc = np.abs(np.fft.irfft(cross, n))
+    cross = np.fft.rfft(take.astype(np.float32), n)
+    cross *= np.conj(np.fft.rfft(played.astype(np.float32), n))
+    cross /= np.abs(cross) + np.float32(1e-12)
+    cc = np.fft.irfft(cross, n)
+    del cross
     lags = np.arange(min_lag, max_lag + 1)
-    window = cc[lags % n]
+    window = np.abs(cc[lags % n]).astype(np.float64)
+    del cc
     k = int(np.argmax(window))
     floor = float(np.median(window)) + 1e-12
     return int(lags[k]), float(window[k] / floor)
@@ -123,18 +126,36 @@ def _placed(played: np.ndarray, start: int, n: int) -> np.ndarray:
     return out
 
 
+def _lagged_dots(a: np.ndarray, b: np.ndarray, taps: int, block: int = 1 << 18) -> np.ndarray:
+    """r[k] = sum over n of a[n] * b[n - k], for k = 0 .. taps - 1 (b taken as 0 before its
+    start; a and b the same length), a block at a time, so no transform is longer than about
+    twice the block."""
+    n = len(a)
+    r = np.zeros(taps)
+    N = _next_pow2(2 * block + taps)
+    for s0 in range(0, n, block):
+        A = a[s0:s0 + block]
+        lo = s0 - (taps - 1)
+        B = b[max(lo, 0):s0 + len(A)]
+        if lo < 0:
+            B = np.concatenate([np.zeros(-lo), B])
+        c = np.fft.irfft(np.fft.rfft(B, N) * np.conj(np.fft.rfft(A, N)), N)
+        r += c[taps - 1::-1]
+    return r
+
+
 def fit_path(take: np.ndarray, played: np.ndarray, lag: int, taps: int = 64, pre: int = 8) -> np.ndarray:
     """Least-squares filter h (`taps` long, starting `pre` samples before the lag) with
     take[n] ~ sum_k h[k] played[n - lag + pre - k]. From the auto- and cross-correlations
-    (Wiener-Hopf), so it does not need the samples in memory twice. Short on purpose: a
-    longer path fitted to the first bass takes (2026-10-12) took out no more of the backing
-    (5-7 dB even fitted to the seconds before the bass came in) and some of the bass."""
+    (Wiener-Hopf), computed a block at a time (`_lagged_dots`): over a whole take at once they
+    took more memory than the control unit has. Short on purpose: a longer path fitted to the
+    first bass takes (2026-10-12) took out no more of the backing (5-7 dB even fitted to the
+    seconds before the bass came in) and some of the bass."""
     n = len(take)
     shifted = _placed(played, lag - pre, n)
-    N = _next_pow2(2 * n)
-    S = np.fft.rfft(shifted, N)
-    auto = np.fft.irfft(S * np.conj(S), N)[:taps]
-    cross = np.fft.irfft(np.fft.rfft(take.astype(np.float64), N) * np.conj(S), N)[:taps]
+    take = take.astype(np.float64)
+    auto = _lagged_dots(shifted, shifted, taps)
+    cross = _lagged_dots(take, shifted, taps)
     R = auto[np.abs(np.subtract.outer(np.arange(taps), np.arange(taps)))]
     R[np.diag_indices(taps)] *= 1.0 + 1e-6  # a little regularization
     return np.linalg.solve(R, cross)
