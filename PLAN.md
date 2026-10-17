@@ -460,7 +460,10 @@ on the same screen as the controls, so a take needs little preparation.
     takes' note and delete. No console errors.
   - **Deployed 2026-10-16, about 06:15** (both recorders idle). `/etc/exercise-recorder.toml`
     got the `[inputs.N]` tables by hand (the installer keeps an existing config; the old one is
-    `/etc/exercise-recorder.toml.pre-inputs.bak`). Not yet tried on the LIVA: the practice
+    `/etc/exercise-recorder.toml.pre-inputs.bak`). 2026-10-16: the DI moved to rear line input 7 (the
+    player; 5 and 6 carry the mixer for records), kept as channel 2 in place of input 1, so a take's
+    channels are as before; edited by hand on the unit (`/etc/exercise-recorder.toml.pre-input7.bak`)
+    and in `config/exercises.toml`. Not yet tried on the LIVA: the practice
     recorder recording while the exercise page is open (the inputs handed over on its yield).
 - **The score before choosing, breadcrumbs, and hearing the chart** (2026-10-16, the player's
   request: "i want to see the chart previewed for the selected exercise. i want breadcrumbs at the

@@ -5,10 +5,11 @@
 capture = "scarlett-18i8-gen3"
 playback = "scarlett-18i8-gen3"
 # The inputs this app keeps, in place of the profile's (inputs 3 and 4): input 3 (the Nadine), input
-# 4 (the condenser), and input 1 (phantom off) for the bass's Fishman Full Circle piezo through its
-# Fishman Pro-EQ Platinum DI (2026-10-15). A take's channels are in this order: 0 the Nadine, 1 the
-# condenser, 2 input 1. The channels are the inputs' numbers less one.
-keep_channels = [2, 3, 0]
+# 4 (the condenser), and input 7 (a rear line input) for the bass's Fishman Full Circle piezo through
+# its Fishman Pro-EQ Platinum DI (2026-10-16; on input 1, phantom off, from 2026-10-15). A take's
+# channels are in this order: 0 the Nadine, 1 the condenser, 2 input 7. The channels are the inputs'
+# numbers less one. (Rear inputs 5 and 6 carry the mixer for records: not kept.)
+keep_channels = [2, 3, 6]
 # "~" is the home of the user the service runs as.
 takes_dir = "~/exercise-takes"
 exercises_dir = "~/exercises"
@@ -22,9 +23,9 @@ peers = ["http://127.0.0.1:8000", "http://127.0.0.1:8001", "http://127.0.0.1:800
 # What is plugged into each kept input, by the interface's input number: the app's input panel
 # shows them, and each take's sidecar says what each channel carried. "for": a pickup or mic on
 # one kind of instrument; none: a mic for the room.
-[inputs.1]
+[inputs.7]
 name = "Piezo"
-details = "Fishman Full Circle, through the Fishman Pro-EQ Platinum DI"
+details = "Fishman Full Circle, through the Fishman Pro-EQ Platinum DI, into rear line input 7"
 for = "bass"
 
 [inputs.3]
