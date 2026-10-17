@@ -291,7 +291,14 @@ on the phone, presses Record along, and plays with it over the speakers.
   player: enough knobs for now). Playback boosts at most 16 dB, so these
   takes play back quieter than others.
 - **Next:** the line-up after a take in a separate, low-priority process,
-  never during a recording; then play-along takes again, short. If they
+  never during a recording; then play-along takes again, short.
+- **2026-10-16, evening: three-minute play-along takes ran the LIVA out of memory.** The line-up
+  transformed the whole take in double precision (2.0 GB at the peak for a 188 s take over Saint
+  Anne's Reel, on 1.86 GB): that take's line-up never finished, the app held 1.45 GB idle after it,
+  and the next take froze at 28 s with an xrun. Now the lag search runs in single precision and the
+  path's correlations are summed a block at a time: the same lag, levels and cleaned take, 0.68 GB at
+  the peak. Deployed the same evening. (The 18:31 take's sidecar still has no line-up: "line up
+  again" would fill it in.) If they
   still lose data, the LIVA (slot 5's alternate: an Intel USB controller)
   or the Scarlett (high-speed USB, no split transactions).
 - **With a new interface:** the Scarlett 18i8 3rd Gen's routing matrix can
