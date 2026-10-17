@@ -511,7 +511,10 @@ on the same screen as the controls, so a take needs little preparation.
   - Tried on the desktop (fake device, headless Chrome at 1180x820, 820x1180 and 390x844): the
     preview, the walk from the top, a change of instrument that leaves the exercise to pick again,
     Hear it on both screens, Record while it plays (it stops), the crumbs during a take. No console
-    errors. Not yet deployed, and the exercises on the control unit have no audio yet.
+    errors. Deployed 2026-10-16 (evening), with the chart audio rendered for all 63 exercises on the control
+    unit (`--audio-only`, 184 MB there). The player chose their own SoundFonts where there are
+    any (the Beard, the Cleveland), GS for the rest, after an A/B with GS's steel-string guitar
+    and acoustic bass. Not yet heard over the speakers on the unit.
 - **Next:** a tool to bring exercise takes into dobro-transcription with
   their `takes.csv` rows (`tools/pull-take` reads only the practice
   recorder's takes; exercise takes need `/etc/exercise-recorder.toml`),
