@@ -334,7 +334,10 @@ yet.
   - USB-A ports for the audio devices;
   - a network link at a fixed address;
   - fanless, so it is silent in the room.
-- **Current (2026-10-14): ECS LIVA** (DMI "ECS BAT-MINI", BIOS 5.6.5 of
+- **Current (2026-10-17): ASUS Chromebox 2 (CN62)**, Core i7-5500U (2 cores, 4 threads), 3.7 GiB,
+  a 16 GB SSD, Debian 13; it has a fan (not fanless, unlike the interface asks: to listen for in
+  takes). In place of the LIVA for the band player's CPU (swap log).
+- **Before (2026-10-14 to 2026-10-17): ECS LIVA** (DMI "ECS BAT-MINI", BIOS 5.6.5 of
   2014-07-28), in place of the Pi 3 after the Pi's T6 popped with the 18i8
   (swap log). Celeron N2807 (Bay Trail-M, 2 cores, 1.58 GHz), 1.8 GiB, a
   29 GB eMMC, fanless.
