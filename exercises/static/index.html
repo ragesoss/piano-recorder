@@ -293,6 +293,11 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
 .readme th, .readme td { border-bottom: 1px solid var(--line); padding: 4px 10px 4px 0; text-align: left; vertical-align: top; }
 .readme th { color: var(--ink3); }
 .side { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+/* the boxes scroll when the column is short (three inputs, a short screen), so Record stays in view */
+.side-scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 14px; }
+.side-scroll > * { flex: none; }
+.side > .recbtn { flex: none; }
+@media (max-height: 760px) { .side > .recbtn { min-height: 96px; } }
 .box { background: var(--surf2); border-radius: 18px; padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; }
 .box .row { display: flex; justify-content: space-between; font-size: 16px; }
 .box .dev-line { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 14px; color: var(--ink3); }
@@ -1077,10 +1082,10 @@ function renderRecord() {
   const level = s ? s.level_offset_db : 0;
   return `<div class="rec-head"><p class="sentence display">${recSentence(true)}</p><div class="meta">${meta}</div></div>
     <div class="rec-grid">${main}
-      <div class="side"><div class="box"><span class="label">Listening</span>${used.map((i) => `<div class="row"><span>${esc(i.name)}${carries()[i.input] === "room" ? " (room)" : ""}</span><span class="tnum" data-meter-text="${i.channel}">–</span></div><span class="meter" data-meter="${i.channel}"><i></i><b></b></span>`).join("")}<span class="muted" id="monNote" style="font-size:14px"></span>
+      <div class="side"><div class="side-scroll"><div class="box"><span class="label">Listening</span>${used.map((i) => `<div class="row"><span>${esc(i.name)}${carries()[i.input] === "room" ? " (room)" : ""}</span><span class="tnum" data-meter-text="${i.channel}">–</span></div><span class="meter" data-meter="${i.channel}"><i></i><b></b></span>`).join("")}<span class="muted" id="monNote" style="font-size:14px"></span>
           <span class="dev-line" data-dev-line>${devLine()}</span></div>
         <div class="box"><div class="row"><label for="recLevel" style="font-weight:700">Speakers</label><span data-level-text class="tnum">${esc(dbText(level))}</span></div><input id="recLevel" type="range" min="-30" max="12" step="1" value="${level}" data-level></div>
-        <button type="button" class="btn small" data-act="sheet" style="justify-content:center">Takes of this ${c.kind === "exercise" ? "exercise" : c.kind === "playalong" ? "backing" : "kind"} (${mine.length})</button>
+        <button type="button" class="btn small" data-act="sheet" style="justify-content:center">Takes of this ${c.kind === "exercise" ? "exercise" : c.kind === "playalong" ? "backing" : "kind"} (${mine.length})</button></div>
         <button type="button" class="recbtn" data-act="record" ${s && s.devices.capture ? "" : "disabled"}><i></i>Record</button></div></div>`;
 }
 
