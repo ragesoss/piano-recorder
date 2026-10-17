@@ -178,3 +178,79 @@ def test_a_free_take_on_a_guitar_not_listed_keeps_the_kind_in_its_sidecar(client
     assert t["exercise"] is None and t["instrument_id"] == "other:guitar" and t["instrument_name"] == "a guitar (not listed)"
     side = json.loads((tmp_path / "takes" / f"{take}.json").read_text())
     assert side["instrument"] == "guitar"
+
+
+def add_chart(root, ex_id, beat0_s=0.25, seconds=3.0, freq=3000.0, name="chart.wav"):
+    """An exercise's chart as exercises/chart.py leaves it: a WAV (here a tone from beat 0), named
+    in exercise.json."""
+    import wave
+
+    import numpy as np
+
+    rate = 48000
+    t = np.arange(int(seconds * rate)) / rate
+    x = np.where(t >= beat0_s, 0.5 * np.sin(2 * np.pi * freq * t), 0.0)
+    d = root / ex_id
+    with wave.open(str(d / "chart.wav"), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes((x * 32767).astype("<i2").tobytes())
+    meta = json.loads((d / "exercise.json").read_text())
+    meta["audio"] = {"file": name, "beat0_s": beat0_s, "seconds": seconds, "sound": "a test tone"}
+    (d / "exercise.json").write_text(json.dumps(meta))
+
+
+def test_an_exercise_chart_plays_with_the_takes_count_in_and_click(client, tmp_path):
+    add_chart(tmp_path / "exercises", "bass-001-walks")
+    exs = {e["id"]: e for e in client.get("/api/exercises").json()}
+    assert exs["bass-001-walks"]["audio"] == {"seconds": 3.0, "sound": "a test tone"} and exs["bass-002-roots"]["audio"] == {}
+    assert client.post("/api/exercises/bass-001-walks/hear", json={"count_in": True, "click": True}).status_code == 200
+    end = time.monotonic() + 5
+    while time.monotonic() < end:
+        pl = client.get("/api/status").json()["playing"]
+        if pl and pl["beat0_s"] is not None:
+            break
+        time.sleep(0.05)
+    tempo = {"bpm": 240.0, "pickup_beats": 1.0, "beats_per_bar": 4}
+    clicks, beat0 = click_track(tempo, 48000, 9.0)  # the take's: a bar's count-in, the pickup, 9 beats
+    assert pl["exercise"] == "bass-001-walks" and pl["take"] is None and pl["tempo"] == tempo
+    assert abs(pl["beat0_s"] - beat0) < 1e-3  # the chart's beat 0 on the click's
+    assert abs(pl["seconds"] - max(len(clicks) / 48000, beat0 - 0.25 + 3.0)) < 0.01
+    client.post("/api/stop")
+    assert client.get("/api/status").json()["playing"] is None
+
+
+def test_a_take_stops_the_chart_and_never_hears_it(client, tmp_path):
+    import wave
+
+    import numpy as np
+
+    add_chart(tmp_path / "exercises", "bass-001-walks", beat0_s=0.0, seconds=8.0)
+    client.post("/api/exercises/bass-001-walks/hear", json={"count_in": False, "click": False})
+    end = time.monotonic() + 5
+    while time.monotonic() < end and not (client.get("/api/status").json()["playing"] or {}).get("position"):
+        time.sleep(0.05)
+    take = client.post("/api/record/start", json={"click": False, "count_in": False}).json()["take"]
+    s = client.get("/api/status").json()
+    assert s["state"] == "recording" and s["playing"] is None
+    time.sleep(1.0)
+    client.post("/api/record/stop")
+    wait_idle(client)
+    with wave.open(str(tmp_path / "takes" / f"{take}.wav")) as w:
+        ch = w.getnchannels()
+        x = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").reshape(-1, ch).astype(float).mean(axis=1)
+    spec = np.abs(np.fft.rfft(x * np.hanning(len(x))))
+    f = np.fft.rfftfreq(len(x), 1 / 48000)
+    at = spec[np.abs(f - 3000) < 5].max()
+    around = np.median(spec[(np.abs(f - 3000) > 50) & (np.abs(f - 3000) < 500)])
+    assert at < 20 * around  # the fake device hears its own playback: the tone would stand out
+
+
+def test_hearing_needs_the_charts_audio(client, tmp_path):
+    r = client.post("/api/exercises/bass-002-roots/hear")
+    assert r.status_code == 404 and "no audio" in r.json()["detail"]
+    assert client.post("/api/exercises/bass-009-nothing/hear").status_code == 404
+    add_chart(tmp_path / "exercises", "bass-002-roots", name="../bass-001-walks/page-1.svg")  # its own folder only
+    assert client.post("/api/exercises/bass-002-roots/hear").status_code == 404
+    assert next(e for e in client.get("/api/exercises").json() if e["id"] == "bass-002-roots")["audio"] == {}

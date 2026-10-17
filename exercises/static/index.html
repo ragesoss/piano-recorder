@@ -42,14 +42,21 @@ h1, h2, h3, p { margin: 0; }
 .tnum { font-variant-numeric: tabular-nums; }
 .svg-i { flex: none; }
 
-/* the top line: back home, the steps (choosing) or the take (recording), the mixer */
-.top { flex: none; min-height: 68px; display: flex; align-items: center; gap: 12px; padding: 8px 24px; flex-wrap: wrap; }
-.top .home { min-height: 44px; display: flex; align-items: center; gap: 6px; color: var(--ink3); font-size: 17px; text-decoration: none; flex: none; }
+/* the top line: where you are, as breadcrumbs (the music room, each step with its choice, Ready, the
+   record screen, the take); each one goes back there. While recording they wait for Stop. */
+.top { flex: none; min-height: 68px; display: flex; align-items: center; gap: 12px; padding: 8px 24px; }
+.top .home { min-height: 44px; display: flex; align-items: center; gap: 6px; color: var(--ink3); font-size: 17px; text-decoration: none; flex: none;
+  padding-right: 4px; }
 .top .home svg path { stroke: var(--ink3); }
-.top .mid { flex: 1; min-width: 0; display: flex; justify-content: center; }
-.top .end { flex: none; display: flex; align-items: center; gap: 14px; font-size: 15px; color: var(--ink3); }
-.steps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; }
-.steps .chev { color: var(--faint); }
+.top .end { flex: none; display: flex; align-items: center; gap: 14px; font-size: 15px; color: var(--ink3); margin-left: auto; }
+.crumbs { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.crumbs .chip { padding: 0 12px; max-width: 230px; }
+.crumbs .chip.now { padding: 0 14px; }
+.crumbs .chip.todo { padding: 0 8px; }
+.crumbs .chip .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.crumbs .chev { color: var(--faint); }
+.crumbs .off { opacity: .45; cursor: default; }
+.crumbs .chip.off { background: transparent; }
 .chip { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 0 16px; border-radius: 22px; border: 0;
   background: var(--surf2); color: var(--ink); font-size: 16px; font-weight: 600; text-decoration: none; white-space: nowrap;
   max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
@@ -133,7 +140,6 @@ h1, h2, h3, p { margin: 0; }
 .sort .end { margin-top: auto; font-size: 17px; font-weight: 600; display: flex; gap: 10px; align-items: center; }
 
 /* 3 which exercise */
-.ex-grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 28px; margin-top: 18px; align-items: start; }
 .col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .col h2 { font-size: 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); margin-top: 8px; }
 .col h2.red { color: var(--red-ink); }
@@ -163,6 +169,28 @@ h1, h2, h3, p { margin: 0; }
 .tunes { display: flex; flex-wrap: wrap; gap: 8px; }
 .tunes button { min-height: 48px; padding: 0 16px; border: 1.5px solid var(--line); border-radius: 24px; background: var(--surf); font-size: 17px; font-weight: 600; }
 .tunes button.sel { border: 2.5px solid var(--purple); background: var(--purple-tint); }
+.tunes button, .list button { gap: 8px; }
+.tunes button { display: inline-flex; align-items: center; }
+/* 3 which exercise: the list, and the score of the one tapped beside it (a sheet over it when narrow) */
+.pick-body { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 14px; }
+.pick-body > .q { flex: none; }
+.pick { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr); gap: 24px; margin-top: 16px; }
+.pick-list { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 10px; padding: 0 6px 12px 0; }
+.pick-list h2 { font-size: 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); margin-top: 8px; }
+.pick-list h2:first-child { margin-top: 0; }
+.pick-list h2.red { color: var(--red-ink); }
+.preview { min-height: 0; display: flex; flex-direction: column; background: var(--surf); border: 1.5px solid var(--line); border-radius: 22px; overflow: hidden; }
+.pv-head { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line-soft); flex-wrap: wrap; }
+.pv-t { flex: 1; min-width: 200px; display: flex; align-items: center; gap: 14px; }
+.pv-t .num { font-family: var(--display); font-size: 26px; font-weight: 700; color: var(--purple-ink); flex: none; }
+.pv-t .main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pv-t .title { font-size: 20px; font-weight: 700; }
+.pv-t .info { font-size: 15px; color: var(--ink3); }
+.pv-score { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 14px; }
+.pv-score img { display: block; width: 100%; height: auto; filter: invert(0.92); mix-blend-mode: lighten; margin-bottom: 10px; }
+.pv-empty { margin: auto; color: var(--ink3); font-size: 19px; padding: 40px 24px; text-align: center; line-height: 1.5; }
+.preview .pv-close, .preview .pv-go { display: none; }
+.btn.go.pv-go { min-height: 56px; padding: 0 20px; border-radius: 18px; font-size: 20px; }
 
 /* 3 which backing, and the speakers */
 .bk-grid { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 28px; margin-top: 18px; align-items: start; }
@@ -233,6 +261,9 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
 .ins-line b { color: var(--ink); }
 .ins-line .meter { flex: none; width: 150px; }
 .toggles { display: flex; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+.hear-box { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
+.hear-box .prog { min-width: 180px; }
+.hear-how { font-size: 15px; }
 
 /* recording: the record screen, the take, what was just recorded */
 .rec-head { flex: none; padding: 4px 40px 0; display: flex; flex-direction: column; gap: 10px; }
@@ -244,7 +275,11 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
 .score { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--surf); border: 1.5px solid var(--line);
   border-radius: 22px; padding: 14px 16px; }
 .score .bar { display: flex; justify-content: space-between; align-items: center; font-size: 15px; color: var(--ink3); margin-bottom: 6px; }
-.score .bar button { background: transparent; border: 0; color: var(--purple-ink); font-weight: 700; text-decoration: underline; min-height: 44px; }
+.score .bar { gap: 12px; flex-wrap: wrap; }
+.score .bar .bar-r { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.score .bar .bar-r button { background: transparent; border: 0; color: var(--purple-ink); font-weight: 700; text-decoration: underline; min-height: 44px; }
+.score .bar .hear { min-height: 44px; padding: 0 14px; font-size: 16px; color: var(--ink); }
+.score .bar .hear.on { color: #fff; }
 .score img { display: block; width: 100%; height: auto; filter: invert(0.92); mix-blend-mode: lighten; margin-bottom: 10px; }
 .score .none { color: var(--ink3); padding: 40px 20px; text-align: center; font-size: 19px; line-height: 1.5; }
 .readme { font-size: 16px; line-height: 1.5; color: var(--ink2); background: var(--surf2); border-radius: 14px; padding: 12px 16px; margin-bottom: 12px; }
@@ -260,6 +295,8 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
 .side { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 .box { background: var(--surf2); border-radius: 18px; padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; }
 .box .row { display: flex; justify-content: space-between; font-size: 16px; }
+.box .dev-line { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 14px; color: var(--ink3); }
+.box .dev-line .dev { min-width: 0; }
 .recbtn { margin-top: auto; min-height: 132px; border: 0; border-radius: 26px; background: var(--red); color: #fff; display: flex; align-items: center;
   justify-content: center; gap: 18px; font-family: var(--display); font-size: 40px; font-weight: 700; }
 .recbtn:disabled { background: #2A2531; color: var(--faint); }
@@ -347,7 +384,17 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
 .empty { color: var(--ink3); padding: 12px 0; }
 
 @media (max-width: 1060px) {
-  .on-grid, .ex-grid, .bk-grid { grid-template-columns: minmax(0, 1fr); }
+  .on-grid, .bk-grid { grid-template-columns: minmax(0, 1fr); }
+  .crumbs .chip { max-width: 170px; }
+  .crumbs .chip .svg-i, .crumbs .wide { display: none; }
+  .pick-body { display: block; overflow-y: auto; }
+  .pick { display: block; }
+  .pick-list { overflow: visible; padding-right: 0; }
+  .preview { display: none; }
+  .preview.open { display: flex; position: fixed; inset: 0; z-index: 10; border: 0; border-radius: 0; background: var(--bg);
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .preview.open .pv-close, .preview.open .pv-go { display: inline-flex; }
+  .preview.open .pv-head { padding: 10px 16px; }
   .rec-grid, .done-grid { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
   .score { min-height: 360px; }
   .sorts { grid-template-columns: minmax(0, 1fr); }
@@ -368,14 +415,17 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
   .rows .k { width: 100%; }
   .stopbtn { min-width: 0; width: 100%; }
   .chip { max-width: 160px; }
+  .crumbs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .crumbs::-webkit-scrollbar { display: none; }
+  .crumbs > * { flex: none; }
+  .preview.open .pv-go { width: 100%; justify-content: center; }
 }
 </style>
 </head>
 <body>
 <div class="app">
   <header class="top">
-    <a class="home" id="home" href="/"><svg class="svg-i" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span id="homeText">Music room</span></a>
-    <div class="mid" id="mid"></div>
+    <nav class="crumbs" id="crumbs" aria-label="Where you are"></nav>
     <div class="end" id="end"></div>
   </header>
   <div class="banner" id="error" hidden><span id="errorText"></span><button type="button" data-act="dismiss">OK</button></div>
@@ -408,7 +458,7 @@ const ICON = {
   trash: '<svg class="svg-i" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5" fill="none" stroke="#F2EEF8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
   speaker: '<svg class="svg-i" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="#F2EEF8"></path><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="#F2EEF8" stroke-width="2" stroke-linecap="round"></path></svg>',
 };
-$("#home").href = `http://${location.hostname}/`;
+const HOME = `http://${location.hostname}/`;
 
 // --- what the server has, and what is chosen
 const S = {
@@ -419,6 +469,7 @@ const S = {
   snapshot: null,  // the choices as they were when a step was opened from Ready
   take: null,  // the take just recorded (the recorded screen)
   showGood: false, showReadme: false, sheet: false, peaks: {}, error: "",
+  preview: null, previewOpen: false,  // the exercise whose score the picker shows (open: as a sheet, when narrow)
 };
 const DEFAULTS = { instruments: [], inputs: {}, kind: null, exercise: null, tempo: {}, countIn: true, clickThrough: true,
   backing: null, backingCountIn: true, freeClick: false, freeBpm: 92, freeBpb: 4, freeCountIn: true };
@@ -539,12 +590,12 @@ function whichName() {
   const k = C().kind;
   return k === "exercise" ? "Which one" : k === "playalong" ? "Which backing" : k === "free" ? "From the speakers" : "Then";
 }
-function stepValue(step) {  // a step's answer, short, for its chip
+function stepValue(step, long) {  // a step's answer, short, for its chip (long: an exercise's number and title)
   const c = C();
   if (step === "on") return chosen().map((i) => i.short).join(" + ");
   if (step === "sort") return { exercise: "Exercise", playalong: "Play-along", free: "Free play" }[c.kind] || "";
   const e = exById(c.exercise), b = backingById(c.backing);
-  if (c.kind === "exercise") return e ? (exNum(e) || shortTitle(e)) : "";
+  if (c.kind === "exercise") return e ? (long && exNum(e) ? `${exNum(e)} ${shortTitle(e)}` : exNum(e) || shortTitle(e)) : "";
   if (c.kind === "playalong") return b ? b.title : "";
   return c.freeClick ? `Click at ${c.freeBpm}` : "Nothing";
 }
@@ -614,8 +665,8 @@ const screenEl = () => $("#screen");
 function render() {
   const keep = $$(".body, .score, .takes, .take-card, .live").map((el) => el.scrollTop);
   const scr = S.screen;
-  $("#mid").innerHTML = ["on", "sort", "which", "ready"].includes(scr) ? stepsNav() : "";
-  $("#end").innerHTML = scr === "record" || scr === "recorded" ? devLine() : "";
+  $("#crumbs").innerHTML = crumbsNav();
+  const cr = $("#crumbs"); if (cr.scrollWidth > cr.clientWidth) cr.scrollLeft = cr.scrollWidth;  // a phone: where you are
   if (scr === "on") screenEl().innerHTML = renderOn();
   else if (scr === "sort") screenEl().innerHTML = renderSort();
   else if (scr === "which") screenEl().innerHTML = C().kind === "exercise" ? renderExercises() : C().kind === "playalong" ? renderBackings() : renderFree();
@@ -633,15 +684,24 @@ function go(screen, opts = {}) {
   if (STEPS.includes(screen) && !STEPS.includes(S.screen)) { S.snapshot = JSON.parse(JSON.stringify(C())); S.entry = screen; }
   if (opts.walk !== undefined) S.walk = opts.walk;
   if (screen === "ready" || screen === "record") S.walk = false;
+  const from = S.screen;
   S.screen = screen;
   S.sheet = false; $("#sheet").hidden = true;
   if (screen !== "which") S.showGood = false;
+  if (screen === "which" && from !== "which") previewChosen();
+  const pl = S.status && S.status.playing;
+  if (pl && pl.exercise && !["ready", "record"].includes(screen)) api("POST", "/api/stop").catch(() => {});  // its Stop is not there
   if (screen === "which" && C().kind === "playalong" && !backingById(C().backing) && S.backings.length) {
     S.choices.backing = backingsNewest()[0].id; save();  // the newest, to hear first
   }
   render();
   const b = $(".body"); if (b && !opts.keepScroll) b.scrollTop = 0;
   monitorTick();
+}
+function previewChosen() {  // the picker's score, first: the exercise chosen, if it is of the instrument's kind
+  const e = exById(C().exercise);
+  S.preview = e && chosen().length && (e.instrument || "") === chosen()[0].kind ? e.id : null;
+  S.previewOpen = false;
 }
 function answered(step) {  // a step's choice made: on to the next step, or back to Ready
   if (S.walk) {
@@ -653,20 +713,39 @@ function answered(step) {  // a step's choice made: on to the next step, or back
 }
 function restore() { if (S.snapshot) { S.choices = S.snapshot; save(); } go("ready"); }
 
-function stepsNav() {
-  const scr = S.screen, out = [];
+function crumbsNav() {
+  // the music room, then each step with its choice (or what is still to choose), Ready, and past
+  // it the record screen and the take. Each goes back to that step with the choices kept; while a
+  // take records they are not links (Stop first: a free take would go on with no one to stop it).
+  const scr = S.screen, out = [], rec = scr === "recording";
   const names = { on: "On what", sort: "What sort", which: whichName() };
+  const back = ICON.back.replace('stroke="#F2EEF8"', 'stroke="#A79FB4"');
+  out.push(rec ? `<span class="home off" aria-disabled="true" title="Stop the take first">${back}Music room</span>`
+    : `<a class="home" href="${esc(HOME)}" data-home>${back}Music room</a>`);
+  const crumb = (label, attrs, cls = "") => rec ? `<span class="chip off${cls}" aria-disabled="true">${label}</span>`
+    : `<button type="button" class="chip${cls}" ${attrs}>${label}</button>`;
   STEPS.forEach((s, i) => {
-    const n = i + 1, val = stepValue(s), ok = stepOk(s);
-    if (s === scr) out.push(`<span class="chip now" aria-current="step">${n} ${esc(names[s])}</span>`);
-    else if (ok && val) out.push(`<button type="button" class="chip" data-act="step" data-step="${s}">${ICON.check}${esc(val)}</button>`);
-    else if (val && STEPS.slice(0, i).every(stepOk)) out.push(`<button type="button" class="chip again" data-act="step" data-step="${s}"><s>${esc(val)}</s> pick again</button>`);
-    else out.push(`<span class="chip todo">${n} ${esc(names[s])}</span>`);
     out.push(ICON.chev);
+    const n = i + 1, val = stepValue(s), ok = stepOk(s), long = s === "which" ? stepValue(s, true) : val;
+    const label = long !== val && long.startsWith(val) ? `<span class="lbl">${esc(val)}<span class="wide">${esc(long.slice(val.length))}</span></span>` : esc(val);
+    if (s === scr) out.push(`<span class="chip now" aria-current="step">${n} ${esc(names[s])}</span>`);
+    else if (ok && val) out.push(crumb(`${ICON.check}${label}`, `data-act="step" data-step="${s}"`));
+    else if (val && STEPS.slice(0, i).every(stepOk)) out.push(crumb(`<s>${esc(val)}</s> pick again`, `data-act="step" data-step="${s}"`, " again"));
+    else out.push(`<span class="chip todo">${n} ${esc(names[s])}</span>`);
   });
+  out.push(ICON.chev);
   out.push(scr === "ready" ? `<span class="chip now" aria-current="step">Ready</span>`
-    : readyOk() ? `<button type="button" class="chip" data-act="go" data-to="ready">Ready</button>` : `<span class="chip todo">Ready</span>`);
-  return `<nav class="steps" aria-label="Steps">${out.join("")}</nav>`;
+    : readyOk() ? crumb("Ready", `data-act="go" data-to="ready"`) : `<span class="chip todo">Ready</span>`);
+  if (["record", "recording", "recorded"].includes(scr)) {  // the record screen (Recording: it, recording)
+    out.push(ICON.chev);
+    out.push(scr === "record" ? `<span class="chip now" aria-current="page">Record</span>`
+      : scr === "recording" ? `<span class="chip now" aria-current="page">Recording</span>` : crumb("Record", `data-act="go" data-to="record"`));
+  }
+  if (scr === "recorded") {
+    out.push(ICON.chev);
+    out.push(`<span class="chip now" aria-current="page">The take</span>`);
+  }
+  return out.join("");
 }
 function devLine() {
   const s = S.status;
@@ -770,34 +849,54 @@ function renderSort() {
 
 // 3: which exercise
 function exRow(e, big) {
-  const st = exState(e), sel = e.id === C().exercise, nx = nextExercise(), cur = exById(C().exercise);
+  // a tap shows its score (the preview); the one previewed is outlined, the one chosen says so
+  const st = exState(e), sel = e.id === C().exercise, pv = e.id === S.preview, nx = nextExercise(), cur = exById(C().exercise);
   const bits = [`${Math.round(e.tempo.bpm)} bpm`, `${e.bars} bars`];
   if (st.key === "review") bits.push(e.to_review === 1 ? `1 new take, ${when(e.last_take)}` : `${e.to_review} new takes, ${when(e.last_take)}`);
   const next = !sel && nx && nx.id === e.id && cur ? ` · <span class="p-ink" style="font-weight:700">next after ${esc(exNum(cur))}</span>` : "";
   const note = st.key === "wanted" && e.status_note ? `<span class="info" style="color:var(--ink)">${esc(e.status_note)}</span>` : "";
-  return `<button type="button" class="ex${sel ? " sel" : ""}" data-act="exercise" data-id="${esc(e.id)}"${big ? "" : ' style="min-height:72px"'}>
+  return `<button type="button" class="ex${pv ? " sel" : ""}" data-act="preview" data-id="${esc(e.id)}" aria-pressed="${pv}"${big ? "" : ' style="min-height:72px"'}>
     <span class="num">${esc(exNum(e))}</span><span class="main"><span class="title">${esc(shortTitle(e))}</span>${note}<span class="info">${esc(bits.join(" · "))}${next}</span></span>
-    ${sel ? `<span class="now">Chosen now${ICON.roundcheck}</span>` : ""}</button>`;
+    ${sel ? `<span class="now">Chosen${ICON.roundcheck}</span>` : ""}</button>`;
+}
+function useLabel(e) {  // the button that takes the exercise previewed on
+  return S.walk ? `Next: ready, with ${exNum(e) || shortTitle(e)}` : e.id === C().exercise ? `Keep ${exNum(e) || shortTitle(e)}: back to Ready`
+    : `Use ${exNum(e) || shortTitle(e)}: back to Ready`;
+}
+function previewHtml(e) {
+  if (!e) return `<section class="preview" aria-label="Score"><p class="pv-empty">Tap an exercise to see its score here.</p></section>`;
+  const st = exState(e);
+  const pages = e.pages.map((_, i) => `<img src="/api/exercises/${encodeURIComponent(e.id)}/pages/${i + 1}" alt="${esc(e.title)}, page ${i + 1}" loading="lazy">`).join("");
+  return `<section class="preview${S.previewOpen ? " open" : ""}" role="region" aria-label="The score of ${esc(exName(e))}">
+    <div class="pv-head"><button type="button" class="btn small pv-close" data-act="preview-close">${ICON.back} The list</button>
+      <div class="pv-t"><span class="num">${esc(exNum(e))}</span><span class="main"><span class="title">${esc(shortTitle(e))}</span>
+        <span class="info">${Math.round(e.tempo.bpm)} bpm · ${e.tempo.beats_per_bar}/4 · ${e.bars} bars${e.pages.length > 1 ? ` · ${e.pages.length} pages` : ""} · <span class="${st.key === "good" ? "" : "red-ink"}">${esc(st.label)}</span></span></span></div>
+      <button type="button" class="btn go pv-go" data-act="exercise" data-id="${esc(e.id)}">${esc(useLabel(e))} ${ICON.next}</button></div>
+    <div class="pv-score">${e.pages.length ? pages : '<p class="pv-empty">This exercise has no pages.</p>'}</div></section>`;
 }
 function renderExercises() {
   const kind = chosen()[0].kind, all = exercisesFor(kind), numbered = all.filter(exNum), tunes = all.filter((e) => !exNum(e));
   const g = (k) => numbered.filter((e) => exState(e).key === k);
   const wanted = g("wanted"), needed = g("needed"), review = g("review"), good = g("good");
-  // the good ones folded to four when the left column is long, the chosen one always shown
-  const shownGood = S.showGood || wanted.length + needed.length + review.length < 4 ? good
-    : good.slice(0, 4).concat(good.slice(4).filter((e) => e.id === C().exercise));
-  return `<div class="body"><div class="q"><h1>Which exercise?</h1><p>${esc(kindName(kind))}, in the order the project wants them. Pick one and you are back at Ready, with its click.</p></div>
-    <div class="ex-grid"><div class="col">
+  // the good ones folded to four when the list is long, the chosen and the previewed one always shown
+  const keep = (e) => e.id === C().exercise || e.id === S.preview;
+  const shownGood = S.showGood || wanted.length + needed.length + review.length < 4 ? good : good.slice(0, 4).concat(good.slice(4).filter(keep));
+  const pv = exById(S.preview);
+  const small = (e, label) => `<button type="button" class="${e.id === S.preview ? "sel" : ""}" data-act="preview" data-id="${esc(e.id)}" aria-pressed="${e.id === S.preview}">${label}${e.id === C().exercise ? ICON.check : ""}</button>`;
+  const left = leftButton();
+  const go = !pv ? `<span class="hint">Tap one to see its score</span>`
+    : pv.id === C().exercise && left && !S.walk ? `<span class="hint">Tap another to see its score</span>`
+    : `<button type="button" class="btn go" data-act="exercise" data-id="${esc(pv.id)}">${esc(useLabel(pv))} ${ICON.next}</button>`;
+  return `<div class="body pick-body"><div class="q"><h1>Which exercise?</h1><p>${esc(kindName(kind))}, in the order the project wants them. Tap one to see its score.</p></div>
+    <div class="pick"><div class="pick-list">
       ${wanted.length ? `<h2 class="red">Wanted again · ${wanted.length}</h2>${wanted.map((e) => exRow(e, true)).join("")}` : `<div class="strip"><b>Wanted again</b> none for ${esc(kind)}</div>`}
       ${needed.length ? `<h2 class="red">Needs a take · ${needed.length}</h2>${needed.map((e) => exRow(e, true)).join("")}` : `<div class="strip"><b>Needs a take</b> none for ${esc(kind)}</div>`}
       ${review.length ? `<h2>New takes to review · ${review.length}</h2>${review.map((e) => exRow(e)).join("")}` : ""}
-    </div><div class="col">
-      ${good.length ? `<h2 style="margin-top:0">Good · ${good.length}</h2><div class="list">${shownGood.map((e) => `<button type="button" class="${e.id === C().exercise ? "sel" : ""}" data-act="exercise" data-id="${esc(e.id)}"><span class="n">${esc(exNum(e))}</span><span class="t">${esc(shortTitle(e))}</span><span class="r">${Math.round(e.tempo.bpm)}${e.last_take ? ` · ${esc(when(e.last_take))}` : ""}</span></button>`).join("")}
+      ${good.length ? `<h2>Good · ${good.length}</h2><div class="list">${shownGood.map((e) => small(e, `<span class="n">${esc(exNum(e))}</span><span class="t">${esc(shortTitle(e))}</span><span class="r">${Math.round(e.tempo.bpm)}${e.last_take ? ` · ${esc(when(e.last_take))}` : ""}</span>`)).join("")}
         ${good.length > shownGood.length || (S.showGood && good.length > 4) ? `<button type="button" data-act="show-good"><span class="more">${S.showGood ? "Fewer" : `All ${good.length} good ones`}</span></button>` : ""}</div>` : ""}
-      ${tunes.length ? `<h2>Tunes · ${tunes.length}</h2><div class="tunes">${tunes.map((e) => `<button type="button" class="${e.id === C().exercise ? "sel" : ""}" data-act="exercise" data-id="${esc(e.id)}">${esc(e.title)}</button>`).join("")}</div>` : ""}
-    </div></div></div>
-    <div class="foot">${leftButton()}
-      <span class="hint">Tap one: ${S.walk ? "on to Ready" : "back to Ready with it"}</span></div>`;
+      ${tunes.length ? `<h2>Tunes · ${tunes.length}</h2><div class="tunes">${tunes.map((e) => small(e, esc(e.title))).join("")}</div>` : ""}
+    </div>${previewHtml(pv)}</div></div>
+    <div class="foot">${left}${go}</div>`;
 }
 
 // 3: which backing
@@ -901,7 +1000,7 @@ function renderReady() {
       <span style="flex:1;min-width:200px;font-size:18px;color:var(--ink2)"><b style="color:var(--ink)">${esc(exName(nx))}</b> · <b class="red-ink">${esc(exState(nx).label.toLowerCase())}</b> · ${Math.round(nx.tempo.bpm)} bpm · ${nx.bars} bars</span>
       <button type="button" class="btn small outline-p" data-act="swap" data-id="${esc(nx.id)}">${ICON.swap} Swap to ${esc(exNum(nx))}</button></div>` : ""}
     <div class="rows">
-      <div><span class="k">What</span><span class="v">${what}</span><button type="button" class="change" data-act="step" data-step="${c.kind === "free" ? "sort" : "which"}">Change</button></div>
+      <div><span class="k">What</span><span class="v">${what}</span>${c.kind === "exercise" ? `<span class="hear-box">${hearChart(e)}</span>` : ""}<button type="button" class="change" data-act="step" data-step="${c.kind === "free" ? "sort" : "which"}">Change</button></div>
       ${guide}
       <div><span class="k">On</span><span class="v" style="gap:6px">${onLines}${room}${unused.length ? `<span class="muted" style="font-size:15px">${esc(andList(unused.map((x) => `In ${x.input} ${x.name}`)))} not used</span>` : ""}</span><button type="button" class="change" data-act="step" data-step="on">Change</button></div>
       <div style="min-height:76px"><label class="k" for="readyLevel">Speakers</label><input id="readyLevel" type="range" min="-30" max="12" step="1" value="${level}" data-level style="flex:1;min-width:200px"><span data-level-text class="tnum" style="font-size:19px;font-weight:700;width:76px;text-align:right">${esc(dbText(level))}</span></div>
@@ -910,6 +1009,28 @@ function renderReady() {
   </div>
   <div class="foot"><button type="button" class="btn" data-act="start-over">${ICON.restart} Start from the top</button>
     <button type="button" class="btn go big" data-act="go" data-to="record"><svg class="svg-i" width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="#FF5147" stroke="#FFFFFF" stroke-width="2"></circle></svg> Ready to record ${ICON.next}</button></div>`;
+}
+
+// --- the chart heard over the speakers, before a take (Ready, and the record screen): its notes,
+// rendered on the desktop when it was pushed, at the score's tempo, with the count-in and the click
+// the take will have (Ready's switches). The speakers, not this iPad: the bass's low notes, the
+// level the click will have, and a take starting stops it (it cannot end up in one).
+function hearChart(e) {
+  if (!e.audio || !e.audio.seconds) return `<span class="muted hear-how" title="Push it again (tools/push-exercise) to get its audio">No audio of it yet</span>`;
+  const c = C(), bpm = Math.round(e.tempo.bpm), mine = Math.round(tempoOf(e)), pl = S.status && S.status.playing;
+  if (pl && pl.exercise === e.id) return `<button type="button" class="hear on" data-act="hear-stop">${ICON.stop} Stop</button>
+    <span class="prog" data-prog="exercise:${esc(e.id)}"><span class="bar"><i></i></span><span class="tnum" data-chart-pos>${esc(chartPlace(pl, e))}</span></span>`;
+  const how = c.clickThrough ? (c.countIn ? "count-in and click" : "click") : c.countIn ? "count-in" : "";
+  return `<button type="button" class="hear" data-act="hear-chart" data-id="${esc(e.id)}">${ICON.play} Hear it</button>
+    <span class="muted hear-how">at ${bpm}${mine !== bpm ? ", the score's tempo" : ""}${how ? `, with the ${how}` : ""}</span>`;
+}
+function chartPlace(pl, e) {  // where the chart is: its count-in, the pickup, the bar and beat
+  if (pl.beat0_s == null || !pl.tempo) return "On the speakers";
+  const p = position({ backing: { kind: "click", tempo: pl.tempo, beat0_s: pl.beat0_s, position: pl.position } });
+  if (!p) return "On the speakers";
+  if (p.counting) return `Count-in · ${p.big}`;
+  if (p.big === "Pickup") return `Pickup · beat ${p.beat}`;
+  return Number(p.big.slice(4)) > e.bars ? "On the speakers" : `${p.big} of ${e.bars} · beat ${p.beat}`;
 }
 
 // --- recording: the record screen (the score, the inputs, Record)
@@ -934,7 +1055,7 @@ function takesFor() {  // the takes like the next one: of its exercise, with its
 function scoreHtml(e, controls) {
   if (!e.pages.length) return `<div class="none">This exercise has no pages.</div>`;
   const pages = e.pages.map((_, i) => `<img src="/api/exercises/${encodeURIComponent(e.id)}/pages/${i + 1}" alt="${esc(e.title)}, page ${i + 1}">`).join("");
-  return (controls ? `<div class="bar"><span>${e.pages.length > 1 ? `${e.pages.length} pages` : "1 page"}</span>${e.readme ? `<button type="button" data-act="readme">${S.showReadme ? "Hide the instructions" : "Instructions"}</button>` : ""}</div>
+  return (controls ? `<div class="bar"><span class="hear-box">${hearChart(e)}</span><span class="bar-r"><span>${e.pages.length > 1 ? `${e.pages.length} pages` : "1 page"}</span>${e.readme ? `<button type="button" data-act="readme">${S.showReadme ? "Hide the instructions" : "Instructions"}</button>` : ""}</span></div>
     <div class="readme" id="readme" ${S.showReadme ? "" : "hidden"}></div>` : "") + pages;
 }
 function renderRecord() {
@@ -956,7 +1077,8 @@ function renderRecord() {
   const level = s ? s.level_offset_db : 0;
   return `<div class="rec-head"><p class="sentence display">${recSentence(true)}</p><div class="meta">${meta}</div></div>
     <div class="rec-grid">${main}
-      <div class="side"><div class="box"><span class="label">Listening</span>${used.map((i) => `<div class="row"><span>${esc(i.name)}${carries()[i.input] === "room" ? " (room)" : ""}</span><span class="tnum" data-meter-text="${i.channel}">–</span></div><span class="meter" data-meter="${i.channel}"><i></i><b></b></span>`).join("")}<span class="muted" id="monNote" style="font-size:14px"></span></div>
+      <div class="side"><div class="box"><span class="label">Listening</span>${used.map((i) => `<div class="row"><span>${esc(i.name)}${carries()[i.input] === "room" ? " (room)" : ""}</span><span class="tnum" data-meter-text="${i.channel}">–</span></div><span class="meter" data-meter="${i.channel}"><i></i><b></b></span>`).join("")}<span class="muted" id="monNote" style="font-size:14px"></span>
+          <span class="dev-line" data-dev-line>${devLine()}</span></div>
         <div class="box"><div class="row"><label for="recLevel" style="font-weight:700">Speakers</label><span data-level-text class="tnum">${esc(dbText(level))}</span></div><input id="recLevel" type="range" min="-30" max="12" step="1" value="${level}" data-level></div>
         <button type="button" class="btn small" data-act="sheet" style="justify-content:center">Takes of this ${c.kind === "exercise" ? "exercise" : c.kind === "playalong" ? "backing" : "kind"} (${mine.length})</button>
         <button type="button" class="recbtn" data-act="record" ${s && s.devices.capture ? "" : "disabled"}><i></i>Record</button></div></div>`;
@@ -1054,6 +1176,7 @@ function live() {
   const s = S.status;
   if (!s) return;
   const rec = s.recording, mon = s.monitor;
+  $$("[data-dev-line]").forEach((el) => { const h = devLine(); if (el.innerHTML !== h) el.innerHTML = h; });
   $$("[data-act=record]").forEach((b) => { b.disabled = !s.devices.capture; });
   const meters = rec ? rec.meters_dbfs : mon ? mon.meters_dbfs : null, peaks = rec ? rec.peaks_dbfs : mon ? mon.peaks_dbfs : null;
   $$("[data-meter]").forEach((el) => {
@@ -1070,6 +1193,11 @@ function live() {
     const on = pl && `backing:${pl.backing}` === el.dataset.prog;
     el.querySelector("i").style.width = on && pl.seconds ? `${100 * pl.position / pl.seconds}%` : "0";
     const pos = el.querySelector("[data-pos]"); if (pos && on) pos.textContent = fmt(pl.position);
+  });
+  $$("[data-prog^='exercise:']").forEach((el) => {
+    const on = pl && `exercise:${pl.exercise}` === el.dataset.prog, e = on ? exById(pl.exercise) : null;
+    el.querySelector("i").style.width = on && pl.seconds ? `${100 * pl.position / pl.seconds}%` : "0";
+    const pos = el.querySelector("[data-chart-pos]"); if (pos && e) pos.textContent = chartPlace(pl, e);
   });
   const wave = $("[data-wave]");
   if (wave) {
@@ -1217,6 +1345,7 @@ async function poll(once) {
   try { s = await api("GET", "/api/status"); } catch (e) { s = null; }
   if (s) {
     const prev = S.status; S.status = s;
+    if ($("#end").textContent) $("#end").innerHTML = "";
     if (s.error && s.error !== S.lastServerError) { S.lastServerError = s.error; showError(s.error); }
     if (s.recording && S.screen !== "recording") { recordingId = s.recording.take; S.screen = "recording"; render(); wakeLock(true); }
     else if (!s.recording && S.screen === "recording") {
@@ -1226,7 +1355,7 @@ async function poll(once) {
     if (s.takes_version !== takesVersion) {
       const first = takesVersion < 0; takesVersion = s.takes_version;
       if (!first) { await refresh(); if (S.screen !== "recording") render(); }
-    } else if (prev && JSON.stringify(prev.playing && [prev.playing.take, prev.playing.backing]) !== JSON.stringify(s.playing && [s.playing.take, s.playing.backing])) {
+    } else if (prev && JSON.stringify(prev.playing && [prev.playing.take, prev.playing.backing, prev.playing.exercise]) !== JSON.stringify(s.playing && [s.playing.take, s.playing.backing, s.playing.exercise])) {
       if (S.screen !== "recording") render();
     }
     live();
@@ -1246,8 +1375,16 @@ async function refresh() {
 }
 
 // --- taps
+function flushNote() {  // a take's note typed but not sent yet, before the screen changes (or the page goes)
+  const el = $("[data-note]"), t = el && S.takes.find((x) => x.id === el.dataset.note);
+  if (!t || el.value === (t.note || "")) return;
+  t.note = el.value;
+  fetch(`/api/takes/${encodeURIComponent(t.id)}/note`, { method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ note: el.value }), keepalive: true }).catch(() => {});
+}
 document.addEventListener("click", (ev) => {
   lastTouch = Date.now();
+  if (!ev.target.closest("[data-note]")) flushNote();
   const el = ev.target.closest("[data-act]");
   if (!el || el.disabled) return;
   const a = el.dataset.act, d = el.dataset, c = C();
@@ -1264,7 +1401,10 @@ document.addEventListener("click", (ev) => {
   else if (a === "carry") { S.choices.inputs = { ...carries(), [d.input]: d.v }; save(); render(); }
   else if (a === "just") { S.choices.instruments = [d.id]; S.choices.inputs = defaultInputs(chosen()); S.choices.kind = "exercise"; save(); answered("sort"); }
   else if (a === "sort") { S.choices.kind = d.kind; save(); answered("sort"); }
-  else if (a === "exercise") { S.choices.exercise = d.id; save(); answered("which"); }
+  else if (a === "exercise") { S.choices.exercise = d.id; S.previewOpen = false; save(); answered("which"); }
+  else if (a === "preview") { S.preview = d.id; S.previewOpen = true; render(); const sc = $(".pv-score"); if (sc) sc.scrollTop = 0; }
+  else if (a === "preview-close") { S.previewOpen = false; render(); }
+  else if (a === "hear-chart") act(() => api("POST", `/api/exercises/${encodeURIComponent(d.id)}/hear`, { count_in: !!c.countIn, click: !!c.clickThrough }));
   else if (a === "show-good") { S.showGood = !S.showGood; render(); }
   else if (a === "backing") set({ backing: d.id });
   else if (a === "hear") act(() => api("POST", `/api/backings/${encodeURIComponent(d.id)}/play`, { start: 0 }));
@@ -1295,7 +1435,10 @@ document.addEventListener("click", (ev) => {
   }
 });
 $("#sheet").addEventListener("click", (ev) => { if (ev.target.id === "sheet") { S.sheet = false; $("#sheet").hidden = true; } });
-document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && S.sheet) { S.sheet = false; $("#sheet").hidden = true; } });
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && S.sheet) { S.sheet = false; $("#sheet").hidden = true; }
+  else if (ev.key === "Escape" && S.previewOpen) { S.previewOpen = false; render(); }
+});
 // the waveform: tap to play from there
 document.addEventListener("click", (ev) => {
   const w = ev.target.closest("[data-wave]");
@@ -1331,6 +1474,7 @@ window.addEventListener("hashchange", () => { const h = location.hash.slice(1); 
   S.screen = ["on", "sort", "which", "ready", "record"].includes(h) && (h !== "record" || readyOk()) ? h : readyOk() ? "ready" : "on";
   S.walk = !readyOk();
   if (STEPS.includes(S.screen)) S.snapshot = readyOk() ? JSON.parse(JSON.stringify(C())) : null;
+  if (S.screen === "which") previewChosen();
   render();
   poll(true);
 })();

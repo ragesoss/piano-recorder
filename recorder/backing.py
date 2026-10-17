@@ -74,9 +74,15 @@ class Backings:
 
     def load(self, backing_id: str) -> tuple[np.ndarray, int]:
         """A backing track as float32 mono (several channels are averaged)."""
-        with wave.open(str(self.path(backing_id))) as w:
-            rate, ch, width = w.getframerate(), w.getnchannels(), w.getsampwidth()
-            data = w.readframes(w.getnframes())
-        dtype = {2: np.dtype("<i2"), 4: np.dtype("<i4")}[width]
-        x = dsp.to_float(np.frombuffer(data, dtype=dtype))
-        return (x if ch == 1 else x.reshape(-1, ch).mean(axis=1)), rate
+        return load_wav(self.path(backing_id))
+
+
+def load_wav(path: Path) -> tuple[np.ndarray, int]:
+    """A 16- or 32-bit WAV as float32 mono (several channels are averaged), and its rate: a
+    backing track, or an exercise's chart (exercises/chart.py)."""
+    with wave.open(str(path)) as w:
+        rate, ch, width = w.getframerate(), w.getnchannels(), w.getsampwidth()
+        data = w.readframes(w.getnframes())
+    dtype = {2: np.dtype("<i2"), 4: np.dtype("<i4")}[width]
+    x = dsp.to_float(np.frombuffer(data, dtype=dtype))
+    return (x if ch == 1 else x.reshape(-1, ch).mean(axis=1)), rate

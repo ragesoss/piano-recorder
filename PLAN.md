@@ -320,7 +320,8 @@ on the same screen as the controls, so a take needs little preparation.
   pages with MuseScore on the desktop (landscape, larger staves, trimmed:
   `tools/exercise-page.mss`), reads its tempo, meter, pickup and length
   (repeats played out), and copies the pages, the score and
-  `exercise.json` to the control unit.
+  `exercise.json` to the control unit (since 2026-10-16 also its notes as
+  audio, `chart.wav`: below).
 - **The page:** the score on the left; on the right the exercise, its
   tempo (4 bpm steps, kept per exercise), Count-in and Click switches, a
   backing track instead of the click, Record, the count-in counted down and
@@ -461,6 +462,56 @@ on the same screen as the controls, so a take needs little preparation.
     got the `[inputs.N]` tables by hand (the installer keeps an existing config; the old one is
     `/etc/exercise-recorder.toml.pre-inputs.bak`). Not yet tried on the LIVA: the practice
     recorder recording while the exercise page is open (the inputs handed over on its yield).
+- **The score before choosing, breadcrumbs, and hearing the chart** (2026-10-16, the player's
+  request: "i want to see the chart previewed for the selected exercise. i want breadcrumbs at the
+  top to take me back to an earlier step instead of just all the way back to 'music room' index. i
+  want a renderer to be able to play a synthesized version of the chart ... when i'm in the
+  ready-to-record state for an exercise").
+  - **The picker shows the score.** A tap on an exercise shows its pages beside the list (an
+    iPad held landscape), or as a sheet over it (narrower, and phones); "Use 028: back to Ready"
+    takes it. It opens on the exercise chosen. At 1180x820 the list now scrolls in its column.
+  - **Breadcrumbs** replace the lone "Music room" link: Music room, each step with its choice
+    (the instrument, Exercise, "027 Slides into Vibrato"), Ready, Record, the take. Each goes back
+    there with the choices kept, as the step chips did. While a take records they are not links
+    (a free take would go on with no one to stop it). A take's note typed but not sent is sent
+    before the screen changes. The mixer's name and the free space moved into the record screen's
+    Listening box. One line at 1180 and 820 wide (the exercise as its number at 820); a phone
+    scrolls them sideways, opened at the end.
+  - **Hear it** (Ready's What row, and the score's bar on the record screen) plays the chart over
+    the speakers at the score's tempo, with the take's count-in and click as Ready's switches set
+    them, and shows the count-in, then the bar and beat. Over the speakers, not the iPad: the
+    iPad's speaker cannot play a bass's low notes, the level is the one the take's click will
+    have, and the engine plays one thing at a time, so a take starting stops it before its
+    capture starts (the fake device hears its own playback: a tone playing when Record was tapped
+    does not reach the take, test_exercises). Leaving Ready and the record screen stops it too.
+  - **The chart is rendered on the desktop at push time** (`exercises/chart.py`; the control
+    unit only plays the file): the tab staff's notes in play order (as the click counts them),
+    ties joined, chords, rests, picked or not (legato slides, hammer-ons, pull-offs, slurred bow
+    changes), slides and scoops as pitch bends (a channel per string, two by turns), vibrato from
+    the words over a note ("slow, wide vib.": 4 or 7 a second, 0.12 or 0.45 semitones), "soft"
+    and "loud", "arco". Through FluidSynth (a program, not in the repo) with the player's own
+    SoundFonts for the dobro (the Beard, `dobro.sf2`) and the bass (the Cleveland, `upright.sf2`),
+    GeneralUser GS's double bass for arco, steel-string guitar and banjo; looked for in
+    `$EXERCISE_SOUNDS`, then `~/play/ambient-room/sounds`, `~/.local/share/sounds/sf2`. Mono,
+    48 kHz, 16-bit, beat 0 at 0.5 s: `chart.wav` beside the pages, and `audio` in exercise.json.
+    The app brings it to the takes' loudness and lays the take's click under it
+    (`playalong.with_click`, the same `click_track`).
+  - **Checked on the desktop:** the notes as read agree with dobro-transcription's answer-key
+    reader (`transcribe.score.read_score`) on all 64 exercise and tune scores: onset, pitch,
+    length, picked or not; and the beats with push-exercise's count. Its bench, run on the
+    renders of 14 (dobro and bass): every note in its bar, no rhythm errors, notes F1 0.97 (the
+    misses are double stops, as in its takes). Each note's pitch within 30 cents of the score
+    (2134 notes; pyin's median +1 cent). Notes speak 5-20 ms after their beat (a few dobro
+    samples about 40 ms), with no drift. The samples run out: the Beard's last 1.2-7.6 s (G4
+    2.9 s), the Cleveland's 0.7-4 s (A2 and D3 0.7 s), so a note held longer dies away early.
+    63 exercises rendered in 5.5 s, 174 MB.
+  - **Existing exercises:** `tools/push-exercise --audio-only [ID ...]` renders the audio again
+    for what is on the control unit (or `--to` a folder), from the score pushed with each, and
+    puts `chart.wav` and then exercise.json back by renames. `--no-audio` pushes without it.
+  - Tried on the desktop (fake device, headless Chrome at 1180x820, 820x1180 and 390x844): the
+    preview, the walk from the top, a change of instrument that leaves the exercise to pick again,
+    Hear it on both screens, Record while it plays (it stops), the crumbs during a take. No console
+    errors. Not yet deployed, and the exercises on the control unit have no audio yet.
 - **Next:** a tool to bring exercise takes into dobro-transcription with
   their `takes.csv` rows (`tools/pull-take` reads only the practice
   recorder's takes; exercise takes need `/etc/exercise-recorder.toml`),

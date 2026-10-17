@@ -91,7 +91,8 @@ function mmss(s) { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s %
 // The practice recorder and the exercise app: the same engine (recorder/engine.py), so the same words.
 function recorderState(s) {
   if (s.state === "recording") return [`Recording ${mmss(s.recording.seconds)}`, true, false, true];
-  if (s.state === "playing" || s.state === "preparing") return [s.playing && s.playing.backing ? "Playing a backing track" : "Playing a take", true];
+  if (s.state === "playing" || s.state === "preparing") return [s.playing && s.playing.backing ? "Playing a backing track"
+    : s.playing && s.playing.exercise ? "Playing an exercise's notes" : "Playing a take", true];
   return ["Ready", false];
 }
 

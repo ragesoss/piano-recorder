@@ -6,6 +6,8 @@ by tools/push-exercise.
     <exercises_dir>/<id>/score.musicxml  the score itself
     <exercises_dir>/<id>/readme.md       how to play it (the exercise's README.md in the project),
                                          shown above the score; optional
+    <exercises_dir>/<id>/chart.wav       its notes as audio (exercises/chart.py, at push time), for
+                                         the app to play with its click before a take; optional
     <exercises_dir>/status.json          what the project has of each exercise (tools/push-status,
                                          from dobro-transcription's exercises/status.py): "good",
                                          "wanted" (a new take, and why) or "needed" (no take yet),
@@ -31,6 +33,7 @@ class Exercise:
     bars: int
     pages: list[str] = field(default_factory=list)
     readme: bool = False  # it has instructions (readme.md)
+    audio: dict = field(default_factory=dict)  # its chart as audio: {"seconds", "sound"}; {} when it has none
     source: str = ""  # where it came from (a path in the project it was taken from)
     note: str = ""
     status: str = ""  # from status.json: "good", "wanted", "needed"; "" when it does not say
@@ -88,6 +91,8 @@ class Exercises:
                 beats=float(raw["beats"]), bars=int(raw.get("bars", 0)),
                 pages=[p for p in raw.get("pages", []) if (d / p).exists()],
                 readme=self._readme_path(d, raw) is not None,
+                audio={k: v for k, v in (raw.get("audio") or {}).items() if k in ("seconds", "sound")}
+                if self._audio_path(d, raw) is not None else {},
                 source=raw.get("source", ""), note=raw.get("note", ""),
                 status=str(st.get("status", "")), status_note=str(st.get("note", "")),
                 project_takes=[str(t) for t in st.get("app_takes", [])], status_updated=str(status.get("generated", "")))
@@ -112,6 +117,27 @@ class Exercises:
         if not isinstance(name, str) or not name or name != Path(name).name or not (d / name).is_file():
             return None
         return d / name
+
+    @staticmethod
+    def _audio_path(d: Path, raw: dict) -> Path | None:
+        """The chart's audio, named in exercise.json ({"file", "beat0_s", ...}): in its own folder only."""
+        a = raw.get("audio")
+        name = a.get("file") if isinstance(a, dict) else None
+        if not isinstance(name, str) or not name or name != Path(name).name or not (d / name).is_file():
+            return None
+        return d / name
+
+    def audio(self, exercise_id: str) -> tuple[Path, float]:
+        """The exercise's chart as audio, and where its beat 0 is in it (s)."""
+        d = self._folder(exercise_id)
+        try:
+            raw = json.loads((d / "exercise.json").read_text())
+            path = self._audio_path(d, raw)
+            if path is None:
+                raise ExerciseNotFound(f"{exercise_id} has no audio")
+            return path, float(raw["audio"].get("beat0_s", 0.0))
+        except (OSError, ValueError, AttributeError, TypeError) as e:
+            raise ExerciseNotFound(f"{exercise_id} audio: {e}")
 
     def readme(self, exercise_id: str) -> str:
         """The exercise's instructions (Markdown)."""

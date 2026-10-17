@@ -305,6 +305,20 @@ def click_track(tempo: dict, rate: int, beats: float, count_in_bars: int = 1, th
     return out, lead - pickup * spb
 
 
+def with_click(notes: np.ndarray, rate: int, notes_beat0_s: float, tempo: dict, beats: float,
+               count_in_bars: int = 1, through: bool = True) -> tuple[np.ndarray, float]:
+    """An exercise's chart (its notes as audio, beat 0 `notes_beat0_s` into it) with the click a
+    take of it gets (`click_track`: the same count-in, and every beat with `through`), beat 0 on
+    beat 0. Returns the mix (float32) and where beat 0 is in it (s)."""
+    clicks, beat0 = click_track(tempo, rate, beats, count_in_bars=count_in_bars, through=through)
+    shift = int(round(beat0 * rate)) - int(round(notes_beat0_s * rate))  # notes start this far into the clicks
+    n0, c0 = max(0, shift), max(0, -shift)
+    out = np.zeros(max(n0 + len(notes), c0 + len(clicks)), dtype=np.float32)
+    out[c0:c0 + len(clicks)] += clicks
+    out[n0:n0 + len(notes)] += notes.astype(np.float32)
+    return out, (c0 / rate) + beat0
+
+
 class ClickStream:
     """A click with no last beat (a free take's), made as it is played: `click_track`'s count-in
     and beats for a tempo with no pickup, sample for sample, so the take is lined up again from a

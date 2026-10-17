@@ -6,11 +6,12 @@ import threading
 import time
 import wave
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
 from . import audio, dsp, peers, playalong
-from .backing import Backings
+from .backing import Backings, load_wav
 from .config import Config
 from .takes import Takes
 
@@ -66,6 +67,10 @@ class _Playing:
     take_id: str | None
     stop: threading.Event = field(default_factory=threading.Event)
     backing_id: str | None = None  # a backing track heard on its own (the app's preview), not a take
+    exercise_id: str | None = None  # an exercise's chart heard with its click (`play_chart`), not a take
+    chart: dict | None = None  # how: {"path", "beat0_s" (in the file), "tempo", "beats", "count_in", "through"}
+    beat0_s: float | None = None  # a chart: where its beat 0 is in what plays
+    tempo: dict | None = None
     position: float = 0.0
     seconds: float = 0.0
     gain_db: float = 0.0
@@ -109,6 +114,7 @@ class Engine:
         self.error: str | None = None
         self.takes_version = 0
         self._prepared: tuple | None = None  # (take_id, mtime, audio, rate, gain_db)
+        self._chart: tuple | None = None  # (what it was made from, audio, rate, gain_db, beat0_s): the last chart
         self._settings_path = takes.dir / "settings.json"
         try:
             self.level_offset_db = float(json.loads(self._settings_path.read_text())["level_offset_db"])
@@ -152,6 +158,9 @@ class Engine:
                 "playing": pl and {
                     "take": pl.take_id,
                     "backing": pl.backing_id,
+                    "exercise": pl.exercise_id,
+                    "beat0_s": pl.beat0_s,
+                    "tempo": pl.tempo,
                     "position": round(pl.position, 2),
                     "seconds": round(pl.seconds, 2),
                     "gain_db": round(pl.gain_db, 1),
@@ -465,6 +474,34 @@ class Engine:
         self.backings.path(backing_id)  # raises BackingNotFound
         self._play_start(_Playing(take_id=None, backing_id=backing_id, position=max(0.0, start_s)))
 
+    def play_chart(self, exercise_id: str, path, beat0_s: float, tempo: dict, beats: float, count_in: bool = True,
+                   through: bool = True) -> None:
+        """An exercise's chart over the speakers (its notes, rendered on the desktop: exercises/chart.py),
+        with the click a take of it gets: the count-in (with `count_in`) and every beat (with
+        `through`), at its tempo. Like any playback it stops when a take starts (`_start`)."""
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        chart = {"path": str(path), "beat0_s": float(beat0_s), "tempo": dict(tempo), "beats": float(beats),
+                 "count_in": bool(count_in), "through": bool(through)}
+        self._play_start(_Playing(take_id=None, exercise_id=exercise_id, chart=chart, tempo=dict(tempo)))
+
+    def _prepare_chart(self, chart: dict) -> tuple[np.ndarray, int, float, float]:
+        """The chart at the playback rate and the takes' loudness, with its click (as the take's)."""
+        key = (chart["path"], Path(chart["path"]).stat().st_mtime, json.dumps(chart, sort_keys=True))
+        if self._chart and self._chart[0] == key:
+            return self._chart[1:]
+        x, rate = load_wav(Path(chart["path"]))
+        want = self.cfg.playback.playback.rate
+        if rate != want:
+            x = np.interp(np.arange(int(len(x) * want / rate)) / want, np.arange(len(x)) / rate, x).astype(np.float32)
+            rate = want
+        loud = self.cfg.loudness
+        y, gain_db = dsp.prepare_for_playback(x, rate, loud.target_dbfs, loud.limit_dbfs, loud.max_gain_db)
+        mix, beat0 = playalong.with_click(y, rate, chart["beat0_s"], chart["tempo"], chart["beats"],
+                                          count_in_bars=1 if chart["count_in"] else 0, through=chart["through"])
+        self._chart = (key, mix, rate, gain_db, beat0)
+        return mix, rate, gain_db, beat0
+
     def _play_start(self, pl: _Playing) -> None:
         with self.lock:
             if self.rec:
@@ -504,14 +541,22 @@ class Engine:
 
     def _play(self, pl: _Playing) -> None:
         try:
-            if pl.backing_id is not None:
+            if pl.chart is not None:
+                y, rate, gain_db, pl.beat0_s = self._prepare_chart(pl.chart)
+            elif pl.backing_id is not None:
                 _, y, rate, gain_db = self._prepare_backing(pl.backing_id)
             else:
                 y, rate, gain_db = self._prepare(pl.take_id)
         except Exception as e:
             with self.lock:
-                self.error = f"could not prepare {pl.take_id or pl.backing_id}: {e}"
-                self.play_ = None
+                self.error = f"could not prepare {pl.take_id or pl.backing_id or pl.exercise_id}: {e}"
+                if self.play_ is pl:
+                    self.play_ = None
+            return
+        if pl.stop.is_set():  # stopped while it was being prepared (a take started)
+            with self.lock:
+                if self.play_ is pl:
+                    self.play_ = None
             return
         with self.lock:
             pl.seconds = len(y) / rate
