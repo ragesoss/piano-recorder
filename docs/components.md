@@ -68,6 +68,10 @@ yet.
   - It needs phantom power (the player, 2026-10-12). Mounted on the bass's
     afterlength, on channel 2 at GAIN maximum (2026-10-13): peaks -25 to
     -31 dBFS, the loudest 50 ms -39 to -43, floor -82. See PLAN.md step 5.
+- **Room mic since 2026-10-17: an MXL 990** (the player), on the 18i8's input 4 in place of the
+  small-diaphragm condenser, gain knob about halfway, phantom on. Cardioid only, about 20 dB(A)
+  self-noise as listed (the note below had passed it over for that). T5 and T8 due; its room
+  tone at this gain to measure (T4).
 - **Wanted, when a good used one turns up locally (not a priority):** a
   room mic, for what a listener hears (the instruments and the room
   together), beside the close mics and pickups. It needs its own input:

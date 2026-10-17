@@ -35,7 +35,7 @@ for = "bass"
 
 [inputs.4]
 name = "Room mic"
-details = "The condenser, pointed at the player"
+details = "MXL 990 (cardioid large-diaphragm condenser, phantom power), gain about halfway (2026-10-17)"
 
 [web]
 host = "0.0.0.0"
