@@ -31,3 +31,10 @@ name = "Ambient"
 about = "Music for the room"
 port = 8001
 stop = ["/api/stop"]
+
+[[apps]]
+id = "band"
+name = "Ugly Duckling String Band"
+about = "A band that follows you: bass, chop and chords from a chart"
+port = 8004
+stop = ["/api/stop"]
