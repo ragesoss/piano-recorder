@@ -754,6 +754,13 @@ either part is swapped.
     asked. The two recorders list it among their peers, so a recording always gets the inputs; it
     asks no one itself, so if they are in use (a recording, or the exercise app listening) its page
     says so.
+  - **A fifth program** (2026-10-17): the Ugly Duckling String Band (ambient-room's `ugly_duckling/`,
+    service `ugly-duckling`, port 8004), the live band that follows the player. While it plays it holds the
+    18i8 both ways (playback 128-frame periods, a 16 ms buffer; the capture of all 20 channels with the same
+    period and buffer, its loopback channels 10-11 timing the band's own clicks); otherwise it holds nothing.
+    It asks 8000-8003 to let go before it opens the device and will not start during a recording; the
+    recorders and the ambient synth list it among their peers, and a yield stops it within about a second.
+    Self-check on the Chromebox, no sound (2026-10-17): the device opened and closed, no xruns, loopback silent.
 
 ## Tests
 

@@ -14,8 +14,10 @@ takes_dir = "~/takes"
 address = "practice.local"
 # Other programs on the control unit that play through the same speakers (only one plays at a
 # time), or listen to the same inputs (the chord app, 8003): before recording or playing, this one asks
-# each to let go (recorder/peers.py).
-peers = ["http://127.0.0.1:8001", "http://127.0.0.1:8002", "http://127.0.0.1:8003"]
+# each to let go (recorder/peers.py). 8004: the Ugly Duckling String Band (ambient-room), which holds the 18i8
+# both ways while it plays.
+peers = ["http://127.0.0.1:8001", "http://127.0.0.1:8002", "http://127.0.0.1:8003",
+         "http://127.0.0.1:8004"]
 
 [web]
 host = "0.0.0.0"

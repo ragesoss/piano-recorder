@@ -109,6 +109,12 @@ function describe(a) {
     if (s.fading) return ["Fading out", true];
     return ["Stopped", false];
   }
+  if (a.id === "band") {
+    const what = s.tune ? ` · ${s.tune}` : "";
+    if (s.playing && s.state === "listening for your count") return [`Listening for a count${what}`, true];
+    if (s.playing) return [`Playing${what}`, true];
+    return ["Stopped", false];
+  }
   if (a.id === "chords") {
     // the chord over the bar once it is sure (it holds still), else this moment's
     const heard = s.bar && s.bar.chord && s.bar.confidence >= 0.4 ? s.bar.chord : s.chord;
