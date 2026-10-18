@@ -64,10 +64,39 @@ def test_the_tab_staff_is_read_once_with_chords_rests_and_ties(tmp_path):
         both(n(71, 8, 2, tie='<tie type="stop"/>'), n(None, 8, None)),
     ], pickup=both(n(62, 4, 3))))
     notes, info = chart.read_notes(p)
-    assert info == {"bpm": 90.0, "beats": 9.0}  # a beat of pickup, two bars
+    assert info == {"bpm": 90.0, "beats": 9.0, "pedal": []}  # a beat of pickup, two bars
     got = [(x.start, x.length, x.midi, x.string, x.picked) for x in notes]
     # the pickup's D4 is beat 0; the chord's two notes together; the rest; B3 tied over the bar
     assert got == [(0.0, 1.0, 62, 3, True), (1.0, 2.0, 67, 1, True), (1.0, 2.0, 62, 3, True), (4.0, 3.0, 71, 2, True)]
+
+
+def test_a_piano_score_reads_both_staves_with_dynamics_and_the_pedal(tmp_path):
+    # a grand staff, no tab (dobro-transcription's write_piano_score): the right hand's C4 then a staccato,
+    # accented C4 E4 G4; the left hand's C3 held the bar; p then f; the pedal down on beat 1, up on beat 3
+    attrs = ("<attributes><divisions>4</divisions><time><beats>4</beats><beat-type>4</beat-type></time><staves>2</staves>"
+             '<clef number="1"><sign>G</sign><line>2</line></clef><clef number="2"><sign>F</sign><line>4</line></clef>'
+             '</attributes><direction><direction-type><metronome><per-minute>60</per-minute></metronome></direction-type>'
+             '<sound tempo="60"/></direction>')
+    dyn = '<direction><direction-type><dynamics><{0}/></dynamics></direction-type><staff>1</staff></direction>'
+    ped = '<direction><direction-type><pedal type="{0}" line="yes"/></direction-type><staff>2</staff></direction>'
+    right = (dyn.format("p") + ped.format("start") + note(60, 8) + ped.format("stop") + dyn.format("f")
+             + note(60, 8, notations="<articulations><staccato/><accent/></articulations>")
+             + note(64, 8, chord=True) + note(67, 8, chord=True))
+    left = note(48, 16, staff=2)
+    xml = ('<?xml version="1.0"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Piano</part-name>'
+           f'</score-part></part-list><part id="P1"><measure number="1">{attrs}{right}<backup><duration>16</duration></backup>'
+           f'{left}</measure></part></score-partwise>')
+    f = tmp_path / "piano.musicxml"
+    f.write_text(xml)
+    notes, info = chart.read_notes(f)
+    assert [(x.start, x.length, x.midi, x.velocity) for x in notes] == [
+        (0.0, 2.0, 60, chart.DYNAMICS["p"]), (0.0, 4.0, 48, chart.DYNAMICS["p"]),
+        (2.0, 1.0, 67, chart.DYNAMICS["f"] + chart.ACCENT), (2.0, 1.0, 64, chart.DYNAMICS["f"] + chart.ACCENT),
+        (2.0, 1.0, 60, chart.DYNAMICS["f"] + chart.ACCENT)]
+    assert len({x.string for x in notes}) == 4  # each key its own: C4 struck again, nothing else stopped
+    assert info["pedal"] == [(0.0, True), (2.0, False)]
+    mid = chart.midi_file(notes, 60, chart.SOUNDS["piano"], pedal=info["pedal"])
+    assert bytes([64, 127]) in mid and bytes([64, 0]) in mid
 
 
 def test_slides_hammers_scoops_and_vibrato(tmp_path):

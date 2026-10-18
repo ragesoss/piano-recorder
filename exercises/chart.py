@@ -8,9 +8,13 @@ take's own count-in and click (Engine.play_chart). The control unit only plays t
   joined), its string, whether it is picked (a legato slide, hammer-on, pull-off or slurred bow
   change is not), a slide from the note before on its string, a scoop from below, and vibrato
   (words over the note: "vib.", "slow, wide vib."; "no vib." none). Words "soft" and "loud" set
-  the velocity from there on, "arco" and "pizz." the bass's sound.
+  the velocity from there on, "arco" and "pizz." the bass's sound. A piano score (a grand staff, no tab:
+  dobro-transcription's `write_piano_score`) is read on both staves, each key its own "string" (a key struck
+  again stops its last sound, and nothing else does); its dynamics (pp to ff) set the velocity from there on,
+  an accent adds to it, a staccato note sounds half its length, and the sustain pedal is played.
 - `midi_file`: a MIDI file of them: two channels per string, by turns, so the pitch bend of one
-  note (a slide, a scoop, vibrato; bend range 12 semitones) never bends the next.
+  note (a slide, a scoop, vibrato; bend range 12 semitones) never bends the next; the sustain pedal as
+  controller 64 on every channel.
 - `render`: the MIDI file through FluidSynth (a program, used at push time) with the instrument's
   SoundFont (`SOUNDS`), mono, 48 kHz, 16-bit, its peak at -1 dBFS, beat 0 at `LEAD_S`.
 
@@ -36,6 +40,10 @@ LEAD_S = 0.5  # silence before beat 0 in the file (room for a slide or grace bef
 PEAK_DBFS = -1.0
 VELOCITY = 92  # a picked note; "soft" and "loud" words set it from there on
 SOFT, LOUD = 58, 116
+DYNAMICS = {"ppp": 25, "pp": 36, "p": 52, "mp": 68, "mf": 84, "f": 100, "ff": 116, "fff": 127}  # a piano score's marks
+ACCENT = 16  # an accented note, this much louder
+STACCATO = 0.5  # a staccato note sounds this share of its length
+PEDAL_CATCH_S = 0.05  # a pedal "change": up at the strike, down again this long after (legato pedalling)
 LEGATO_VELOCITY = 0.6  # a hammer-on, pull-off or slurred bow change: a new note, this much softer
 SCOOP_ST, SCOOP_S = 2.0, 0.12  # a scoop: picked this far below, slid up over this long
 VIB_DELAY_S, VIB_RAMP_S = 0.15, 0.25  # vibrato starts this long into the note, and widens over this
@@ -64,6 +72,7 @@ SOUNDS = {
     "bass-arco": Sound("a bowed double bass (GeneralUser GS)", "GeneralUser-GS.sf2", 43),
     "guitar": Sound("a steel-string guitar (GeneralUser GS)", "generaluser.sf2", 25),
     "banjo": Sound("a banjo (GeneralUser GS)", "generaluser.sf2", 105),
+    "piano": Sound("a grand piano (GeneralUser GS)", "GeneralUser-GS.sf2", 0),
 }
 
 
@@ -169,12 +178,17 @@ def _play_staff(part: ET.Element) -> str | None:
 
 
 def read_notes(path: Path) -> tuple[list[Note], dict]:
-    """The score's notes as played (see the module's docstring), and {"bpm", "beats"} (beats: from
-    beat 0 to the end of the last bar, repeats played out, as the click counts them)."""
+    """The score's notes as played (see the module's docstring), and {"bpm", "beats", "pedal"} (beats: from
+    beat 0 to the end of the last bar, repeats played out, as the click counts them; pedal: the sustain
+    pedal's [(beat, down)], in time order)."""
     root = ET.parse(path).getroot()
     part = root.find("part")
     measures = part.findall("measure")
     staff = _play_staff(part)
+    keyboard = staff is None and any(c.get("number") == "2" for c in part.iter("clef"))
+    pedal: list[tuple[float, bool]] = []
+    shaped: list[tuple[Note, bool, bool]] = []  # piano notes: (note, staccato, accent)
+    chord_arts = None
     lengths = dict(zip(map(id, measures), measure_lengths(measures)))
     divisions, bpm, transpose = None, None, 0
     notes: list[Note] = []
@@ -199,6 +213,16 @@ def read_notes(path: Path) -> tuple[list[Note], dict]:
                 if s is not None and s.get("tempo") and bpm is None:
                     bpm = float(s.get("tempo"))
                 at = bar_start + cursor / divisions
+                for d in el.iter("dynamics"):
+                    for mark in d:
+                        if mark.tag in DYNAMICS:
+                            settings.append((at, "velocity", DYNAMICS[mark.tag]))
+                for ped in el.iter("pedal"):
+                    kind = ped.get("type")
+                    if kind in ("stop", "change"):
+                        pedal.append((at, False))
+                    if kind in ("start", "change"):
+                        pedal.append((at + (PEDAL_CATCH_S * (bpm or 60) / 60 if kind == "change" else 0.0), True))
                 for w in el.iter("words"):
                     text = (w.text or "").strip().lower()
                     vib = _vibrato(text)
@@ -225,8 +249,8 @@ def read_notes(path: Path) -> tuple[list[Note], dict]:
                 chord_place = chord_place + 1 if is_chord else 1
                 if el.find("rest") is not None or el.find("pitch") is None:
                     continue
-                string = int(el.findtext("notations/technical/string") or 0) or chord_place
                 midi = _midi(el.find("pitch"), transpose)
+                string = midi if keyboard else int(el.findtext("notations/technical/string") or 0) or chord_place
                 if grace:  # an ornament: slid from into the next note on its string, else left out
                     if any(sl.get("type") == "start" for sl in el.findall("notations/slide")):
                         scoop_next[string] = midi
@@ -257,6 +281,13 @@ def read_notes(path: Path) -> tuple[list[Note], dict]:
                 notes.append(note)
                 segments.append((start, note))
                 sounding[string] = note
+                if keyboard:
+                    arts = el.find("notations/articulations")
+                    if arts is None and is_chord:  # a chord's articulation, written on its first note
+                        arts = chord_arts
+                    chord_arts = arts
+                    shaped.append((note, arts is not None and arts.find("staccato") is not None,
+                                   arts is not None and arts.find("accent") is not None))
         bar_start += lengths[id(m)] / divisions
     if not divisions or not bpm:
         raise ValueError(f"{path}: no divisions or no tempo marking (<sound tempo=...>)")
@@ -270,8 +301,13 @@ def read_notes(path: Path) -> tuple[list[Note], dict]:
             for s, n in segments:
                 if abs(s - onsets[0]) < 1e-6 and (n.vibrato is None or n.vibrato[0] > s):
                     n.vibrato = (s, *vib)
+    for n, staccato, accent in shaped:
+        if staccato:
+            n.length *= STACCATO
+        if accent:
+            n.velocity = min(127, n.velocity + ACCENT)
     notes.sort(key=lambda n: (n.start, -n.midi))
-    return notes, {"bpm": bpm, "beats": bar_start}
+    return notes, {"bpm": bpm, "beats": bar_start, "pedal": sorted(pedal, key=lambda e: e[0])}
 
 
 # --- the MIDI file
@@ -361,9 +397,10 @@ def _bend_value(st: float) -> int:
     return max(0, min(16383, 8192 + int(round(st / BEND_RANGE * 8191))))
 
 
-def midi_file(notes: list[Note], bpm: float, sound: Sound, arco: Sound | None = None) -> bytes:
+def midi_file(notes: list[Note], bpm: float, sound: Sound, arco: Sound | None = None, pedal=()) -> bytes:
     """A type-0 MIDI file of the notes: beat 0 at `LEAD_S`, 60 bpm with `PPQ` ticks to the beat
-    (so a tick is a fixed time), the sound's program (an arco note: `arco`'s) on every channel."""
+    (so a tick is a fixed time), the sound's program (an arco note: `arco`'s) on every channel; `pedal`,
+    the sustain pedal's [(beat, down)], as controller 64 on every channel used."""
     vs = voices(notes, bpm)
     events: list[tuple[int, int, bytes]] = []  # (tick, order, message): offs, then controls, then ons
 
@@ -377,6 +414,9 @@ def midi_file(notes: list[Note], bpm: float, sound: Sound, arco: Sound | None = 
         for cc, val in ((101, 0), (100, 0), (6, BEND_RANGE), (38, 0), (101, 127), (100, 127)):
             events.append((0, 1, bytes([0xB0 | c, cc, val])))
     program = {c: sound for c in used}
+    for beat, down in pedal:  # with the controls (after the offs, before the notes struck at that moment)
+        for c in used:
+            events.append((at(beat * 60.0 / bpm), 1, bytes([0xB0 | c, 64, 127 if down else 0])))
     for v in vs:
         c = v.channel
         want = arco if (v.arco and arco is not None) else sound
@@ -436,7 +476,7 @@ def render(score: Path, out: Path, instrument: str, fluidsynth: str | None = Non
     gain = sound.gain
     with tempfile.TemporaryDirectory() as tmp:
         mid, wav = Path(tmp) / "chart.mid", Path(tmp) / "chart.wav"
-        mid.write_bytes(midi_file(notes, info["bpm"], sound, arco))
+        mid.write_bytes(midi_file(notes, info["bpm"], sound, arco, info.get("pedal", ())))
         for _ in range(4):  # quieter again if it clipped
             # the arco font first, so the instrument's own program wins where both have it
             cmd = [synth, "-ni", "-q", "-R", "0", "-C", "0", "-g", f"{gain:g}", "-r", str(RATE), "-O", "s32",
