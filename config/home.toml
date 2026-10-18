@@ -38,3 +38,10 @@ name = "Ugly Duckling String Band"
 about = "A band that follows you: bass, chop and chords from a chart"
 port = 8004
 stop = ["/api/stop"]
+
+[[apps]]
+id = "review"
+name = "Transcription review"
+about = "Questions about your takes: listen, then say what you played"
+port = 8005
+stop = []

@@ -761,6 +761,10 @@ either part is swapped.
     It asks 8000-8003 to let go before it opens the device and will not start during a recording; the
     recorders and the ambient synth list it among their peers, and a yield stops it within about a second.
     Self-check on the Chromebox, no sound (2026-10-17): the device opened and closed, no xruns, loopback silent.
+  - **A sixth program** (2026-10-17): the transcription review app (dobro-transcription's `review/`, service
+    `transcription-review`, port 8005; `docs/review-app.md` there), where the player answers questions about
+    their takes (clips at full and half speed, spectrograms, chart excerpts; the answers kept on the unit in
+    `~/review-data`). It holds no audio device: the page plays its clips in the browser. Listed on the home page.
 
 ## Tests
 
