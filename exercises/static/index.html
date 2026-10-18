@@ -374,6 +374,10 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
 .tk .m b { font-size: 17px; }
 .tk .m span { font-size: 14px; color: var(--ink2); }
 .tk .m em { font-size: 14px; color: var(--ink3); }
+.tip-next { all: unset; cursor: pointer; display: block; width: 100%; color: inherit; font: inherit; }
+.tip-next b { color: var(--ink); }
+.tip-go { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 6px 14px; border-radius: 999px; border: 2px solid var(--purple, #7C3AED); color: var(--ink); font-weight: 700; }
+.tip-next:focus-visible { outline: 2px solid var(--purple, #7C3AED); outline-offset: 4px; border-radius: 12px; }
 .tip { margin-top: auto; background: var(--surf2); border-radius: 16px; padding: 14px 16px; font-size: 16px; line-height: 1.4; color: var(--ink2); }
 
 /* the takes, from the record screen */
@@ -1141,7 +1145,7 @@ function renderRecorded() {
   const others = S.takes.filter((x) => x.id !== t.id && (t.exercise ? x.exercise === t.exercise : isFree(t) ? isFree(x) : !x.exercise && x.backing === t.backing)).slice(0, 8);
   const pl = S.status && S.status.playing, playingThis = pl && pl.take === t.id;
   const proj = e ? e.project_takes || [] : [];
-  const tip = e ? (() => { const nx = exercisesFor(e.instrument).filter(exNum).find((x) => todo(x) && x.id !== e.id); return nx ? `Next wanted for ${esc(e.instrument)}: ${esc(exName(nx))}.` : `Nothing else wanted for ${esc(e.instrument)} now.`; })() : "";
+  const tip = e ? (() => { const nx = exercisesFor(e.instrument).filter(exNum).find((x) => todo(x) && x.id !== e.id); return nx ? `<button type="button" class="tip-next" data-act="prepare" data-id="${esc(nx.id)}">Next wanted for ${esc(e.instrument)}: <b>${esc(exName(nx))}</b> <span class="tip-go">${ICON.swap} Set it up</span></button>` : `Nothing else wanted for ${esc(e.instrument)} now.`; })() : "";
   const tk = (x, label) => {
     const on = pl && pl.take === x.id;
     return `<button type="button" class="tk${on ? " on" : ""}" data-act="${on ? "stop-play" : "play"}" data-id="${esc(x.id)}"><span class="play">${on ? ICON.stop : ICON.play}</span>
@@ -1421,6 +1425,7 @@ document.addEventListener("click", (ev) => {
   else if (a === "ex-bpm") { const e = exById(c.exercise); set({ tempo: { ...c.tempo, [e.id]: Math.max(30, Math.min(260, Math.round(tempoOf(e)) + Number(d.d))) } }); }
   else if (a === "ex-bpm-reset") { const t = { ...c.tempo }; delete t[c.exercise]; set({ tempo: t }); }
   else if (a === "swap") set({ exercise: d.id });
+  else if (a === "prepare") { Object.assign(S.choices, { kind: "exercise", exercise: d.id }); save(); go("ready"); }
   else if (a === "level") setLevel((S.status ? S.status.level_offset_db : 0) + Number(d.d));
   else if (a === "readme") { S.showReadme = !S.showReadme; render(); }
   else if (a === "record") act(record);
