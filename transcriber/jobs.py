@@ -45,6 +45,8 @@ STAGES = {  # what the page says each stage is doing
 }
 DEFAULT_RATIO = 0.4  # transcribing time per second of take, until this unit has done some (Red Wing on the
 # desktop: 0.05 over a click, 0.19 without; the unit's CPU is slower)
+DEFAULT_RATIOS = {"piano": 0.1}  # the piano's path is faster (exercise takes of 28-40 s on the desktop: 0.5 s over
+# the click, 2.4 s without; the unit about 3.5 times as long)
 LOG_MAX = 200_000  # transcribe.log is cut back to its end past this
 
 
@@ -249,7 +251,8 @@ class Jobs:
                 rates.append(tr["seconds"] / m["seconds"])
             if len(rates) >= 8:
                 break
-        return round(seconds * (statistics.median(rates) if rates else DEFAULT_RATIO) + 2.0, 1)
+        default = DEFAULT_RATIOS.get(instrument, DEFAULT_RATIO)
+        return round(seconds * (statistics.median(rates) if rates else default) + 2.0, 1)
 
     def command(self, take_id: str, meta: dict) -> list[str]:
         p = self.settings.pipeline

@@ -710,9 +710,9 @@ it right there, with playback; "Review it" sends the take to the review app (dob
   needs no change. A tile on the home page.
 - **The look and flow** are the exercise app's redesign (step 6): dark, purple for what to tap, steps that
   open on Ready as left, the choices kept on the unit (`/api/choices`).
-  - **Choosing:** two steps. What you are playing (the dobro or the bass, `[instruments.*]` in the config)
-    and which input carries it (the dobro the room mic, input 4; the bass the Nadine, input 3, as the corpus's
-    bass takes; any kept input can be chosen, with its level). Then the take: the tempo, the beats in a bar
+  - **Choosing:** two steps. What you are playing (the dobro or the bass, `[instruments.*]` in the config; the
+    piano too since 2026-10-19, below) and which input carries it (the dobro the room mic, input 4; the bass the
+    Nadine, input 3, as the corpus's bass takes; any kept input can be chosen, with its level). Then the take: the tempo, the beats in a bar
     (4, 3 or 2), a bar's count-in (on), the click all through (on), a name if wanted. A new instrument or
     input chosen from Ready goes straight back to it; the take's step has its "Back to Ready".
   - **Recording:** the record screen (the input's level, the click's level on the speakers, Record), then
@@ -781,6 +781,55 @@ it right there, with playback; "Review it" sends the take to the review app (dob
   app restarted), and the ambient synth and the band restarted to read their peers. On the unit: Red Wing's take 1
   (80 s) imported by `tools/import-take` over its click, transcribed in 14.0 s (183 notes, 32 bars); "Review it" made
   `take-check-2026-10-19-082229` (8 questions) in about 5 s.
+- **The piano** (2026-10-19, the player: "piano should be added as an option for transcriber"). A third
+  instrument, `[instruments.piano]`, on input 4, the room mic (the MXL 990), as the exercise app records the piano:
+  every piano exercise take's sidecar (2026-10-17) has input 4 carrying the piano and inputs 3 and 7 nothing, so a
+  take's `take-01.flac` is channel 1 of the three kept.
+  - **The run:** `--instrument piano` (dobro-transcription's `pianoscore`): the take read at its own rate (48 kHz),
+    the beat tracker at the pipeline's 22.05 kHz. Over the click `--metronome --downbeat S`, as for the others (its
+    count-in bar teaches the pipeline the click, kept out of the strikes); with the click off, the tracker's tempo,
+    and the notes place the beats. The pipeline writes the piano's notes strike by strike from the top key down and
+    finds a strike's keys in another order: they are sorted alike to pair them, so each note gets its own end. A
+    note found before the downbeat puts the score's bar 1 a bar before it (as `pianoscore` writes it), and the
+    beats' times follow.
+  - **`transcription.json`:** each note's time, beat, bar, pitch, length (beats and s), end (where its damper came
+    down, or null) and `staff` (1 the treble, 2 the bass) with its `hand` (right, left). No string, fret, technique
+    or tuning (`tuning` null). The beats as for the others.
+  - **The page:** a grand staff, no tab, and no Notation/Tab switch ("Grand staff: the right hand over the left").
+    The bass staff's voice 5 is renumbered for alphaTab as the tab's was (a grand staff's 5-8 to 1-4: one voice a
+    staff, as the pipeline writes it); every staff notation only, set in `scoreLoaded`; the cursor follows both
+    staves' beats (a note's before a rest's, where both have one). The pipeline writes no pedal or dynamics in a
+    transcription; the exercises' own scores (016's pedal, 017's dynamics) draw with them the same way.
+    `/api/setup` gives each instrument `tab` (false: a grand staff), each take its `tab`.
+  - **"Review it":** dobro-transcription's take check reads the piano from branch `take-check-piano` (its
+    `review/take_check.py` names what it reads, `INSTRUMENTS = ("dobro", "bass", "piano")`; this app reads that line
+    each time it is asked, and a take_check.py that names none reads the dobro and the bass, as first deployed).
+    Until then a piano take's page says "Review isn't there yet for the piano", and `POST /api/takes/ID/review`
+    answers 409.
+  - **The first estimate:** 0.1 s a second of take for the piano (0.4 for the others) until the unit has done some.
+  - **Timed on the desktop** (Core i7-12700K, nice 19, two threads): the piano exercise takes of 28-40 s
+    (dobro-transcription `exercises/piano` 001, 008, 012-015) 0.4-0.5 s over their click, 2.1-2.5 s as free play
+    (the beat tracker is most of it); five of them run together (187 s) 3.1 s over the click, 6.8 s free. The
+    review of a 40 s take (012, three questions) made in 2.7 s (3.9 s from the page's tap), of the 187 s one in
+    11.8 s. Memory: 241 MB for a 40 s take, 1.0 GB for 187 s (1.2 GB free), once the pipeline's `note_ends` took its
+    spectra a block at a time (on the same branch; 583 MB and 2.5 GB before, the same notes and output).
+  - **On the unit (estimated, not measured):** 2.5-3.5 times the desktop's times (Red Wing's 80 s take: 4.0 s here,
+    14.0 s there), so a 40 s exercise take about 1-2 s over the click and 5-9 s free, a 3-minute piece about 8-11 s
+    over the click and 17-24 s free, a 40 s take's review about 7-14 s. The unit has 3.8 GB (3.0 GB available,
+    2026-10-19): a 3-minute piano take's 2.5 GB before the change above was too near that.
+  - **Tried on the desktop:** exercises 008 (G1 to G7, both staves) and 012 (triads, right hand) brought in by
+    `tools/import-take` against the dev config and transcribed (7 notes, 008's key exactly; 9, 012 missing two
+    chords' top notes), with Red Wing's dobro take beside them. Headless Chromium at 390x844, 820x1180 and
+    1180x820: the grand staff drawn (two staves, one voice each, no tab), played at full speed with the cursor on
+    the beat, a tap on bar 3 playing from 12.25 s; the instrument step with its three cards; "Review it" made the
+    review, whose excerpts the review page drew as grand staves. Red Wing still notation and tab, a tap on bar 3
+    from 5.18 s. No console errors, no sideways scroll.
+  - **Not yet deployed.** The order: dobro-transcription's `review/tools/deploy` (the review side and
+    `pipeline/src`; it restarts the review app only); then `tools/deploy` here (every app here restarted; the
+    unit's `/etc/take-transcriber.toml` is kept, so the installer notes it has no `[instruments.piano]`); then
+    `[instruments.piano]` (`name = "Piano"`, `input = 4`) added to `/etc/take-transcriber.toml` by hand and
+    `sudo systemctl restart take-transcriber`. Not the other way round: the app deployed now refuses a config with
+    an instrument it does not know.
 
 ## Open questions
 

@@ -1,5 +1,6 @@
 # The transcribe app's config (transcriber/), installed as /etc/take-transcriber.toml by setup/install.sh.
 # The same devices and inputs as the exercise app (config/exercises.toml): the 18i8, inputs 3, 4 and 7.
+# It records the dobro, the bass and the piano ([instruments.*]).
 
 capture = "scarlett-18i8-gen3"
 playback = "scarlett-18i8-gen3"
@@ -31,7 +32,9 @@ details = "MXL 990 (cardioid large-diaphragm condenser, phantom power), gain abo
 
 # What this app records, as the pipeline names it (`transcribe --instrument`), and the input that carries it
 # unless the page says another: the dobro on the room mic; the bass on the Nadine, as the corpus's bass takes
-# (dobro-transcription tunes/bass/*: "the Nadine's channel alone").
+# (dobro-transcription tunes/bass/*: "the Nadine's channel alone"); the piano on the room mic, as the exercise
+# app records it (every piano exercise take's sidecar: input 4, "Room mic", carries the piano; the Nadine and the
+# piezo nothing). The piano is written as a grand staff, no tab.
 [instruments.dobro]
 name = "Dobro"
 input = 4
@@ -39,6 +42,10 @@ input = 4
 [instruments.bass]
 name = "Bass"
 input = 3
+
+[instruments.piano]
+name = "Piano"
+input = 4
 
 # The transcription project's package as synced to the unit, and the venv that has its dependencies (numpy,
 # scipy, librosa, soundfile): the review app's. A run gets a few threads and nice 19.

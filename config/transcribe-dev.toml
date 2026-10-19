@@ -28,6 +28,10 @@ input = 4
 name = "Bass"
 input = 3
 
+[instruments.piano]
+name = "Piano"
+input = 4
+
 [pipeline]
 python = "python3"
 src = "~/play/dobro-transcription/pipeline/src"

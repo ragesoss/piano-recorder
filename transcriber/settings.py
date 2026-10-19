@@ -3,6 +3,7 @@ devices, the kept inputs, takes_dir, peers, web and loudness there):
 
     [instruments.dobro]   name = "Dobro", input = 4    the pipeline's instrument, and the input that carries it
     [instruments.bass]    name = "Bass", input = 3     (the page can choose another of the kept inputs)
+    [instruments.piano]   name = "Piano", input = 4    (the piano: a grand staff, no tab)
     [pipeline]            python, src, threads, nice    the transcription project's package, and how to run it
     [review]              root, python, data, port      the review app's generator (dobro-transcription)
 """
@@ -14,12 +15,13 @@ from pathlib import Path
 
 from recorder.config import REPO, Config, ConfigError
 
-PIPELINE_INSTRUMENTS = ("dobro", "bass")  # what `transcribe --instrument` takes that this app records
+PIPELINE_INSTRUMENTS = ("dobro", "bass", "piano")  # what `transcribe --instrument` takes that this app records
+GRAND_STAFF = ("piano",)  # written as a grand staff (two staves, the hands), no tab: the others as notation and tab
 
 
 @dataclass(frozen=True)
 class Instrument:
-    kind: str  # the pipeline's --instrument: "dobro", "bass"
+    kind: str  # the pipeline's --instrument: "dobro", "bass", "piano"
     name: str  # "Dobro"
     input: int  # the interface's input number that carries it unless the page says otherwise
 

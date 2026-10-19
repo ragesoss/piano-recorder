@@ -1,8 +1,9 @@
 """Transcribe a take folder with the transcription project's pipeline (dobro-transcription's
 `transcribe.transcribe`), and say what it found for the transcribe app's page.
 
-    PYTHONPATH=<pipeline/src> <its venv>/python transcriber/job/run_pipeline.py FOLDER --instrument dobro \
-        --bpm 72 [--beats-per-bar 4] [--metronome] [--downbeat S] [--track-beats] [--title T]
+    PYTHONPATH=<pipeline/src> <its venv>/python transcriber/job/run_pipeline.py FOLDER \
+        --instrument dobro|bass|piano --bpm 72 [--beats-per-bar 4] [--metronome] [--downbeat S] \
+        [--track-beats] [--title T]
 
 Run by the app (transcriber/jobs.py) in the pipeline's venv, which has numpy, scipy, librosa and
 soundfile; this file imports nothing of the app's, and sits alone in its folder (the folder of the
@@ -10,9 +11,11 @@ script run is first on the path: nothing here may stand in for a module of the p
 
 Writes into FOLDER, each by a rename once it is whole:
 - `transcription.musicxml`: the pipeline's output as its CLI writes it (`write_transcription`):
-  standard notation and tab;
-- `transcription.json`: the notes (time, beat, bar, pitch, string, fret, technique, length) and the
-  score's beats in the take's time, for the page's cursor and the review side.
+  standard notation and tab; for the piano a grand staff (the right hand on the treble staff, the left on
+  the bass staff), no tab;
+- `transcription.json`: the notes (time, beat, bar, pitch, string, fret, technique, length; the piano's
+  pitch, time, beat, bar, length and staff, its hand, with no string or fret) and the score's beats in the
+  take's time, for the page's cursor and the review side.
 
 Prints a JSON line at each stage on stdout (`{"stage": "notes"}` ...), the last `{"stage": "done", ...}`.
 
@@ -20,6 +23,10 @@ The beat: over a click (`--metronome --downbeat S`) the score's beats are the cl
 beat tracker (`transcribe.chords.beat_grid`: librosa's, from the tempo given) gives the tempo the
 pipeline is told (`--track-beats`; held to the tempo given when it strays more than `TRACK_SPAN`), and
 the score's beats are placed in the take by its notes (`fit_times`).
+
+The piano (`--instrument piano`, the pipeline's `pianoscore`) reads the take at its own rate (48 kHz: its
+partials to 9 kHz); the beat tracker reads it at the pipeline's 22.05 kHz. Over a click its count-in bar
+teaches it the click, so it is told the downbeat as the others are.
 """
 
 import argparse
@@ -75,6 +82,16 @@ def fit_times(beats, times, query, spb: float, half_window: float = 4.0) -> np.n
     return out
 
 
+def in_order(t, instrument: str) -> list:
+    """Each event's note as found, in the events' order: what gives a note its time in the take. The piano's
+    path writes its events strike by strike from the top key down, its notes found (`written`) in the order
+    each strike's keys were read: sorted alike, they pair (a strike's notes share its time)."""
+    w = list(t.written or [])
+    if instrument == "piano" and len(w) == len(t.events):
+        w = sorted(w, key=lambda n: (n.onset_s, -n.midi))
+    return w
+
+
 def score_beats(pickup: float, bpb: int, total: float) -> list[tuple[float, int, int]]:
     """The score's beats on the bar's grid, from its start to its end: (beat from the score's start,
     bar (0: the pickup bar), beat in the bar)."""
@@ -94,7 +111,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("folder", type=Path)
     ap.add_argument("--take", default="take-01.flac")
-    ap.add_argument("--instrument", choices=("dobro", "bass"), default="dobro")
+    ap.add_argument("--instrument", choices=("dobro", "bass", "piano"), default="dobro")
     ap.add_argument("--bpm", type=float, required=True, help="the tempo given (the click's, if there was one)")
     ap.add_argument("--beats-per-bar", type=int, default=4)
     ap.add_argument("--metronome", action="store_true", help="played to a click at --bpm")
@@ -108,14 +125,20 @@ def main() -> None:
     from transcribe.detect import SR, load
     from transcribe.transcribe import to_bars, transcribe, write_transcription
 
-    y = load(a.folder / a.take)
-    take_s = len(y) / SR
+    piano = a.instrument == "piano"
+    if piano:  # at the take's own rate
+        from transcribe.pianoscore import load as load_piano
+
+        y, sr = load_piano(a.folder / a.take)
+    else:
+        y, sr = load(a.folder / a.take), SR
+    take_s = len(y) / sr
     bpm, tracked = a.bpm, None
     if a.track_beats and not a.metronome:
         say("beats")
         from transcribe.chords import beat_grid
 
-        tracked = [float(x) for x in beat_grid(y, a.bpm)]
+        tracked = [float(x) for x in beat_grid(y if sr == SR else load(a.folder / a.take), a.bpm)]
         if len(tracked) > 4:
             found = 60.0 / float(np.median(np.diff(tracked)))
             if abs(found / a.bpm - 1.0) <= TRACK_SPAN:
@@ -123,7 +146,7 @@ def main() -> None:
 
     say("notes")
     t = transcribe(y, bpm, a.beats_per_bar, metronome=a.metronome, instrument=a.instrument,
-                   downbeat_s=a.downbeat, sr=SR)
+                   downbeat_s=a.downbeat, sr=sr)
 
     say("writing")
     bpb, pickup = t.beats_per_bar, float(t.pickup_beats)
@@ -131,20 +154,32 @@ def main() -> None:
     tmp = a.folder / "transcription.musicxml.tmp"
     if t.events:
         write_transcription(t, tmp, a.title or f"Transcription: {a.folder.name}")
-        n_bars = len(to_bars(t.events, bpb, pickup))
+        if piano:
+            from transcribe.pianoscore import to_piano_bars
+
+            n_bars = len(to_piano_bars(t.events, bpb))
+        else:
+            n_bars = len(to_bars(t.events, bpb, pickup))
     else:
         write_empty(tmp, a.title or f"Transcription: {a.folder.name}", t, a.instrument)
         n_bars = 1
     total = (pickup + (n_bars - 1) * bpb) if pickup > 0 else n_bars * bpb
     spb = 60.0 / bpm
+    written = in_order(t, a.instrument)
     note_beats = [e.onset_beats for e in t.events]
-    note_times = [w.onset_s for w in (t.written or [])]
+    note_times = [w.onset_s for w in written]
     grid = "click" if a.metronome and a.downbeat is not None else "notes" if t.events else "tempo"
     grid_beats = score_beats(pickup, bpb, total)
     query = [b for b, _, _ in grid_beats]
     if grid == "click":
         spb = 60.0 / a.bpm
-        times = [a.downbeat + (b - pickup) * spb for b in query]
+        # the score's bar 1 this many beats from the downbeat: the piano's path writes notes found before the
+        # downbeat in a bar of their own before it (the others, as a pickup)
+        lead = 0.0
+        if piano and note_times:
+            off = float(np.median([(s - a.downbeat) / spb - b for b, s in zip(note_beats, note_times)]))
+            lead = round(off / bpb) * bpb
+        times = [a.downbeat + (b - pickup + lead) * spb for b in query]
     elif grid == "notes":
         times = list(fit_times(note_beats, note_times, query, spb))
     else:
@@ -152,13 +187,17 @@ def main() -> None:
         times = [start + (b - pickup) * spb for b in query]
     at = lambda b: float(np.interp(b, query, times)) if len(query) > 1 else float(times[0]) + (b - query[0]) * spb
     notes = []
-    for e, w in zip(t.events, t.written or []):
-        notes.append({"t": round(w.onset_s, 4), "beat": round(e.onset_beats, 4), "bar": e.bar,
-                      "length_beats": round(e.duration_beats, 4),
-                      "length_s": round(max(0.0, at(e.onset_beats + e.duration_beats) - at(e.onset_beats)), 4),
-                      "end_s": None if w.offset_s is None else round(w.offset_s, 4),
-                      "midi": e.midi, "pitch": pitch_name(e.midi), "string": e.string, "fret": e.fret,
-                      "attack": bool(e.attack), "technique": e.technique})
+    for e, w in zip(t.events, written):
+        n = {"t": round(w.onset_s, 4), "beat": round(e.onset_beats, 4), "bar": e.bar,
+             "length_beats": round(e.duration_beats, 4),
+             "length_s": round(max(0.0, at(e.onset_beats + e.duration_beats) - at(e.onset_beats)), 4),
+             "end_s": None if w.offset_s is None else round(w.offset_s, 4),
+             "midi": e.midi, "pitch": pitch_name(e.midi)}
+        if piano:  # the staff is the hand (the pipeline's `string`): 1 the treble staff, 2 the bass staff
+            n.update(staff=int(e.string), hand="right" if int(e.string) == 1 else "left")
+        else:
+            n.update(string=e.string, fret=e.fret, attack=bool(e.attack), technique=e.technique)
+        notes.append(n)
     beat0, bar1 = at(0.0), at(pickup)
     out = {
         "format": 1,
@@ -173,7 +212,7 @@ def main() -> None:
         "bar1_s": round(bar1, 4),  # bar 1's first beat in the take: the downbeat told, else the transcription's
         "bars": n_bars,
         "beats_total": total,
-        "tuning": {str(s): int(m) for s, m in sorted(t.tuning.items())},
+        "tuning": None if piano else {str(s): int(m) for s, m in sorted(t.tuning.items())},  # the piano has no strings
         "grid": grid,  # where the beats' times come from: the click, the notes, or the tempo alone
         "beats": [{"beat": b, "bar": bar, "in_bar": k, "t": round(float(x), 4)}
                   for (b, bar, k), x in zip(grid_beats, times)],
@@ -191,7 +230,14 @@ def main() -> None:
 
 
 def write_empty(path: Path, title: str, t, instrument: str) -> None:
-    """No notes found: a bar's rest, so the page still draws a staff and tab."""
+    """No notes found: a bar's rest, so the page still draws a staff and tab (the piano: a grand staff)."""
+    if instrument == "piano":
+        from transcribe.notation import Rest, write_piano_score
+
+        bar = 4 * t.beats_per_bar
+        write_piano_score(path, title, [([Rest(bar)], [Rest(bar)])], tempo_bpm=round(t.bpm),
+                          beats_per_bar=t.beats_per_bar)
+        return
     from transcribe.notation import DOBRO, UPRIGHT_BASS, Rest, write_score
 
     write_score(path, title, [[Rest(4 * t.beats_per_bar)]], tempo_bpm=round(t.bpm), tuning=t.tuning,

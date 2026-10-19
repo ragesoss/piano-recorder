@@ -1,10 +1,12 @@
 """The transcribe app (transcriber/): a take recorded on the fake device becomes a folder of the
 transcription project's corpus, is transcribed (by a stand-in for the pipeline, run as the real one is,
-in its own interpreter), drawn and heard on the page, and handed to the review app."""
+in its own interpreter), drawn and heard on the page, and handed to the review app. The dobro and the
+bass as notation and tab, the piano as a grand staff."""
 
 import csv
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import time
@@ -28,16 +30,36 @@ from transcriber.store import COLUMNS, Folders
 DEV = REPO / "config" / "transcribe-dev.toml"
 DOBRO_TRANSCRIPTION = Path.home() / "play" / "dobro-transcription"
 
-# A stand-in for dobro-transcription's package: the functions job/run_pipeline.py calls, a note a beat.
+# A stand-in for dobro-transcription's package: the functions job/run_pipeline.py calls, a note a beat. The
+# piano's: read at the take's own rate (48 kHz), a chord and a note a beat on its two staves, its events by strike
+# from the top key down and its notes found in another order (as `pianoscore`'s), each note's end its own; with
+# FAKE_PIANO_EARLY set, a note before the downbeat, and so a bar before it (as `pianoscore` writes one).
 FAKE = {
     "__init__.py": "",
     "detect.py": "import numpy as np\nSR = 22050\ndef load(path):\n    return np.zeros(SR * 3)\n",
-    "chords.py": "import numpy as np\ndef beat_grid(y, bpm):\n    return np.arange(0.5, 3.0, 60.0 / (bpm * 1.02))\n",
-    "transcribe.py": '''from pathlib import Path
+    "chords.py": ("import numpy as np\ndef beat_grid(y, bpm):\n    assert len(y) == 22050 * 3, 'the tracker reads 22.05 kHz'\n"
+                  "    return np.arange(0.5, 3.0, 60.0 / (bpm * 1.02))\n"),
+    "pianoscore.py": ("import numpy as np\ndef load(path):\n    return np.zeros(48000 * 3), 48000\n"
+                      "def to_piano_bars(events, beats_per_bar=4):\n    return [([0], [0])] * 2\n"),
+    "transcribe.py": '''import os
+from pathlib import Path
 from types import SimpleNamespace as NS
 
 def transcribe(y, bpm, beats_per_bar=4, metronome=False, instrument="dobro", downbeat_s=None, sr=22050, **kw):
     spb, d = 60.0 / bpm, (downbeat_s if downbeat_s is not None else 0.5)
+    if instrument == "piano":
+        assert sr == 48000 and len(y) == 48000 * 3, "the piano is read at its own rate"
+        early = 4.0 if os.environ.get("FAKE_PIANO_EARLY") else 0.0
+        strikes = [(0.0, [67, 64, 60], 1), (1.0, [48], 2), (2.0, [65, 62], 1), (2.0, [50], 2)]
+        events = [NS(onset_beats=b + early, duration_beats=1.0, midi=m, string=st, fret=0, bar=1 + int(b + early) // beats_per_bar,
+                     attack=True, technique=None) for b, ms, st in strikes for m in ms]
+        written = [NS(onset_s=d + e.onset_beats * spb - early * spb, midi=e.midi, offset_s=d + e.midi / 100.0) for e in events]
+        written = written[1:] + written[:1]  # found in another order than written (the first strike's top key last)
+        if early:
+            events.insert(0, NS(onset_beats=3.75, duration_beats=0.25, midi=72, string=1, fret=0, bar=1, attack=True, technique=None))
+            written.append(NS(onset_s=d - 0.25 * spb, midi=72, offset_s=None))
+        return NS(events=events, written=written, bpm=bpm, beats_per_bar=beats_per_bar, pickup_beats=0.0, tuning={},
+                  instrument="piano")
     events = [NS(onset_beats=float(k), duration_beats=1.0, midi=55 + k, string=3, fret=k, bar=1 + k // beats_per_bar,
                  attack=k != 2, technique=None if k != 2 else "slide") for k in range(6)]
     written = [NS(onset_s=d + k * spb, offset_s=None) for k in range(6)]
@@ -48,7 +70,8 @@ def to_bars(events, beats_per_bar, pickup):
     return [[0]] * 2
 
 def write_transcription(t, path, title):
-    Path(path).write_text(f"<score-partwise><work><work-title>{title}</work-title></work></score-partwise>")
+    staves = "<staves>2</staves>" if getattr(t, "instrument", "") == "piano" else ""
+    Path(path).write_text(f"<score-partwise><work><work-title>{title}</work-title></work>{staves}</score-partwise>")
 ''',
 }
 
@@ -227,6 +250,71 @@ def test_another_input_can_carry_the_instrument(client, setup):
     assert meta["input"] == 1 and meta["input_name"] == "Piezo" and meta["channel"] == 2
 
 
+def test_a_piano_take_is_a_folder_of_the_corpus_and_a_grand_staff(client, setup):
+    cfg, _ = setup
+    piano = next(i for i in client.get("/api/setup").json()["instruments"] if i["kind"] == "piano")
+    assert piano == {"kind": "piano", "name": "Piano", "input": 4, "tab": False}  # the room mic, as the exercise app's
+    take = record(client, 2.0, instrument="piano", bpm=120)
+    t = wait_for(client, take)
+    d = cfg.takes_dir / take
+    assert t["transcription"]["state"] == "done", t["transcription"]
+    assert t["tab"] is False and t["instrument"] == "piano" and t["instrument_name"] == "Piano"
+    # the folder as for the others: the room mic's channel alone, every kept input in raw/, the corpus's takes.csv
+    assert flac_info(d / "take-01.flac") == (48000, 1, 24) and flac_info(d / "raw" / f"{take}.flac") == (48000, 3, 24)
+    meta = json.loads((d / "meta.json").read_text())
+    for k, v in {"instrument": "piano", "input": 4, "input_name": "Room mic", "channel": 1, "bpm": 120.0, "click": True,
+                 "count_in_bars": 1, "click_found": True}.items():
+        assert meta[k] == v, k
+    rows = list(csv.DictReader((d / "takes.csv").open()))
+    assert tuple(rows[0]) == COLUMNS and rows[0]["metronome"] == "yes"
+    assert abs(float(rows[0]["beat0_s"]) - meta["downbeat_s"]) < 1e-3
+    log = (d / "transcribe.log").read_text()
+    assert "--instrument piano" in log and "--metronome" in log and f"--downbeat {meta['downbeat_s']:.4f}" in log
+    assert "<staves>2</staves>" in (d / "transcription.musicxml").read_text()
+    # its notes: pitch, time, length, the staff and hand, beats; no strings or frets
+    tr = json.loads((d / "transcription.json").read_text())
+    assert tr["instrument"] == "piano" and tr["tuning"] is None and tr["grid"] == "click" and tr["bars"] == 2
+    assert [b["t"] for b in tr["beats"][:3]] == pytest.approx([meta["downbeat_s"] + k * 0.5 for k in range(3)], abs=1e-3)
+    notes = tr["notes"]
+    assert [(n["beat"], n["pitch"], n["staff"], n["hand"]) for n in notes] == [
+        (0.0, "G4", 1, "right"), (0.0, "E4", 1, "right"), (0.0, "C4", 1, "right"), (1.0, "C3", 2, "left"),
+        (2.0, "F4", 1, "right"), (2.0, "D4", 1, "right"), (2.0, "D3", 2, "left")]
+    for n in notes:
+        assert not {"string", "fret", "technique"} & set(n), n
+        assert n["end_s"] == pytest.approx(n["t"] - n["beat"] * 0.5 + n["midi"] / 100.0, abs=1e-3)  # its own end
+        assert n["t"] == pytest.approx(meta["downbeat_s"] + n["beat"] * 0.5, abs=1e-3)
+        assert n["length_beats"] == 1.0 and n["length_s"] == pytest.approx(0.5, abs=1e-3)
+
+
+def test_a_piano_note_before_the_downbeat_puts_bar_1_a_bar_before_it(client, setup, monkeypatch):
+    cfg, _ = setup
+    monkeypatch.setenv("FAKE_PIANO_EARLY", "1")
+    take = record(client, 2.0, instrument="piano", bpm=120)
+    wait_for(client, take)
+    meta = json.loads((cfg.takes_dir / take / "meta.json").read_text())
+    tr = json.loads((cfg.takes_dir / take / "transcription.json").read_text())
+    # the score's bar 1 is the bar before the downbeat: its beat 0 four beats before it, the downbeat its beat 4
+    assert tr["beat0_s"] == pytest.approx(meta["downbeat_s"] - 2.0, abs=1e-3)
+    assert next(b["t"] for b in tr["beats"] if b["beat"] == 4.0) == pytest.approx(meta["downbeat_s"], abs=1e-3)
+    assert all(abs(n["t"] - (tr["beat0_s"] + n["beat"] * 0.5)) < 1e-3 for n in tr["notes"])
+
+
+def test_free_play_on_the_piano_tracks_the_beat_at_the_pipelines_rate(client, setup):
+    cfg, _ = setup
+    take = record(client, 1.0, instrument="piano", click=False, count_in=False)
+    t = wait_for(client, take)
+    assert t["transcription"]["state"] == "done", t["transcription"]  # the stand-in checks both rates
+    tr = json.loads((cfg.takes_dir / take / "transcription.json").read_text())
+    assert tr["grid"] == "notes" and tr["bpm"] == pytest.approx(240 * 1.02, abs=0.1)
+    assert all(b["t"] < c["t"] for b, c in zip(tr["beats"], tr["beats"][1:]))
+
+
+def test_the_first_estimate_is_the_instruments(setup):
+    cfg, _ = setup
+    jobs = Jobs(cfg, load_settings(cfg), Folders(cfg.takes_dir), None)
+    assert jobs.estimate(40.0, "piano", True) == 6.0 and jobs.estimate(40.0, "dobro", True) == 18.0
+
+
 @pytest.mark.parametrize("body, code", [({"instrument": "banjo"}, 400), ({"instrument": "dobro", "input": 5}, 400),
                                         ({"instrument": "dobro", "bpm": 900}, 400),
                                         ({"instrument": "dobro", "beats_per_bar": 5}, 400)])
@@ -278,7 +366,9 @@ def test_a_take_that_could_not_be_transcribed_says_why_and_can_be_again(client, 
 
 def test_review_it_runs_the_review_apps_take_check_and_links_to_it(client, setup):
     cfg, tmp = setup
-    assert client.get("/api/setup").json()["review"] == {"available": True, "why": "", "port": 8005}
+    # (its take_check.py names no instruments: it reads the dobro and the bass, as first deployed)
+    assert client.get("/api/setup").json()["review"] == {"available": True, "why": "", "port": 8005,
+                                                         "instruments": ["dobro", "bass"]}
     take = record(client, 0.5, click=False, count_in=False)
     wait_for(client, take)
     assert client.post(f"/api/takes/{take}/review").status_code == 200
@@ -307,6 +397,23 @@ def test_review_it_waits_for_the_review_app_to_have_take_check(setup):
         assert r.status_code == 409 and "doesn't check takes yet" in r.json()["detail"]
         mr.write_text(MAKE_REVIEW.format(kinds='"borderline", "take-check"'))  # deployed: no restart needed
         assert c.get("/api/setup").json()["review"]["available"] is True
+
+
+def test_review_it_waits_for_the_review_app_to_check_piano_takes(client, setup):
+    cfg, tmp = setup
+    take = record(client, 0.5, instrument="piano", click=False, count_in=False)
+    wait_for(client, take)
+    assert client.get("/api/setup").json()["review"]["instruments"] == ["dobro", "bass"]
+    r = client.post(f"/api/takes/{take}/review")
+    assert r.status_code == 409 and r.json()["detail"] == "the review app doesn't check piano takes yet"
+    # deployed: its take_check.py names the piano (no restart needed)
+    (tmp / "dt" / "review" / "take_check.py").write_text('INSTRUMENTS = ("dobro", "bass", "piano")  # what it reads\n')
+    assert client.get("/api/setup").json()["review"]["instruments"] == ["dobro", "bass", "piano"]
+    assert client.post(f"/api/takes/{take}/review").status_code == 200
+    end = time.monotonic() + 20
+    while client.get("/api/status").json()["review"] and time.monotonic() < end:
+        time.sleep(0.1)
+    assert client.get(f"/api/takes/{take}").json()["review"]["id"] == "take-check-" + take.replace("_", "-")
 
 
 def test_the_review_id_is_read_from_make_reviews_output():
@@ -391,6 +498,20 @@ def test_a_recording_made_elsewhere_is_brought_in_as_a_take(setup, monkeypatch, 
     assert row["beat0_s"] == "0.500" and row["metronome"] == "yes"
 
 
+def test_a_piano_exercise_take_is_brought_in(setup, monkeypatch, tmp_path, capsys):
+    cfg, _ = setup
+    t = np.arange(48000 * 2) / 48000
+    src = tmp_path / "take-01.wav"
+    write_wav(src, 0.3 * np.sin(2 * np.pi * 261.6 * t)[:, None], 48000)
+    monkeypatch.setattr("transcriber.importer.load_config", lambda path: cfg)
+    from transcriber import importer
+    importer.main([str(src), "--instrument", "piano", "--bpm", "60", "--click", "--downbeat", "4.366", "--no-transcribe"])
+    take = capsys.readouterr().out.split(":")[0]
+    meta = json.loads((cfg.takes_dir / take / "meta.json").read_text())
+    assert meta["instrument"] == "piano" and meta["instrument_name"] == "Piano" and meta["downbeat_s"] == 4.366
+    assert Folders(cfg.takes_dir).summary(take)["tab"] is False
+
+
 def test_the_page_draws_with_alphatab_from_the_app_itself(client):
     page = client.get("/").text
     assert '<script src="/alphatab/alphaTab.min.js">' in page and "http" not in page.split("<script>")[0].replace("http-equiv", "")
@@ -453,3 +574,34 @@ def test_the_real_pipeline_transcribes_a_real_take(setup, tmp_path):
     assert (first["pitch"], first["beat"], first["string"], first["fret"]) == ("G3", 0.0, 3, 0)  # Red Wing's first note
     assert abs(first["t"] - 0.5) < 0.05
     assert "<score-partwise" in (d / "transcription.musicxml").read_text()
+
+
+@pytest.mark.skipif(pipeline_python() is None, reason="needs dobro-transcription's pipeline and its dependencies")
+def test_the_real_pipeline_transcribes_a_real_piano_take(setup):
+    """Piano exercise 008, G1 to G7 (dobro-transcription exercises/piano/008-gs-across: the room mic, over the exercise
+    app's click at 60 bpm, a bar's count-in; bar 1's downbeat 4.370 s): three Gs on the bass staff, four on the treble."""
+    cfg, _ = setup
+    src = DOBRO_TRANSCRIPTION / "exercises/piano/008-gs-across/take-01.flac"
+    if not src.is_file():
+        pytest.skip("no piano take")
+    settings = load_settings(cfg)
+    settings = replace(settings, pipeline=Pipeline(python=pipeline_python(), src=DOBRO_TRANSCRIPTION / "pipeline" / "src"))
+    folders = Folders(cfg.takes_dir)
+    d = folders.create("2026-10-17_231852")
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(src), "-c:a", "flac", "-sample_fmt", "s32",
+                    "-bits_per_raw_sample", "24", str(d / "take-01.flac")], check=True)
+    folders.write_meta(d.name, {"instrument": "piano", "bpm": 60, "beats_per_bar": 4, "click": True, "downbeat_s": 4.370,
+                                "seconds": 39.8})
+    jobs = Jobs(cfg, settings, folders, None)
+    jobs.current = {"take": d.name, "stage": "", "started": time.monotonic(), "paused_s": 0.0}
+    tr = jobs.transcribe(d.name)
+    assert tr["state"] == "done" and tr["notes"] == 7 and tr["bars"] == 7 and tr["grid"] == "click"
+    data = json.loads((d / "transcription.json").read_text())
+    assert [(n["pitch"], n["beat"], n["staff"], n["hand"]) for n in data["notes"]] == [
+        ("G1", 0.0, 2, "left"), ("G2", 4.0, 2, "left"), ("G3", 8.0, 2, "left"), ("G4", 12.0, 1, "right"),
+        ("G5", 16.0, 1, "right"), ("G6", 20.0, 1, "right"), ("G7", 24.0, 1, "right")]
+    assert all(abs(n["t"] - (4.370 + n["beat"])) < 0.1 and "string" not in n for n in data["notes"])  # struck 0-80 ms early
+    xml = (d / "transcription.musicxml").read_text()
+    assert "<staves>2</staves>" in xml and '<clef number="2"><sign>F</sign>' in xml and "staff-details" not in xml
+    row = next(csv.DictReader((d / "takes.csv").open()))
+    assert row["beat0_s"] == "4.370" and row["metronome"] == "yes"

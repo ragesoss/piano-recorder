@@ -1,6 +1,6 @@
 """The transcribe app: the player records a take on the phone and sees the transcription pipeline's
-notation and tab for it there, with the take's own sound and a cursor; "Review it" sends the take to
-the review app to be checked and corrected (review.py).
+notation and tab for it there (the piano's as a grand staff), with the take's own sound and a cursor;
+"Review it" sends the take to the review app to be checked and corrected (review.py).
 
 A separate app on its own port (8006), with its own takes (store.py: one folder each, laid out as
 a folder of the transcription project's corpus). It uses the recorder's engine, devices, click and
@@ -33,7 +33,7 @@ from recorder.takes import TakeNotFound, Takes
 from . import VERSION
 from .jobs import Jobs
 from .review import Reviews
-from .settings import load_settings
+from .settings import GRAND_STAFF, load_settings
 from .store import TAKE, Folders
 
 STATIC = Path(__file__).parent / "static"
@@ -47,7 +47,7 @@ SAFE_PATH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*
 
 
 class StartIn(BaseModel):
-    instrument: str  # "dobro", "bass" (GET /api/setup)
+    instrument: str  # "dobro", "bass", "piano" (GET /api/setup)
     input: int | None = None  # the input that carries it (default: the config's for it)
     bpm: float = 90.0
     beats_per_bar: int = 4
@@ -153,13 +153,16 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.get("/api/setup")
     def setup():
-        """What can be recorded, on which inputs, and whether the review app can check a take."""
+        """What can be recorded, on which inputs (`tab`: written as notation and tab, else as a grand staff),
+        and whether the review app can check a take, and of which instruments."""
         ok, why = reviews.available()
         return {
-            "instruments": [{"kind": i.kind, "name": i.name, "input": i.input} for i in settings.instruments],
+            "instruments": [{"kind": i.kind, "name": i.name, "input": i.input, "tab": i.kind not in GRAND_STAFF}
+                            for i in settings.instruments],
             "inputs": [{"input": i.number, "channel": c, "name": i.name, "details": i.details, "for": i.for_kind}
                        for c, i in enumerate(cfg.inputs)],
-            "review": {"available": ok, "why": why, "port": settings.review.port},
+            "review": {"available": ok, "why": why, "port": settings.review.port,
+                       "instruments": list(reviews.instruments())},
             "meters": list(METERS),
             "version": VERSION,
         }

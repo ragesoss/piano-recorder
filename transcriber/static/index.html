@@ -12,7 +12,8 @@
 /* The transcribe app's page, in the exercise app's look (exercises/static/index.html): dark, purple for what
    to tap, red only for recording. Two parts: choosing the next take (steps that open on Ready, as you left
    it: the instrument, then the take's details) and recording it (the record screen, the take, then the take
-   as notation and tab with its own sound). The notation is drawn by alphaTab 1.8.4 (/alphatab/, MPL-2.0). */
+   as notation and tab with its own sound; the piano's as a grand staff). The notation is drawn by alphaTab 1.8.4
+   (/alphatab/, MPL-2.0). */
 @font-face { font-family: "Bricolage Grotesque"; src: url(/fonts/bricolage-grotesque.woff2) format("woff2");
   font-weight: 200 800; font-display: swap; }
 @font-face { font-family: "Public Sans"; src: url(/fonts/public-sans.woff2) format("woff2");
@@ -206,6 +207,7 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
 .score-tools .seg { min-width: 230px; }
 .score-tools .seg button { min-height: 40px; font-size: 15px; }
 .score-tools .hint { font-size: 13px; color: var(--ink3); margin-left: auto; }
+.score-tools .what { font-size: 15px; font-weight: 700; color: var(--ink2); }
 #scoreHost { position: relative; min-height: 120px; }
 #scoreHost .at-surface { cursor: pointer; }
 .at-cursor { position: absolute; width: 3px; background: var(--red-dot); border-radius: 2px; pointer-events: none; z-index: 5; display: none; }
@@ -324,6 +326,11 @@ function plural(n, one, many) { return `${n} ${n === 1 ? one : many || one + "s"
 function inst(kind) { return (S.setup ? S.setup.instruments : []).find((i) => i.kind === kind) || null; }
 function inputOf(n) { return (S.setup ? S.setup.inputs : []).find((i) => i.input === Number(n)) || null; }
 function chosenInst() { return inst(C().instrument); }
+function writesText() {  // what the pipeline writes for the instrument chosen (or for each)
+  const i = chosenInst(), all = S.setup ? S.setup.instruments : [];
+  if (i) return i.tab === false ? "The pipeline writes a grand staff for it: the right hand over the left." : "The pipeline writes notation and tab for it.";
+  return all.some((x) => x.tab === false) ? "The pipeline writes notation and tab for a dobro or a bass, a grand staff for the piano." : "The pipeline writes notation and tab for it.";
+}
 function chosenInput() {  // the input the chosen instrument is on: the page's choice, else the config's
   const i = chosenInst();
   if (!i) return null;
@@ -464,7 +471,7 @@ function renderOn() {
       <span class="radio"></span><span class="m"><b>In ${x.input} · ${esc(x.name)}${x.input === i.input ? ' <span class="badge dim">usual</span>' : ""}</b>${x.details ? `<span>${esc(x.details)}</span>` : ""}</span>
       <span class="meter" data-meter="${x.channel}" style="max-width:90px"><i></i><b></b></span></button>`;
   }).join("") : "";
-  return `<div class="body"><div class="q"><h1>What are you playing?</h1><p>The pipeline writes notation and tab for it.</p></div>
+  return `<div class="body"><div class="q"><h1>What are you playing?</h1><p>${esc(writesText())}</p></div>
     <div class="kinds" role="radiogroup" aria-label="Instrument">${cards}</div>
     ${i ? `<section class="panel" aria-label="Input"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><h2>Heard on</h2><span class="muted" style="font-size:14px">the take is this input alone</span></div>
       <div class="opts" role="radiogroup" aria-label="Input">${opts}</div><p class="muted" id="monNote" style="font-size:13px"></p></section>` : ""}</div>
@@ -593,8 +600,10 @@ function renderTake() {
   if (job || queued || tr.state === "running" || tr.state === "queued" || tr.state === "building") main = workingHtml(job, t);
   else if (tr.state === "failed") main = `<div class="working"><span class="doing red-ink">Not transcribed</span><p style="font-size:15px;color:var(--ink2)">${esc(tr.error || "The pipeline stopped.")}</p>
       <div class="acts"><button type="button" class="btn tint" data-act="transcribe" data-id="${esc(t.id)}">Transcribe again</button></div></div>`;
-  else if (tr.state === "done") main = `${statsHtml(t)}<div class="score-card"><div class="score-tools"><div class="seg" role="radiogroup" aria-label="Show">
-      <button type="button" aria-pressed="${S.view === "both"}" data-act="view" data-v="both">Notation and tab</button><button type="button" aria-pressed="${S.view === "tab"}" data-act="view" data-v="tab">Tab</button></div>
+  else if (tr.state === "done") main = `${statsHtml(t)}<div class="score-card"><div class="score-tools">${t.tab === false
+      ? '<span class="what">Grand staff: the right hand over the left</span>'
+      : `<div class="seg" role="radiogroup" aria-label="Show">
+      <button type="button" aria-pressed="${S.view === "both"}" data-act="view" data-v="both">Notation and tab</button><button type="button" aria-pressed="${S.view === "tab"}" data-act="view" data-v="tab">Tab</button></div>`}
       <span class="hint">Tap a bar to play from there</span></div><div id="scoreSlot"></div></div>`;
   else main = `<div class="working"><span class="doing">Not transcribed yet</span><div class="acts"><button type="button" class="btn tint" data-act="transcribe" data-id="${esc(t.id)}">Transcribe it</button></div></div>`;
   return `<div class="body take-body" id="takeBody">${head}${clickNote}${main}${reviewHtml(t)}${actionsHtml(t)}</div>${t.playable ? playerHtml(t) : ""}`;
@@ -625,6 +634,9 @@ function reviewHtml(t) {
   const open = r.id ? `<a class="btn fill" href="${esc(reviewUrl(r))}">Open the review</a>` : "";
   const err = r.error ? `<p class="red-ink">The review could not be made: ${esc(r.error)}</p>` : "";
   if (!rv.available) return `<div class="review-box"><span class="label">Review</span>${open}<p>The review app doesn't check takes yet${rv.why ? ` (${esc(rv.why.replace(/^the review app doesn't check takes yet\s*/, "").replace(/^\(|\)$/g, ""))})` : ""}. When it does, “Review it” sends this take there, and your answers turn this draft into the take's answer key.</p>
+    <button type="button" class="btn" disabled>Review it</button></div>`;
+  const reads = rv.instruments || ["dobro", "bass"];
+  if (t.instrument && !reads.includes(t.instrument)) return `<div class="review-box"><span class="label">Review</span>${open}<p>Review isn't there yet for the ${esc((t.instrument_name || t.instrument).toLowerCase())}: the review app checks ${esc(reads.join(" and "))} takes so far. When it checks this one, “Review it” sends the take there, and your answers turn this draft into the take's answer key.</p>
     <button type="button" class="btn" disabled>Review it</button></div>`;
   return `<div class="review-box"><span class="label">Review</span>${r.id ? `<p>In the review app since ${esc(when(r.made))}. Your answers there turn this draft into the take's answer key.</p>` : `<p>The review app checks the draft with you, and your answers turn it into the take's answer key.</p>`}${err}
     <div class="acts">${open}<button type="button" class="btn ${r.id ? "" : "fill"}" data-act="review" data-id="${esc(t.id)}"${s.review ? " disabled" : ""}>${r.id ? "Make the review again" : "Review it"}</button></div></div>`;
@@ -675,11 +687,13 @@ function placeScore() {
   const slot = $("#scoreSlot"), t = takeById(S.take);
   if (!slot || !t) return;
   host.hidden = false; slot.append(host);
-  if (SC.take !== t.id || SC.view !== S.view || SC.finished !== (t.transcription || {}).finished) loadScore(t);
+  if (SC.take !== t.id || SC.view !== viewOf(t) || SC.finished !== (t.transcription || {}).finished) loadScore(t);
 }
+function viewOf(t) { return t.tab === false ? "grand" : S.view; }  // a grand staff has no tab to show alone
 async function loadScore(t) {
   if (SC.api) { try { SC.api.destroy(); } catch (e) {} }
-  Object.assign(SC, { take: t.id, view: S.view, finished: (t.transcription || {}).finished, api: null, map: null, beats: null, bars: null, ready: false });
+  const view = viewOf(t), grand = view === "grand";
+  Object.assign(SC, { take: t.id, view, grand, finished: (t.transcription || {}).finished, api: null, map: null, beats: null, bars: null, ready: false });
   host.innerHTML = `<p class="score-empty">Drawing the notation…</p>`;
   let xml, data;
   try {
@@ -688,10 +702,12 @@ async function loadScore(t) {
   } catch (e) { host.innerHTML = `<p class="score-empty">The notation could not be loaded (${esc(e.message)}).</p>`; return; }
   if (SC.take !== t.id) return;
   SC.beats = data && data.beats && data.beats.length ? data.beats : null;
-  // the tab staff's notes are in voice 5 (the pipeline numbers the staves' voices apart); alphaTab draws
-  // an empty voice 1 there as rests, so for drawing only they become voice 1 of their staff
+  // the second staff's notes are in voice 5 (the pipeline numbers the staves' voices apart: the tab's, or the
+  // piano's left hand); alphaTab reads that as four empty voices before it and draws them as rests, so for
+  // drawing only they become voice 1 of their staff (a grand staff's voices 5-8 become its 1-4)
   const doc = new DOMParser().parseFromString(xml, "application/xml");
-  doc.querySelectorAll("note").forEach((n) => { const st = n.querySelector("staff"), v = n.querySelector("voice"); if (st && v && st.textContent.trim() === "2") v.textContent = "1"; });
+  doc.querySelectorAll("note").forEach((n) => { const st = n.querySelector("staff"), v = n.querySelector("voice"); if (!st || !v || st.textContent.trim() !== "2") return;
+    if (!grand) v.textContent = "1"; else if (Number(v.textContent) >= 5) v.textContent = String(Number(v.textContent) - 4); });
   const text = new XMLSerializer().serializeToString(doc);
   host.innerHTML = "";
   const el = document.createElement("div"); host.append(el);
@@ -699,24 +715,37 @@ async function loadScore(t) {
   const api = new alphaTab.AlphaTabApi(el, {
     core: { fontDirectory: "/alphatab/font/", useWorkers: false, engine: "svg", enableLazyLoading: false },
     display: { layoutMode: "Page", scale: scaleFor(), resources: RES },
-    notation: { rhythmMode: S.view === "tab" ? "ShowWithBars" : "Hidden", elements },
+    notation: { rhythmMode: view === "tab" ? "ShowWithBars" : "Hidden", elements },
     player: { enablePlayer: false },
   });
   SC.api = api; SC.scale = scaleFor();
-  api.scoreLoaded.on((score) => { const tr = score.tracks[0]; if (S.view === "tab" && tr && tr.staves.length > 1) tr.staves[0].showStandardNotation = false; });
+  api.scoreLoaded.on((score) => {
+    const tr = score.tracks[0];
+    if (grand) score.tracks.forEach((x) => x.staves.forEach((st) => { st.showStandardNotation = true; st.showTablature = false; st.showSlash = false; st.showNumbered = false; }));
+    else if (view === "tab" && tr && tr.staves.length > 1) tr.staves[0].showStandardNotation = false;
+  });
   api.error.on((e) => { host.innerHTML = `<p class="score-empty">The notation could not be drawn: ${esc((e && e.message) || e)}</p>`; });
   api.postRenderFinished.on(() => { if (SC.api === api) buildMap(api); });
   api.load(new TextEncoder().encode(text));
 }
 function buildMap(api) {
-  // every beat drawn on the first staff, in time order, with where it is: alphaTab counts 960 ticks a quarter,
-  // from the score's first bar (a pickup's, if it has one): the transcription's beat 0
+  // every beat drawn on the first staff (a grand staff: on either), in time order, with where it is: alphaTab
+  // counts 960 ticks a quarter, from the score's first bar (a pickup's, if it has one): the transcription's beat 0
   const lk = api.renderer.boundsLookup;
   if (!lk) return;
   const entries = [], bars = [];
   lk.staffSystems.forEach((sys) => sys.bars.forEach((mb) => {
     const m = api.score.masterBars[mb.index];
     bars.push({ tick: m.start, end: m.start + m.calculateDuration(), x: mb.realBounds.x, w: mb.realBounds.w, y: sys.realBounds.y, h: sys.realBounds.h });
+    if (SC.grand) {  // both staves' beats, one a time: a note's before a rest's (a bar's rest is drawn mid-bar)
+      const at = new Map();
+      mb.bars.forEach((bb) => bb.beats.forEach((b) => {
+        const tick = b.beat.absolutePlaybackStart, had = at.get(tick);
+        if (!had || (had.rest && !b.beat.isRest)) at.set(tick, { tick, dur: b.beat.playbackDuration, x: b.onNotesX, bar: bars.length - 1, rest: b.beat.isRest });
+      }));
+      entries.push(...at.values());
+      return;
+    }
     const bb = mb.bars[0];
     if (bb) bb.beats.forEach((b) => entries.push({ tick: b.beat.absolutePlaybackStart, dur: b.beat.playbackDuration, x: b.onNotesX, bar: bars.length - 1 }));
   }));

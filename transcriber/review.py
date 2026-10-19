@@ -6,7 +6,9 @@ draft (transcription.musicxml) into the take's answer key. The generator is dobr
 
 It prints the review's id first ("ID: N questions, ..."); the page links to the review app
 (`http://<host>:8005/#/r/ID`, its own links: `review/static/index.html`). Until the review app has that
-kind (looked for in make_review.py's choices each time it is asked), the page says so.
+kind (looked for in make_review.py's choices each time it is asked), the page says so. The same for an
+instrument the take check does not read yet: its `review/take_check.py` names those it reads
+(`INSTRUMENTS = (...)`); one that names none reads the dobro and the bass (as it was first deployed).
 """
 
 import os
@@ -22,6 +24,8 @@ from .settings import Settings, which
 from .store import Folders
 
 KIND = "take-check"
+FIRST_READ = ("dobro", "bass")  # what take_check.py read before it named its instruments (dobro-transcription 43943b6)
+INSTRUMENTS = re.compile(r"^INSTRUMENTS\s*=\s*\(([^)]*)\)", re.M)
 ID_LINE = re.compile(r"^([a-z0-9][a-z0-9-]*[a-z0-9]):\s+\d+\s+questions?\b")
 BARE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,120}$")
 
@@ -42,9 +46,30 @@ class Reviews:
         self.lock = threading.Lock()
         self.current: dict | None = None  # {"take", "started"}
         self._seen: tuple | None = None  # (mtime, available, why)
+        self._reads: tuple | None = None  # (mtime, instruments)
 
-    def available(self) -> tuple[bool, str]:
-        """Whether the review app can check a take yet, and if not, why."""
+    def instruments(self) -> tuple[str, ...]:
+        """The instruments the review app's take check reads (its take_check.py's `INSTRUMENTS`)."""
+        path = self.settings.review.root / "review" / "take_check.py"
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return FIRST_READ
+        if self._reads and self._reads[0] == mtime:
+            return self._reads[1]
+        m = INSTRUMENTS.search(path.read_text(errors="replace"))
+        reads = tuple(re.findall(r"[\"']([a-z]+)[\"']", m.group(1))) if m else FIRST_READ
+        self._reads = (mtime, reads)
+        return reads
+
+    def available(self, instrument: str | None = None) -> tuple[bool, str]:
+        """Whether the review app can check a take yet (of this instrument, if named), and if not, why."""
+        ok, why = self._available()
+        if ok and instrument and instrument not in self.instruments():
+            return False, f"the review app doesn't check {instrument} takes yet"
+        return ok, why
+
+    def _available(self) -> tuple[bool, str]:
         path = self.settings.review.make_review
         try:
             mtime = path.stat().st_mtime
@@ -80,10 +105,10 @@ class Reviews:
             return cur and {"take": cur["take"], "elapsed_s": round(time.monotonic() - cur["started"], 1)}
 
     def start(self, take_id: str) -> None:
-        ok, why = self.available()
+        self.folders.path(take_id)
+        ok, why = self.available(self.folders.meta(take_id).get("instrument"))
         if not ok:
             raise Busy(why)
-        self.folders.path(take_id)
         with self.lock:
             if self.current:
                 raise Busy("a review is being made: wait for it")

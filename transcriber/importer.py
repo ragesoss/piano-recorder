@@ -1,14 +1,16 @@
 """Bring a recording in as a take of the transcribe app, and have the app transcribe it: a take made
 elsewhere (a phone, the exercise app, the corpus), or one to try the app with.
 
-    tools/import-take FILE --instrument dobro --bpm 100 [--beats-per-bar 4] [--click] [--downbeat S]
-                      [--channel N] [--title T]
+    tools/import-take FILE --instrument dobro|bass|piano --bpm 100 [--beats-per-bar 4] [--click]
+                      [--downbeat S] [--channel N] [--title T]
 
 Runs where the app runs, with its config ($TAKE_TRANSCRIBER_CONFIG, else /etc/take-transcriber.toml):
 the take's folder is made in its takes_dir as a recorded take's is (store.py), `take-01.flac` from
 FILE's channel N (default: all channels mixed to one) at FILE's own rate, 24-bit; then the app is
 asked to transcribe it (POST /api/takes/ID/transcribe). `--click`: it was played to a click at
---bpm; `--downbeat`: bar 1's first beat in FILE (s), as a click's line-up would give it.
+--bpm; `--downbeat`: bar 1's first beat in FILE (s), as a click's line-up would give it. A piano exercise take
+(dobro-transcription `exercises/piano/*/take-01.flac`, the room mic alone; its click's beat 0, bar 1's downbeat, is
+takes.csv's beat0_s): `--instrument piano --bpm 60 --click --downbeat 4.366`.
 """
 
 import argparse
