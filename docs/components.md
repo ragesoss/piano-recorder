@@ -765,6 +765,12 @@ either part is swapped.
     `transcription-review`, port 8005; `docs/review-app.md` there), where the player answers questions about
     their takes (clips at full and half speed, spectrograms, chart excerpts; the answers kept on the unit in
     `~/review-data`). It holds no audio device: the page plays its clips in the browser. Listed on the home page.
+  - **A seventh program** (2026-10-19): the transcribe app (`transcriber/`, service `take-transcriber`, port 8006;
+    PLAN.md step 8). It records like the exercise app, from the same inputs, over the same click, and takes turns
+    the same way: it asks 8000-8004 to let go, and the practice recorder, the exercise app, the ambient synth and
+    the band list it among their peers. After each take it runs the transcription project's pipeline on the CPU
+    (nice 19, two threads), held still while it records; it plays the takes in the phone's browser, not over the
+    speakers.
 
 ## Tests
 

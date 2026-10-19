@@ -1,0 +1,1026 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Transcribe</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#121016">
+<style>
+/* The transcribe app's page, in the exercise app's look (exercises/static/index.html): dark, purple for what
+   to tap, red only for recording. Two parts: choosing the next take (steps that open on Ready, as you left
+   it: the instrument, then the take's details) and recording it (the record screen, the take, then the take
+   as notation and tab with its own sound). The notation is drawn by alphaTab 1.8.4 (/alphatab/, MPL-2.0). */
+@font-face { font-family: "Bricolage Grotesque"; src: url(/fonts/bricolage-grotesque.woff2) format("woff2");
+  font-weight: 200 800; font-display: swap; }
+@font-face { font-family: "Public Sans"; src: url(/fonts/public-sans.woff2) format("woff2");
+  font-weight: 100 900; font-display: swap; }
+:root {
+  color-scheme: dark;
+  --bg: #121016; --surf2: #1E1A24; --surf: #28232F; --line: #3E3748; --line-soft: #2F2A37; --dash: #514960;
+  --ink: #F2EEF8; --ink2: #CEC7DA; --ink3: #A79FB4; --faint: #7E768B;
+  --purple-fill: #7C3AED; --purple: #8B5CF6; --purple-line: #A78BFA; --purple-ink: #B9A0FF;
+  --purple-tint: #33264F; --purple-tint2: #45356A;
+  --red: #D42A1F; --red-dot: #FF5147; --red-ink: #FF8F85; --red-tint: #3E1F24;
+  --green: #4ADE80; --amber: #E8B93B;
+  --display: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --text: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.4 var(--text); -webkit-tap-highlight-color: transparent;
+  overflow: hidden; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+a { color: var(--purple-ink); }
+h1, h2, h3, p { margin: 0; }
+.app { display: flex; flex-direction: column; height: 100vh; height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.display { font-family: var(--display); }
+.tnum { font-variant-numeric: tabular-nums; }
+.svg-i { flex: none; }
+.muted { color: var(--ink3); }
+.red-ink { color: var(--red-ink); }
+.p-ink { color: var(--purple-ink); }
+.label { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); }
+
+/* the top line: where you are, as breadcrumbs; each goes back there. While recording they wait for Stop. */
+.top { flex: none; min-height: 60px; display: flex; align-items: center; gap: 10px; padding: 8px 16px; }
+.crumbs { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.crumbs::-webkit-scrollbar { display: none; }
+.crumbs > * { flex: none; }
+.crumbs .home { min-height: 44px; display: flex; align-items: center; gap: 6px; color: var(--ink3); font-size: 16px; text-decoration: none; padding-right: 2px; }
+.crumbs .chev { color: var(--faint); }
+.crumbs .off { opacity: .45; cursor: default; }
+.chip { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; border-radius: 22px; border: 0;
+  background: var(--surf2); color: var(--ink); font-size: 15px; font-weight: 600; text-decoration: none; white-space: nowrap;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.chip.now { background: var(--purple-fill); color: #fff; font-weight: 700; }
+.chip.todo { background: transparent; color: var(--ink3); font-weight: 400; padding: 0 8px; }
+.chip.off { background: transparent; }
+.top .end { flex: none; display: flex; align-items: center; gap: 10px; }
+.top .end .chip { background: transparent; border: 1.5px solid var(--line); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); display: inline-block; flex: none; }
+.dot.on { background: var(--green); }
+.banner { margin: 0 16px 8px; padding: 10px 14px; border-radius: 14px; background: var(--red-tint); color: var(--ink);
+  border: 1.5px solid var(--red-ink); font-size: 15px; display: flex; gap: 12px; align-items: center; }
+.banner button { margin-left: auto; min-height: 40px; padding: 0 14px; border-radius: 12px; border: 1.5px solid var(--ink3); background: transparent; }
+
+/* a screen: its body (scrolling) and a footer */
+.screen { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px 16px 20px; }
+.foot { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1.5px solid var(--line); flex-wrap: wrap; }
+.foot .note { flex: 1 1 100%; font-size: 15px; color: var(--ink2); }
+.q h1 { font-family: var(--display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.08; }
+.q p { margin-top: 6px; font-size: 17px; color: var(--ink3); }
+.btn { min-height: 56px; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 1.5px solid var(--ink2);
+  border-radius: 18px; background: transparent; font-size: 17px; font-weight: 700; text-decoration: none; color: var(--ink); }
+.btn.go { min-height: 64px; padding: 0 24px; border: 0; border-radius: 20px; background: var(--purple-fill); color: #fff;
+  font-family: var(--display); font-size: 22px; margin-left: auto; }
+.btn.go:disabled { background: #2A2531; color: var(--faint); }
+.btn.small { min-height: 44px; padding: 0 14px; border-radius: 14px; font-size: 15px; }
+.btn.fill { border: 0; background: var(--purple-fill); color: #fff; }
+.btn.tint { border: 0; background: var(--purple-tint); color: var(--purple-ink); }
+.btn.quiet { border-color: var(--line); }
+.btn.red { border-color: var(--red-ink); color: var(--red-ink); }
+.btn.wide { flex: 1; }
+
+/* 1: the instrument */
+.kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.card { min-height: 104px; padding: 14px 16px; border: 1.5px solid var(--line); border-radius: 18px; background: var(--surf);
+  text-align: left; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.card .t { font-family: var(--display); font-size: 28px; font-weight: 700; }
+.card .sub { font-size: 14px; color: var(--ink3); }
+.card.sel { border: 2.5px solid var(--purple); background: var(--purple-tint); }
+.card.sel .sub { color: var(--purple-ink); font-weight: 600; }
+.panel { margin-top: 18px; background: var(--surf); border: 1.5px solid var(--line); border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.panel h2 { font-family: var(--display); font-size: 22px; font-weight: 700; }
+.opts { display: flex; flex-direction: column; gap: 8px; }
+.opt { min-height: 60px; display: flex; align-items: center; gap: 12px; padding: 8px 14px; border: 1.5px solid var(--line); border-radius: 14px;
+  background: transparent; text-align: left; }
+.opt .m { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.opt .m b { font-size: 16px; }
+.opt .m span { font-size: 13px; color: var(--ink3); }
+.opt.sel { border: 2.5px solid var(--purple); background: var(--purple-tint); }
+.radio { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--ink3); flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.sel .radio { border-color: var(--purple); }
+.sel .radio::after { content: ""; width: 14px; height: 14px; border-radius: 50%; background: var(--purple); }
+.meter { flex: 1; height: 10px; border-radius: 5px; background: var(--line); position: relative; overflow: hidden; min-width: 60px; }
+.meter > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 5px; background: var(--ink2); transition: width .12s linear; }
+.meter > b { position: absolute; top: 0; bottom: 0; width: 3px; background: var(--ink); opacity: .8; display: none; }
+.meter.big { height: 14px; border-radius: 7px; }
+.box > .meter, .v > .meter { flex: none; width: 100%; }  /* in a column: its own line, its own height */
+.mrow { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--ink2); }
+.mrow .meter { flex: 1; }
+
+/* 2: the take's details */
+.fields { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+.field { background: var(--surf); border: 1.5px solid var(--line); border-radius: 20px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.field .k { font-size: 15px; font-weight: 700; color: var(--ink2); }
+.field .hint { font-size: 14px; color: var(--ink3); }
+.bpm { display: flex; align-items: center; gap: 12px; }
+.bpm button { width: 60px; height: 60px; flex: none; border: 1.5px solid var(--line); border-radius: 30px; background: transparent; font-size: 28px; }
+.bpm .bv { flex: 1; display: flex; align-items: baseline; justify-content: center; gap: 6px; }
+.bpm input { width: 3.4ch; background: transparent; border: 0; border-bottom: 2px solid var(--line); text-align: center;
+  font-family: var(--display); font-size: 48px; font-weight: 700; padding: 0; -moz-appearance: textfield; }
+.bpm input::-webkit-outer-spin-button, .bpm input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.bpm small { font-size: 18px; font-weight: 600; color: var(--ink3); }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 3px; border-radius: 13px; background: var(--surf2); }
+.seg button { min-height: 48px; border: 0; border-radius: 10px; background: transparent; font-size: 17px; font-weight: 600; padding: 4px 6px; line-height: 1.15; }
+.seg button[aria-pressed="true"] { background: var(--purple-fill); color: #fff; font-weight: 700; }
+.switch { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 2px;
+  border: 0; background: transparent; font-size: 17px; font-weight: 600; text-align: left; width: 100%; }
+.switch .track { width: 52px; height: 30px; border-radius: 15px; background: var(--line); display: flex; padding: 3px; flex: none; }
+.switch .track i { width: 24px; height: 24px; border-radius: 12px; background: #fff; }
+.switch[aria-checked="true"] .track { background: var(--purple); justify-content: flex-end; }
+.text-in { min-height: 52px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--bg); padding: 0 14px; font-size: 17px; width: 100%; }
+
+/* Ready */
+.ready-body { display: flex; flex-direction: column; gap: 14px; }
+.sentence { font-family: var(--display); font-size: 26px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.22; }
+.sentence b { font-weight: 700; }
+.rows { background: var(--surf); border: 1.5px solid var(--line); border-radius: 20px; display: flex; flex-direction: column; }
+.rows > div { display: flex; align-items: center; gap: 12px; min-height: 76px; padding: 10px 16px; border-bottom: 1px solid var(--line-soft); flex-wrap: wrap; }
+.rows > div:last-child { border-bottom: 0; }
+.rows .k { width: 100%; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); }
+.rows .v { flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 3px; }
+.rows .v .big { font-size: 19px; font-weight: 700; }
+.rows .v .sm { font-size: 14px; color: var(--ink3); }
+.change { min-height: 44px; display: flex; align-items: center; padding: 0 6px; color: var(--purple-ink); font-size: 16px; font-weight: 700;
+  background: transparent; border: 0; text-decoration: underline; text-underline-offset: 3px; }
+.last { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--surf2); width: 100%; border: 0; text-align: left; }
+.last .m { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.last .m span { font-size: 14px; color: var(--ink3); }
+
+/* recording: the record screen, the take */
+.rec-body { display: flex; flex-direction: column; gap: 14px; }
+.rec-sentence { font-family: var(--display); font-size: 28px; font-weight: 500; line-height: 1.3; }
+.rec-sentence button { font: inherit; font-weight: 700; color: var(--purple-ink); background: var(--purple-tint); border: 0;
+  border-radius: 12px; padding: 0 10px; margin: 2px 0; }
+.box { background: var(--surf2); border-radius: 18px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.box .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 15px; }
+.box .dev-line { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--ink3); align-items: center; }
+input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--purple); }
+.recbtn { min-height: 112px; width: 100%; border: 0; border-radius: 26px; background: var(--red); color: #fff; display: flex; align-items: center;
+  justify-content: center; gap: 16px; font-family: var(--display); font-size: 36px; font-weight: 700; }
+.recbtn:disabled { background: #2A2531; color: var(--faint); }
+.recbtn i { width: 26px; height: 26px; border-radius: 50%; background: #fff; }
+.recording-chip { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 16px; border-radius: 20px; background: var(--red);
+  color: #fff; font-size: 17px; font-weight: 700; flex: none; animation: pulse 1.6s ease-in-out infinite; align-self: flex-start; }
+.recording-chip i { width: 10px; height: 10px; border-radius: 50%; background: #fff; }
+@keyframes pulse { 50% { opacity: .78; } }
+.live { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 16px; }
+.where .v { font-family: var(--display); font-size: 84px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.where .v.count { color: var(--red-ink); font-size: 120px; }
+.where .s { font-size: 19px; color: var(--ink2); margin-top: 6px; }
+.beats { display: flex; gap: 10px; justify-content: center; }
+.beats i { width: 28px; height: 28px; border-radius: 50%; border: 2.5px solid var(--faint); }
+.beats i.on { background: var(--purple); border-color: var(--purple); }
+.clock { font-family: var(--display); font-size: 40px; font-weight: 700; }
+.rec-bar { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; background: var(--surf2); border-top: 1.5px solid var(--line); }
+.peak { font-size: 14px; color: var(--ink3); }
+.peak.clip { color: var(--red-ink); font-weight: 700; }
+.stopbtn { min-height: 96px; width: 100%; border: 0; border-radius: 24px; background: var(--red); color: #fff; display: flex; align-items: center;
+  justify-content: center; gap: 14px; font-family: var(--display); font-size: 36px; font-weight: 700; }
+.stopbtn i { width: 24px; height: 24px; border-radius: 4px; background: #fff; }
+
+/* the take: its notation and tab, its sound, and what to do with it */
+.take-body { display: flex; flex-direction: column; gap: 14px; padding-bottom: 28px; }
+.take-body > *, .ready-body > *, .rec-body > * { flex-shrink: 0; }
+.take-head h1 { font-family: var(--display); font-size: 30px; font-weight: 700; line-height: 1.12; letter-spacing: -0.015em; }
+.take-head .sub { margin-top: 4px; font-size: 15px; color: var(--ink3); }
+.stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; max-width: 560px; }
+.stat { display: flex; flex-direction: column; padding: 8px 8px; border-radius: 12px; background: var(--surf2); min-width: 0; }
+.stat b { font-family: var(--display); font-size: 21px; font-weight: 700; line-height: 1.1; white-space: nowrap; }
+.stat span { font-size: 11px; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.working { background: var(--surf); border: 1.5px solid var(--line); border-radius: 20px; padding: 18px 16px; display: flex; flex-direction: column; gap: 10px; }
+.working .doing { font-family: var(--display); font-size: 24px; font-weight: 700; }
+.prog { height: 10px; border-radius: 5px; background: var(--line); position: relative; overflow: hidden; }
+.prog i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--purple); border-radius: 5px; width: 0; transition: width .4s linear; }
+.score-card { background: var(--surf); border: 1.5px solid var(--line); border-radius: 20px; overflow: hidden; }
+.score-tools { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); flex-wrap: wrap; }
+.score-tools .seg { min-width: 230px; }
+.score-tools .seg button { min-height: 40px; font-size: 15px; }
+.score-tools .hint { font-size: 13px; color: var(--ink3); margin-left: auto; }
+#scoreHost { position: relative; min-height: 120px; }
+#scoreHost .at-surface { cursor: pointer; }
+.at-cursor { position: absolute; width: 3px; background: var(--red-dot); border-radius: 2px; pointer-events: none; z-index: 5; display: none; }
+.at-bar { position: absolute; background: rgba(139, 92, 246, 0.16); border-radius: 6px; pointer-events: none; z-index: 4; display: none; }
+.score-empty { padding: 28px 18px; color: var(--ink3); font-size: 16px; text-align: center; }
+.acts { display: flex; flex-wrap: wrap; gap: 10px; }
+.review-box { background: var(--surf2); border-radius: 18px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.review-box p { font-size: 15px; color: var(--ink2); }
+.confirm { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 16px; border: 1.5px solid var(--red-ink); background: var(--red-tint); }
+.confirm .acts .btn { flex: 1; }
+
+/* the player: the take's own sound, at full or half speed; it sticks to the foot of the screen */
+.player { flex: none; display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--surf2); border-top: 1.5px solid var(--line); flex-wrap: wrap; }
+.player .playbtn { width: 56px; height: 56px; flex: none; border-radius: 28px; border: 0; background: var(--purple-fill); color: #fff; display: flex; align-items: center; justify-content: center; }
+.player .seg { width: 132px; flex: none; }
+.player .seg button { min-height: 40px; font-size: 14px; }
+.player .pos { flex: 1; min-width: 150px; display: flex; flex-direction: column; gap: 4px; }
+.player .bar { height: 22px; position: relative; cursor: pointer; touch-action: none; display: flex; align-items: center; }
+.player .bar .track { height: 8px; border-radius: 4px; background: var(--line); width: 100%; position: relative; overflow: hidden; }
+.player .bar .track i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--purple); width: 0; }
+.player .t { font-size: 13px; color: var(--ink2); display: flex; justify-content: space-between; }
+
+/* the takes */
+.tk { border: 1.5px solid var(--line); border-radius: 18px; background: var(--surf); display: flex; flex-direction: column; }
+.tk .open { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 0; background: transparent; text-align: left; width: 100%; }
+.tk .open .m { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tk .open .m b { font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk .open .m span { font-size: 14px; color: var(--ink3); }
+.tk .x { display: flex; gap: 8px; padding: 0 14px 12px; flex-wrap: wrap; }
+.tk .x button { min-height: 40px; padding: 0 12px; border: 1.5px solid var(--line); border-radius: 12px; background: transparent; font-size: 15px; }
+.tk .edit { padding: 0 14px 12px; display: flex; gap: 8px; }
+.tk .edit input { flex: 1; min-width: 0; }
+.tk.on { border-color: var(--purple); }
+.badge { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 12px; font-size: 13px; font-weight: 700; background: var(--purple-tint); color: var(--purple-ink); }
+.badge.red { background: var(--red-tint); color: var(--red-ink); }
+.badge.dim { background: var(--surf2); color: var(--ink3); }
+.list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.empty { color: var(--ink3); padding: 14px 2px; }
+
+/* wider: an iPad, a desktop */
+@media (min-width: 760px) {
+  body { font-size: 17px; }
+  .top { padding: 8px 28px; }
+  .body { padding: 18px 32px 24px; }
+  .foot { padding: 12px 28px; }
+  .q h1 { font-size: 42px; }
+  .kinds { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); max-width: 720px; }
+  .panel, .fields, .rows, .rec-body > *, .list { max-width: 820px; }
+  .sentence { font-size: 31px; }
+  .rows .k { width: 120px; }
+  .rec-sentence { font-size: 38px; }
+  .recbtn, .stopbtn { max-width: 520px; }
+  .rec-bar { flex-direction: row; align-items: center; padding: 14px 28px; }
+  .rec-bar .meters { flex: 1; }
+  .rec-bar .stopbtn { width: 320px; }
+  .player { padding: 10px 28px; }
+  .foot .note { flex: 1; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <nav class="crumbs" id="crumbs" aria-label="Where you are"></nav>
+    <div class="end" id="end"></div>
+  </header>
+  <div class="banner" id="error" hidden><span id="errorText"></span><button type="button" data-act="dismiss">OK</button></div>
+  <div class="screen" id="screen"></div>
+</div>
+<div id="scoreHost" hidden></div>
+<audio id="player" preload="auto"></audio>
+<script src="/alphatab/alphaTab.min.js"></script>
+<script>
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ICON = {
+  check: '<svg class="svg-i" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#A78BFA" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  chev: '<svg class="svg-i chev" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="#7E768B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  back: '<svg class="svg-i" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  next: '<svg class="svg-i" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  restart: '<svg class="svg-i" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v4.5H9" fill="none" stroke="#F2EEF8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  play: '<svg class="svg-i" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"></path></svg>',
+  pause: '<svg class="svg-i" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"></rect><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"></rect></svg>',
+  trash: '<svg class="svg-i" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+  dot: '<svg class="svg-i" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="#FF5147" stroke="#FFFFFF" stroke-width="2"></circle></svg>',
+};
+const HOME = `http://${location.hostname}/`;
+const STEPS = ["on", "details"];
+const DEFAULTS = { instrument: null, inputs: {}, bpm: 90, bpb: 4, countIn: true, click: true, title: "" };
+
+// --- what the server has, and what is chosen
+const S = {
+  setup: null, status: null, takes: [], choices: null,
+  screen: "ready",  // on | details | ready | record | recording | take | takes
+  walk: false, snapshot: null, entry: null,
+  take: null, from: "ready",  // the take shown, and whether it was reached by recording or from the list
+  confirm: null, renaming: null, view: "both", error: "",
+};
+const C = () => S.choices;
+function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
+function fmt(s) { s = Math.max(0, Math.floor(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+function when(iso) {
+  if (!iso) return "";
+  const d = new Date(iso), now = new Date(), y = new Date(now); y.setDate(now.getDate() - 1);
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) return `today ${time}`;
+  if (d.toDateString() === y.toDateString()) return `yesterday ${time}`;
+  return d.toLocaleDateString([], { day: "numeric", month: "short" }) + `, ${time}`;
+}
+function dbText(v) { return v == null || v <= -99 ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(Math.round(v))} dB`; }
+function meterPct(db) { return Math.max(0, Math.min(100, (db + 60) / 60 * 100)); }
+function plural(n, one, many) { return `${n} ${n === 1 ? one : many || one + "s"}`; }
+
+// the instruments and inputs (GET /api/setup)
+function inst(kind) { return (S.setup ? S.setup.instruments : []).find((i) => i.kind === kind) || null; }
+function inputOf(n) { return (S.setup ? S.setup.inputs : []).find((i) => i.input === Number(n)) || null; }
+function chosenInst() { return inst(C().instrument); }
+function chosenInput() {  // the input the chosen instrument is on: the page's choice, else the config's
+  const i = chosenInst();
+  if (!i) return null;
+  return inputOf((C().inputs || {})[i.kind]) || inputOf(i.input);
+}
+function stepOk(step) {
+  if (step === "on") return !!chosenInst() && !!chosenInput();
+  if (step === "details") { const c = C(); return c.bpm >= 20 && c.bpm <= 300 && (S.setup ? S.setup.meters : [2, 3, 4]).includes(c.bpb); }
+  return true;
+}
+function firstOpen() { return STEPS.find((s) => !stepOk(s)) || null; }
+function readyOk() { return !firstOpen(); }
+function timingText(c, long) {
+  const parts = [`${Math.round(c.bpm)} bpm`, `${c.bpb}/4`];
+  if (long) parts.push(c.click ? (c.countIn ? "count-in and click" : "click, no count-in") : c.countIn ? "count-in, then no click" : "no click");
+  return parts.join(" · ");
+}
+function sentenceHtml() {
+  const c = C(), i = chosenInst(), inp = chosenInput();
+  const over = c.click ? `over the click${c.countIn ? " after a bar's count-in" : ""}` : c.countIn ? "after a bar's count-in, then no click" : "with no click";
+  return `<b>${esc(i ? i.name : "")}</b> at <b>${Math.round(c.bpm)} bpm</b>, ${c.bpb}/4, ${esc(over)}${inp ? `, on the ${esc(inp.name)}` : ""}${c.title ? `: “${esc(c.title)}”` : ""}.`;
+}
+
+// --- talking to the control unit
+async function api(method, path, body) {
+  const r = await fetch(path, { method, headers: body !== undefined ? { "Content-Type": "application/json" } : {},
+    body: body !== undefined ? JSON.stringify(body) : undefined });
+  if (!r.ok) {
+    let msg = `${r.status}`;
+    try { msg = (await r.json()).detail || msg; } catch (e) {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+function showError(msg) { S.error = msg || ""; $("#errorText").textContent = S.error; $("#error").hidden = !S.error; }
+async function act(fn) { try { showError(""); await fn(); } catch (e) { showError(e.message); } poll(true); }
+let saveTimer = null;
+function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => api("PUT", "/api/choices", C()).catch(() => {}), 400); }
+function set(changes) { Object.assign(S.choices, changes); save(); render(); }
+
+async function loadAll() {
+  const [setup, choices, takes] = await Promise.all([api("GET", "/api/setup"), api("GET", "/api/choices"), api("GET", "/api/takes")]);
+  S.setup = setup; S.takes = takes;
+  S.choices = { ...DEFAULTS, ...choices, inputs: { ...((choices || {}).inputs || {}) } };
+  if (!S.choices.instrument && takes[0]) {  // nothing saved yet: start from the newest take
+    const t = takes[0];
+    Object.assign(S.choices, { instrument: t.instrument, bpm: t.bpm || 90, bpb: t.beats_per_bar || 4, click: t.click !== false });
+  }
+}
+async function refresh() { try { S.takes = await api("GET", "/api/takes"); } catch (e) {} }
+function takeById(id) { return S.takes.find((t) => t.id === id) || null; }
+
+// --- the screens
+const screenEl = () => $("#screen");
+function render() {
+  const keep = $$(".body").map((el) => el.scrollTop);
+  parkScore();
+  $("#crumbs").innerHTML = crumbsNav();
+  const cr = $("#crumbs"); if (cr.scrollWidth > cr.clientWidth) cr.scrollLeft = cr.scrollWidth;
+  $("#end").innerHTML = S.screen === "recording" || S.screen === "takes" ? "" : `<button type="button" class="chip" data-act="go" data-to="takes">Takes${S.takes.length ? ` (${S.takes.length})` : ""}</button>`;
+  const scr = S.screen;
+  screenEl().innerHTML = scr === "on" ? renderOn() : scr === "details" ? renderDetails() : scr === "ready" ? renderReady()
+    : scr === "record" ? renderRecord() : scr === "recording" ? renderRecording() : scr === "take" ? renderTake() : renderTakes();
+  if (scr === "take") placeScore();
+  $$(".body").forEach((el, i) => { if (keep[i]) el.scrollTop = keep[i]; });
+  live();
+}
+function go(screen, opts = {}) {
+  if (STEPS.includes(screen) && !STEPS.includes(S.screen)) { S.snapshot = JSON.parse(JSON.stringify(C())); S.entry = screen; }
+  if (opts.walk !== undefined) S.walk = opts.walk;
+  if (["ready", "record"].includes(screen)) S.walk = false;
+  if (screen !== "take") { stopPlaying(); S.confirm = null; }
+  if (screen === "takes") S.renaming = null;
+  S.screen = screen;
+  render();
+  const b = $(".body"); if (b && !opts.keepScroll) b.scrollTop = 0;
+  monitorTick();
+}
+function openTake(id, from) { S.take = id; S.from = from || S.from; S.confirm = null; go("take"); }
+function answered(step) {
+  if (S.walk) { const i = STEPS.indexOf(step); go(i < STEPS.length - 1 ? STEPS[i + 1] : "ready"); return; }
+  go(firstOpen() || "ready");
+}
+function restore() { if (S.snapshot) { S.choices = S.snapshot; save(); } go("ready"); }
+
+function crumbsNav() {
+  const scr = S.screen, rec = scr === "recording", out = [];
+  const back = ICON.back;
+  out.push(rec ? `<span class="home off" aria-disabled="true" title="Stop the take first">${back}Music room</span>` : `<a class="home" href="${esc(HOME)}">${back}Music room</a>`);
+  const crumb = (label, attrs) => rec ? `<span class="chip off" aria-disabled="true">${label}</span>` : `<button type="button" class="chip" ${attrs}>${label}</button>`;
+  if (scr === "takes" || (scr === "take" && S.from === "takes")) {
+    out.push(ICON.chev);
+    out.push(scr === "takes" ? `<span class="chip now" aria-current="page">Takes</span>` : crumb("Takes", 'data-act="go" data-to="takes"'));
+    if (scr === "take") { const t = takeById(S.take); out.push(ICON.chev, `<span class="chip now" aria-current="page">${esc(t ? takeName(t) : "The take")}</span>`); }
+    return out.join("");
+  }
+  const names = { on: "What", details: "The take" };
+  STEPS.forEach((s, i) => {
+    out.push(ICON.chev);
+    const n = i + 1, ok = stepOk(s), val = s === "on" ? (chosenInst() ? chosenInst().name : "") : timingText(C());
+    if (s === scr) out.push(`<span class="chip now" aria-current="step">${n} ${esc(names[s])}</span>`);
+    else if (ok && val) out.push(crumb(`${ICON.check}${esc(val)}`, `data-act="step" data-step="${s}"`));
+    else out.push(`<span class="chip todo">${n} ${esc(names[s])}</span>`);
+  });
+  out.push(ICON.chev);
+  out.push(scr === "ready" ? `<span class="chip now" aria-current="step">Ready</span>` : readyOk() ? crumb("Ready", 'data-act="go" data-to="ready"') : `<span class="chip todo">Ready</span>`);
+  if (["record", "recording", "take"].includes(scr)) {
+    out.push(ICON.chev);
+    out.push(scr === "record" ? `<span class="chip now" aria-current="page">Record</span>` : scr === "recording" ? `<span class="chip now" aria-current="page">Recording</span>`
+      : crumb("Record", 'data-act="go" data-to="record"'));
+  }
+  if (scr === "take") out.push(ICON.chev, `<span class="chip now" aria-current="page">The take</span>`);
+  return out.join("");
+}
+function leftButton() {  // walking: the step before; a step opened from Ready: back to it as it was
+  const i = STEPS.indexOf(S.screen);
+  if (S.walk && i > 0) return `<button type="button" class="btn" data-act="go" data-to="${STEPS[i - 1]}">${ICON.back} Back</button>`;
+  if (!S.snapshot) return "";
+  const cur = S.choices; S.choices = S.snapshot; const ok = readyOk(); S.choices = cur;
+  return ok ? `<button type="button" class="btn" data-act="restore">${ICON.back} Keep it as it was</button>` : "";
+}
+function nextButton(step) {
+  const label = S.walk ? (step === "on" ? "Next: the take" : "Next: ready") : "Back to Ready";
+  return `<button type="button" class="btn go" data-act="answered" data-step="${step}"${stepOk(step) ? "" : " disabled"}>${esc(label)} ${ICON.next}</button>`;
+}
+
+// 1: what you are playing, and which input carries it
+function renderOn() {
+  const c = C(), i = chosenInst(), inp = chosenInput();
+  const cards = S.setup.instruments.map((x) => {
+    const sel = x.kind === c.instrument, on = sel && inp ? inp : inputOf(((c.inputs || {})[x.kind]) || x.input);
+    return `<button type="button" class="card${sel ? " sel" : ""}" role="radio" aria-checked="${sel}" data-act="inst" data-kind="${esc(x.kind)}">
+      <span class="t">${esc(x.name)}</span><span class="sub">${on ? `In ${on.input} · ${esc(on.name)}` : "no input"}</span></button>`;
+  }).join("");
+  const opts = i ? S.setup.inputs.slice().sort((a, b) => a.input - b.input).map((x) => {
+    const sel = inp && x.input === inp.input;
+    return `<button type="button" class="opt${sel ? " sel" : ""}" role="radio" aria-checked="${!!sel}" data-act="input" data-n="${x.input}">
+      <span class="radio"></span><span class="m"><b>In ${x.input} · ${esc(x.name)}${x.input === i.input ? ' <span class="badge dim">usual</span>' : ""}</b>${x.details ? `<span>${esc(x.details)}</span>` : ""}</span>
+      <span class="meter" data-meter="${x.channel}" style="max-width:90px"><i></i><b></b></span></button>`;
+  }).join("") : "";
+  return `<div class="body"><div class="q"><h1>What are you playing?</h1><p>The pipeline writes notation and tab for it.</p></div>
+    <div class="kinds" role="radiogroup" aria-label="Instrument">${cards}</div>
+    ${i ? `<section class="panel" aria-label="Input"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><h2>Heard on</h2><span class="muted" style="font-size:14px">the take is this input alone</span></div>
+      <div class="opts" role="radiogroup" aria-label="Input">${opts}</div><p class="muted" id="monNote" style="font-size:13px"></p></section>` : ""}</div>
+    <div class="foot">${leftButton()}${nextButton("on")}</div>`;
+}
+
+// 2: the take's details: tempo, meter, count-in, click, a name
+function renderDetails() {
+  const c = C(), meters = S.setup.meters;
+  return `<div class="body"><div class="q"><h1>How will you play it?</h1><p>${esc(chosenInst() ? chosenInst().name : "")}: the tempo and the meter the transcription goes by.</p></div>
+    <div class="fields">
+      <div class="field"><span class="k">Tempo</span>
+        <div class="bpm"><button type="button" data-act="bpm" data-d="-2" aria-label="Slower">−</button>
+          <span class="bv"><input id="bpmIn" type="number" inputmode="numeric" min="20" max="300" value="${Math.round(c.bpm)}" aria-label="Tempo, beats a minute"><small>bpm</small></span>
+          <button type="button" data-act="bpm" data-d="2" aria-label="Faster">+</button></div></div>
+      <div class="field"><span class="k">Beats in a bar</span>
+        <div class="seg" role="radiogroup" aria-label="Beats in a bar">${meters.slice().reverse().map((n) => `<button type="button" role="radio" aria-pressed="${c.bpb === n}" data-act="bpb" data-v="${n}">${n}</button>`).join("")}</div></div>
+      <div class="field">
+        <button type="button" class="switch" role="switch" aria-checked="${!!c.countIn}" data-act="toggle" data-k="countIn">A bar of count-in first<span class="track"><i></i></span></button>
+        <button type="button" class="switch" role="switch" aria-checked="${!!c.click}" data-act="toggle" data-k="click" style="border-top:1px solid var(--line-soft)">The click all through<span class="track"><i></i></span></button>
+        <span class="hint">${c.click ? "The beat is the click's." : `No click: the beat is found from your playing, starting from ${Math.round(c.bpm)} bpm.`}${c.countIn ? " The count-in says where bar 1 starts." : " Without a count-in, bar 1 starts where the transcription thinks it does."}</span></div>
+      <div class="field"><label class="k" for="titleIn">A name (if you like)</label>
+        <input id="titleIn" class="text-in" type="text" maxlength="120" value="${esc(c.title)}" placeholder="Red Wing" autocomplete="off">
+        <span class="hint">For the takes list. It can be changed after.</span></div>
+    </div></div>
+    <div class="foot">${leftButton()}${nextButton("details")}</div>`;
+}
+
+// Ready: the next take, as left; one tap to record it, or to change one thing
+function renderReady() {
+  if (!readyOk()) return `<div class="body"><div class="q"><h1>Nothing chosen yet</h1><p>Two steps: what you are playing, and how. Then ready.</p></div></div>
+    <div class="foot"><button type="button" class="btn go" data-act="start-over">Start ${ICON.next}</button></div>`;
+  const c = C(), i = chosenInst(), inp = chosenInput(), last = S.takes[0];
+  return `<div class="body ready-body">
+    <span class="label">Next take${c.saved ? ` · as you left it, ${esc(when(c.saved))}` : ""}</span>
+    <p class="sentence" style="margin-top:-6px">${sentenceHtml()}</p>
+    <div class="rows">
+      <div><span class="k">What</span><span class="v"><span class="big">${esc(i.name)}</span><span class="sm">In ${inp.input} · ${esc(inp.name)}</span>
+        <span class="meter" data-meter="${inp.channel}" style="max-width:220px;margin-top:6px"><i></i><b></b></span></span><button type="button" class="change" data-act="step" data-step="on">Change</button></div>
+      <div><span class="k">Timing</span><span class="v"><span class="big">${esc(timingText(c))}</span><span class="sm">${esc(timingText(c, true).split(" · ").slice(2).join(""))}</span></span><button type="button" class="change" data-act="step" data-step="details">Change</button></div>
+      <div><span class="k">Name</span><span class="v"><span class="big">${c.title ? esc(c.title) : '<span class="muted" style="font-weight:400">none</span>'}</span></span><button type="button" class="change" data-act="step" data-step="details">Change</button></div>
+    </div>
+    <p class="muted" id="monNote" style="font-size:13px"></p>
+    ${last ? `<button type="button" class="last" data-act="open" data-id="${esc(last.id)}"><span class="m"><span>Last take</span><b>${esc(takeName(last))}</b><span>${esc(takeLine(last))}</span></span>${stateBadge(last)}</button>` : ""}
+  </div>
+  <div class="foot"><button type="button" class="btn" data-act="start-over">${ICON.restart} From the top</button>
+    <button type="button" class="btn go" data-act="go" data-to="record">${ICON.dot} Ready to record ${ICON.next}</button></div>`;
+}
+
+// --- recording: the record screen (the input, the speakers, Record)
+function recSentence() {
+  const c = C(), i = chosenInst();
+  const part = (text, step) => `<button type="button" data-act="step" data-step="${step}">${esc(text)}</button>`;
+  return `Record ${part(i.name.toLowerCase(), "on")} at ${part(`${Math.round(c.bpm)} bpm, ${c.bpb}/4`, "details")}, ${esc(c.click ? "over the click" : c.countIn ? "after a count-in, then no click" : "with no click")}.`;
+}
+function devLine() {
+  const s = S.status;
+  if (!s) return "";
+  const ok = s.devices.capture && s.devices.playback;
+  return `<span style="display:inline-flex;align-items:center;gap:6px"><span class="dot${ok ? " on" : ""}"></span>${esc(ok ? s.devices.capture_name : "Mixer not found")}</span><span>${(s.free_mb / 1000).toFixed(1)} GB free</span>`;
+}
+function renderRecord() {
+  if (!readyOk()) { S.screen = "ready"; return renderReady(); }
+  const c = C(), inp = chosenInput(), s = S.status, level = s ? s.level_offset_db : 0, speakers = c.click || c.countIn;
+  return `<div class="body rec-body"><p class="rec-sentence">${recSentence()}</p>
+    <div class="box"><span class="label">Listening</span>
+      <div class="row"><span>In ${inp.input} · ${esc(inp.name)}</span><span class="tnum" data-meter-text="${inp.channel}">–</span></div>
+      <span class="meter big" data-meter="${inp.channel}"><i></i><b></b></span>
+      <span class="muted" id="monNote" style="font-size:13px"></span><span class="dev-line" data-dev-line>${devLine()}</span></div>
+    ${speakers ? `<div class="box"><div class="row"><label for="recLevel" style="font-weight:700">The click on the speakers</label><span data-level-text class="tnum">${esc(dbText(level))}</span></div>
+      <input id="recLevel" type="range" min="-30" max="12" step="1" value="${level}" data-level></div>` : ""}
+    <button type="button" class="recbtn" data-act="record" ${s && s.devices.capture ? "" : "disabled"}><i></i>Record</button>
+  </div>`;
+}
+
+// --- recording: the take
+function position(rec) {  // where the player is: {big, beat, beats, counting}
+  const bk = rec && rec.backing;
+  if (!bk || bk.kind !== "click" || !bk.tempo || bk.beat0_s == null) return null;
+  const spb = 60 / bk.tempo.bpm, bpb = bk.tempo.beats_per_bar || 4, beat = (bk.position - bk.beat0_s) / spb;
+  if (beat < -0.02) return { big: String(Math.ceil(-beat - 0.02)), counting: true, beats: bpb };
+  const bar = Math.floor(beat / bpb + 1e-6) + 1;
+  return { big: `Bar ${bar}`, beat: Math.floor(beat - (bar - 1) * bpb + 1e-6) + 1, beats: bpb };
+}
+function renderRecording() {
+  const c = C(), inp = chosenInput();
+  return `<div class="body" style="display:flex;flex-direction:column;gap:12px;padding-bottom:0"><span class="recording-chip"><i></i>Recording</span>
+      <div class="live"><div class="where"><div class="v tnum" data-where>…</div><div class="s" data-where-s></div></div>
+        <div class="beats" data-beats hidden></div><div class="clock tnum" data-clock>0:00</div></div></div>
+    <div class="rec-bar"><div class="meters" style="display:flex;flex-direction:column;gap:6px">
+        <div class="mrow"><span>${esc(inp ? inp.name : "")}</span><span class="meter big" data-meter="${inp ? inp.channel : 0}"><i></i><b></b></span></div>
+        <span class="peak" data-peak>No clipping</span></div>
+      <button type="button" class="stopbtn" data-act="stop-rec"><i></i>Stop</button></div>`;
+}
+
+// --- the take: transcribing, then its notation and tab with its sound
+function takeName(t) { return t.title || `${t.instrument_name || cap(t.instrument) || "A"} take`; }
+function takeLine(t) {
+  const bits = [cap(when(t.recorded_at || dateOf(t.id))), t.seconds != null ? fmt(t.seconds) : ""];
+  if (t.title) bits.push(t.instrument_name || cap(t.instrument));
+  if (t.bpm) bits.push(`${Math.round(t.bpm)} bpm${t.click ? ", click" : ""}`);
+  return bits.filter(Boolean).join(" · ");
+}
+function dateOf(id) { const m = /^(\d{4})-(\d\d)-(\d\d)_(\d\d)(\d\d)(\d\d)$/.exec(id); return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}` : ""; }
+function stateBadge(t) {
+  const tr = t.transcription || {}, job = t.job || (S.status && S.status.job && S.status.job.take === t.id ? "running" : null);
+  if (job === "running" || tr.state === "running") return '<span class="badge">Transcribing</span>';
+  if (job === "queued" || tr.state === "queued" || tr.state === "building") return '<span class="badge dim">Waiting</span>';
+  if (tr.state === "failed") return '<span class="badge red">Not transcribed</span>';
+  if (tr.state === "done") return `<span class="badge${t.review && t.review.id ? "" : " dim"}">${t.review && t.review.id ? "In review" : plural(tr.notes || 0, "note")}</span>`;
+  return "";
+}
+function reviewUrl(r) { return `http://${location.hostname}:${S.setup.review.port || 8005}/#/r/${encodeURIComponent(r.id)}`; }
+function renderTake() {
+  const t = takeById(S.take), s = S.status, job = s && s.job && s.job.take === S.take ? s.job : null;
+  if (!t) {
+    const saving = job || (s && (s.state === "analyzing" || (s.queue || []).includes(S.take)));
+    return `<div class="body take-body"><div class="take-head"><h1>${saving ? "Saving the take…" : "The take is gone"}</h1></div>
+      ${saving ? workingHtml(job, null) : ""}</div>
+      <div class="foot"><button type="button" class="btn go" data-act="go" data-to="ready">Back to Ready ${ICON.next}</button></div>`;
+  }
+  const tr = t.transcription || {}, queued = (s && (s.queue || []).includes(t.id)) || t.job === "queued";
+  const head = `<div class="take-head"><h1>${esc(takeName(t))}</h1><p class="sub">${esc(takeLine(t))}${t.imported_from ? ` · from ${esc(t.imported_from)}` : ""}</p></div>`;
+  const clickNote = t.click_found === false ? `<p class="red-ink" style="font-size:15px">The click was not found in the take: bar 1 is where the transcription thinks it is.</p>` : "";
+  let main;
+  if (job || queued || tr.state === "running" || tr.state === "queued" || tr.state === "building") main = workingHtml(job, t);
+  else if (tr.state === "failed") main = `<div class="working"><span class="doing red-ink">Not transcribed</span><p style="font-size:15px;color:var(--ink2)">${esc(tr.error || "The pipeline stopped.")}</p>
+      <div class="acts"><button type="button" class="btn tint" data-act="transcribe" data-id="${esc(t.id)}">Transcribe again</button></div></div>`;
+  else if (tr.state === "done") main = `${statsHtml(t)}<div class="score-card"><div class="score-tools"><div class="seg" role="radiogroup" aria-label="Show">
+      <button type="button" aria-pressed="${S.view === "both"}" data-act="view" data-v="both">Notation and tab</button><button type="button" aria-pressed="${S.view === "tab"}" data-act="view" data-v="tab">Tab</button></div>
+      <span class="hint">Tap a bar to play from there</span></div><div id="scoreSlot"></div></div>`;
+  else main = `<div class="working"><span class="doing">Not transcribed yet</span><div class="acts"><button type="button" class="btn tint" data-act="transcribe" data-id="${esc(t.id)}">Transcribe it</button></div></div>`;
+  return `<div class="body take-body" id="takeBody">${head}${clickNote}${main}${reviewHtml(t)}${actionsHtml(t)}</div>${t.playable ? playerHtml(t) : ""}`;
+}
+function workingHtml(job, t) {
+  const st = S.status || {}, paused = job && job.paused;
+  const doing = !job ? "Waiting its turn" : paused ? "Held while recording" : job.doing;
+  const est = job && job.estimate_s, el = job ? job.elapsed_s : 0;
+  const pct = est ? Math.min(95, 100 * el / est) : 0;
+  const ahead = t && (st.queue || []).indexOf(t.id) > 0 ? ` · ${plural((st.queue || []).indexOf(t.id), "take")} ahead` : "";
+  return `<div class="working" aria-live="polite"><span class="label">Transcribing</span><span class="doing" data-doing>${esc(doing)}…</span>
+    <div class="prog"><i data-job-prog style="width:${pct}%"></i></div>
+    <span class="muted tnum" style="font-size:14px" data-job-time>${job ? `${fmt(el)}${est ? ` of about ${fmt(est)}` : ""}` : ""}${esc(ahead)}</span>
+    ${t && t.playable ? '<span class="muted" style="font-size:14px">You can listen to it meanwhile.</span>' : ""}</div>`;
+}
+function statsHtml(t) {
+  const tr = t.transcription || {};
+  const stat = (v, k) => `<span class="stat"><b class="tnum">${esc(v)}</b><span>${esc(k)}</span></span>`;
+  const grid = { click: "the click's beat", notes: "the beat as found", tempo: "the tempo given" }[tr.grid] || "";
+  return `<div class="stats">${stat(Math.round(tr.bpm || t.bpm || 0), "bpm")}${stat(`${t.beats_per_bar || 4}/4`, "meter")}${stat(tr.bars ?? "–", "bars")}${stat(tr.notes ?? "–", "notes")}${stat(tr.seconds != null ? `${Math.round(tr.seconds)} s` : "–", "transcribed")}</div>
+    <p class="muted" style="font-size:14px;margin-top:-6px">${tr.bpm && t.bpm && Math.abs(tr.bpm - t.bpm) >= 0.5 ? `Played at about ${tr.bpm} bpm (${Math.round(t.bpm)} given)` : `At ${Math.round(t.bpm || tr.bpm || 0)} bpm`}${grid ? `, bars on ${esc(grid)}` : ""}${tr.pickup_beats ? `, a pickup of ${tr.pickup_beats} beat${tr.pickup_beats === 1 ? "" : "s"}` : ""}.</p>`;
+}
+function reviewHtml(t) {
+  const tr = t.transcription || {}, rv = S.setup.review, r = t.review || {}, s = S.status || {};
+  if (tr.state !== "done") return "";
+  const making = s.review && s.review.take === t.id;
+  if (making) return `<div class="review-box"><span class="label">Review</span><p><b>Making the review…</b> ${fmt(s.review.elapsed_s)}: the review app's questions about this take.</p></div>`;
+  const open = r.id ? `<a class="btn fill" href="${esc(reviewUrl(r))}">Open the review</a>` : "";
+  const err = r.error ? `<p class="red-ink">The review could not be made: ${esc(r.error)}</p>` : "";
+  if (!rv.available) return `<div class="review-box"><span class="label">Review</span>${open}<p>The review app doesn't check takes yet${rv.why ? ` (${esc(rv.why.replace(/^the review app doesn't check takes yet\s*/, "").replace(/^\(|\)$/g, ""))})` : ""}. When it does, “Review it” sends this take there, and your answers turn this draft into the take's answer key.</p>
+    <button type="button" class="btn" disabled>Review it</button></div>`;
+  return `<div class="review-box"><span class="label">Review</span>${r.id ? `<p>In the review app since ${esc(when(r.made))}. Your answers there turn this draft into the take's answer key.</p>` : `<p>The review app checks the draft with you, and your answers turn it into the take's answer key.</p>`}${err}
+    <div class="acts">${open}<button type="button" class="btn ${r.id ? "" : "fill"}" data-act="review" data-id="${esc(t.id)}"${s.review ? " disabled" : ""}>${r.id ? "Make the review again" : "Review it"}</button></div></div>`;
+}
+function actionsHtml(t) {
+  if (S.confirm === t.id) return `<div class="confirm" role="alertdialog" aria-label="Delete this take?"><b>Delete this take?</b><span style="font-size:15px;color:var(--ink2)">${esc(takeName(t))}, ${esc(takeLine(t))}: its recording and its transcription.${t.review && t.review.id ? " The review stays in the review app." : ""}</span>
+    <div class="acts"><button type="button" class="btn red" data-act="delete-yes" data-id="${esc(t.id)}">${ICON.trash} Delete it</button><button type="button" class="btn" data-act="delete-no">Keep it</button></div></div>`;
+  const renaming = S.renaming === t.id;
+  return `${renaming ? `<div class="field"><label class="k" for="renameIn">Name</label><input id="renameIn" class="text-in" type="text" maxlength="120" value="${esc(t.title)}" placeholder="${esc(takeName({ ...t, title: "" }))}">
+      <div class="acts"><button type="button" class="btn fill" data-act="rename-save" data-id="${esc(t.id)}">Save</button><button type="button" class="btn" data-act="rename-cancel">Cancel</button></div></div>` : ""}
+    <div class="acts">${S.from !== "takes" ? `<button type="button" class="btn red wide" data-act="record-again">${ICON.dot} Record again</button><button type="button" class="btn tint wide" data-act="go" data-to="ready">Something else</button>` : ""}
+      ${renaming ? "" : `<button type="button" class="btn quiet" data-act="rename" data-id="${esc(t.id)}">Rename</button>`}
+      <a class="btn quiet" href="/api/takes/${esc(t.id)}/take.flac">The take (FLAC)</a>
+      ${t.transcription && t.transcription.state === "done" ? `<a class="btn quiet" href="/api/takes/${esc(t.id)}/transcription.musicxml" download="${esc(t.id)}.musicxml">MusicXML</a>` : ""}
+      <button type="button" class="btn quiet" data-act="delete" data-id="${esc(t.id)}" aria-label="Delete this take">${ICON.trash} Delete</button></div>`;
+}
+function playerHtml(t) {
+  const on = P.take === t.id && !player.paused;
+  return `<div class="player" aria-label="Play the take"><button type="button" class="playbtn" data-act="play" aria-label="${on ? "Pause" : "Play"}">${on ? ICON.pause : ICON.play}</button>
+    <div class="seg" role="radiogroup" aria-label="Speed"><button type="button" aria-pressed="${P.rate === 1}" data-act="speed" data-v="1">Full</button><button type="button" aria-pressed="${P.rate === 0.5}" data-act="speed" data-v="0.5">Half</button></div>
+    <div class="pos"><div class="bar" data-seek><span class="track"><i data-play-prog></i></span></div><div class="t tnum"><span data-play-at>${fmt(P.take === t.id ? P.at : 0)}</span><span>${fmt(t.seconds)}</span></div></div></div>`;
+}
+
+// --- the takes
+function renderTakes() {
+  const rows = S.takes.map((t) => {
+    if (S.confirm === t.id) return `<div class="tk on"><div class="confirm" role="alertdialog" aria-label="Delete this take?" style="border:0;border-radius:16px"><b>Delete ${esc(takeName(t))}?</b><span style="font-size:15px;color:var(--ink2)">${esc(takeLine(t))}: its recording and its transcription.</span>
+      <div class="acts"><button type="button" class="btn red" data-act="delete-yes" data-id="${esc(t.id)}">${ICON.trash} Delete it</button><button type="button" class="btn" data-act="delete-no">Keep it</button></div></div></div>`;
+    const edit = S.renaming === t.id ? `<div class="edit"><input class="text-in" id="renameIn" type="text" maxlength="120" value="${esc(t.title)}" placeholder="${esc(takeName({ ...t, title: "" }))}" aria-label="Name">
+      <button type="button" class="btn small fill" data-act="rename-save" data-id="${esc(t.id)}">Save</button><button type="button" class="btn small" data-act="rename-cancel">Cancel</button></div>` : "";
+    return `<div class="tk"><button type="button" class="open" data-act="open" data-id="${esc(t.id)}"><span class="m"><b>${esc(takeName(t))}</b><span>${esc(takeLine(t))}</span></span>${stateBadge(t)}</button>
+      ${edit || `<div class="x"><button type="button" data-act="rename" data-id="${esc(t.id)}">Rename</button><button type="button" data-act="delete" data-id="${esc(t.id)}">Delete</button></div>`}</div>`;
+  }).join("");
+  return `<div class="body"><div class="q"><h1>Takes</h1><p>Newest first. Tap one to see it and hear it again.</p></div>
+    <div class="list">${rows || '<p class="empty">No takes yet.</p>'}</div></div>
+    <div class="foot"><button type="button" class="btn go" data-act="go" data-to="ready">Record a take ${ICON.next}</button></div>`;
+}
+
+// --- the score: alphaTab, kept across renders (the screen is drawn again often; the score is not)
+const host = $("#scoreHost");
+const SC = { take: null, view: null, api: null, xml: null, map: null, beats: null, bars: null, ready: false };
+const RES = { mainGlyphColor: "#F2EEF8", secondaryGlyphColor: "#A79FB4", staffLineColor: "#7E768B", barSeparatorColor: "#A79FB4",
+  barNumberColor: "#A79FB4", scoreInfoColor: "#CEC7DA" };
+const HIDE = ["scoreTitle", "scoreSubTitle", "scoreArtist", "scoreAlbum", "scoreWords", "scoreMusic", "scoreWordsAndMusic", "scoreCopyright"];
+function scaleFor() { const w = window.innerWidth; return w < 600 ? 0.62 : w < 900 ? 0.85 : 1.0; }
+function parkScore() { if (host.parentNode !== document.body) { host.hidden = true; document.body.append(host); } }
+function placeScore() {
+  const slot = $("#scoreSlot"), t = takeById(S.take);
+  if (!slot || !t) return;
+  host.hidden = false; slot.append(host);
+  if (SC.take !== t.id || SC.view !== S.view || SC.finished !== (t.transcription || {}).finished) loadScore(t);
+}
+async function loadScore(t) {
+  if (SC.api) { try { SC.api.destroy(); } catch (e) {} }
+  Object.assign(SC, { take: t.id, view: S.view, finished: (t.transcription || {}).finished, api: null, map: null, beats: null, bars: null, ready: false });
+  host.innerHTML = `<p class="score-empty">Drawing the notation…</p>`;
+  let xml, data;
+  try {
+    [xml, data] = await Promise.all([fetch(`/api/takes/${t.id}/transcription.musicxml`).then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); }),
+      fetch(`/api/takes/${t.id}/transcription.json`).then((r) => r.ok ? r.json() : null)]);
+  } catch (e) { host.innerHTML = `<p class="score-empty">The notation could not be loaded (${esc(e.message)}).</p>`; return; }
+  if (SC.take !== t.id) return;
+  SC.beats = data && data.beats && data.beats.length ? data.beats : null;
+  // the tab staff's notes are in voice 5 (the pipeline numbers the staves' voices apart); alphaTab draws
+  // an empty voice 1 there as rests, so for drawing only they become voice 1 of their staff
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  doc.querySelectorAll("note").forEach((n) => { const st = n.querySelector("staff"), v = n.querySelector("voice"); if (st && v && st.textContent.trim() === "2") v.textContent = "1"; });
+  const text = new XMLSerializer().serializeToString(doc);
+  host.innerHTML = "";
+  const el = document.createElement("div"); host.append(el);
+  const elements = Object.fromEntries(HIDE.map((k) => [k, false]));
+  const api = new alphaTab.AlphaTabApi(el, {
+    core: { fontDirectory: "/alphatab/font/", useWorkers: false, engine: "svg", enableLazyLoading: false },
+    display: { layoutMode: "Page", scale: scaleFor(), resources: RES },
+    notation: { rhythmMode: S.view === "tab" ? "ShowWithBars" : "Hidden", elements },
+    player: { enablePlayer: false },
+  });
+  SC.api = api; SC.scale = scaleFor();
+  api.scoreLoaded.on((score) => { const tr = score.tracks[0]; if (S.view === "tab" && tr && tr.staves.length > 1) tr.staves[0].showStandardNotation = false; });
+  api.error.on((e) => { host.innerHTML = `<p class="score-empty">The notation could not be drawn: ${esc((e && e.message) || e)}</p>`; });
+  api.postRenderFinished.on(() => { if (SC.api === api) buildMap(api); });
+  api.load(new TextEncoder().encode(text));
+}
+function buildMap(api) {
+  // every beat drawn on the first staff, in time order, with where it is: alphaTab counts 960 ticks a quarter,
+  // from the score's first bar (a pickup's, if it has one): the transcription's beat 0
+  const lk = api.renderer.boundsLookup;
+  if (!lk) return;
+  const entries = [], bars = [];
+  lk.staffSystems.forEach((sys) => sys.bars.forEach((mb) => {
+    const m = api.score.masterBars[mb.index];
+    bars.push({ tick: m.start, end: m.start + m.calculateDuration(), x: mb.realBounds.x, w: mb.realBounds.w, y: sys.realBounds.y, h: sys.realBounds.h });
+    const bb = mb.bars[0];
+    if (bb) bb.beats.forEach((b) => entries.push({ tick: b.beat.absolutePlaybackStart, dur: b.beat.playbackDuration, x: b.onNotesX, bar: bars.length - 1 }));
+  }));
+  entries.sort((a, b) => a.tick - b.tick);
+  SC.map = entries; SC.bars = bars; SC.ready = true;
+  const surface = host.querySelector(".at-surface");
+  if (surface) {
+    if (!surface.querySelector(".at-cursor")) surface.insertAdjacentHTML("beforeend", '<div class="at-bar"></div><div class="at-cursor"></div>');
+  }
+  drawCursor();
+}
+// the take's time (s) at a score beat, and the score beat at a time: the transcription's beats (its JSON)
+function timeAt(b) {
+  const bs = SC.beats;
+  if (!bs) return null;
+  if (bs.length === 1) return bs[0].t;
+  let i = bs.findIndex((x) => x.beat > b);
+  if (i < 0) i = bs.length - 1; if (i === 0) i = 1;
+  const a = bs[i - 1], c = bs[i];
+  return a.t + (b - a.beat) * (c.t - a.t) / ((c.beat - a.beat) || 1);
+}
+function beatAt(t) {
+  const bs = SC.beats;
+  if (!bs) return null;
+  if (bs.length === 1) return bs[0].beat;
+  let i = bs.findIndex((x) => x.t > t);
+  if (i < 0) i = bs.length - 1; if (i === 0) i = 1;
+  const a = bs[i - 1], c = bs[i];
+  return a.beat + (t - a.t) * (c.beat - a.beat) / ((c.t - a.t) || 1);
+}
+function drawCursor() {
+  const cur = host.querySelector(".at-cursor"), bar = host.querySelector(".at-bar");
+  if (!cur || !SC.ready || !SC.map.length) return;
+  const show = P.take === SC.take && (P.at > 0 || !player.paused);
+  const b = show ? beatAt(P.at) : null;
+  if (b == null) { cur.style.display = bar.style.display = "none"; return; }
+  const tick = Math.max(0, b * 960), m = SC.map;
+  let lo = 0, hi = m.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (m[mid].tick <= tick) lo = mid; else hi = mid - 1; }
+  const e = m[lo], nx = m[lo + 1], br = SC.bars[e.bar];
+  let x = e.x;
+  if (tick > e.tick) {
+    const sameRow = nx && SC.bars[nx.bar].y === br.y, toX = sameRow ? nx.x : br.x + br.w - 6, toTick = sameRow ? nx.tick : e.tick + Math.max(e.dur, 1);
+    x = e.x + (toX - e.x) * Math.min(1, (tick - e.tick) / Math.max(1, toTick - e.tick));
+  }
+  if (b * 960 > (SC.bars[SC.bars.length - 1].end || 0) + 960) { cur.style.display = bar.style.display = "none"; return; }
+  Object.assign(cur.style, { display: "block", left: `${x - 1}px`, top: `${br.y + 4}px`, height: `${br.h - 8}px` });
+  Object.assign(bar.style, { display: "block", left: `${br.x}px`, top: `${br.y + 2}px`, width: `${br.w}px`, height: `${br.h - 4}px` });
+  if (!player.paused) follow(br);
+}
+function follow(br) {  // keep the bar played in view as the take plays
+  const body = $("#takeBody"), surface = host.querySelector(".at-surface");
+  if (!body || !surface) return;
+  const top = surface.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop + br.y;
+  if (top < body.scrollTop + 8 || top + br.h > body.scrollTop + body.clientHeight - 8) body.scrollTo({ top: Math.max(0, top - body.clientHeight * 0.2), behavior: "smooth" });
+}
+function barAtPoint(ev) {  // the bar tapped, if any
+  const surface = host.querySelector(".at-surface");
+  if (!surface || !SC.ready) return null;
+  const r = surface.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+  return SC.bars.find((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) || null;
+}
+let down = null;
+host.addEventListener("pointerdown", (ev) => { down = { x: ev.clientX, y: ev.clientY }; });
+host.addEventListener("click", (ev) => {
+  if (down && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 10) return;  // a scroll, not a tap
+  const b = barAtPoint(ev);
+  if (!b) return;
+  const t = timeAt(b.tick / 960);
+  if (t != null) playFrom(Math.max(0, t - 0.12));
+});
+window.addEventListener("resize", () => {  // a phone turned: the score's scale for its width
+  clearTimeout(window._rs);
+  window._rs = setTimeout(() => { if (SC.api && SC.scale !== scaleFor()) { SC.scale = scaleFor(); SC.api.settings.display.scale = SC.scale; SC.api.updateSettings(); SC.api.render(); } }, 250);
+});
+
+// --- the take's own sound, at full or half speed (the pitch kept: play/half.mp3, ffmpeg's atempo)
+const player = $("#player");
+const P = { take: null, rate: 1, at: 0 };
+function srcFor(id, rate) { return `/api/takes/${encodeURIComponent(id)}/play/${rate === 1 ? "full" : "half"}.mp3`; }
+function playFrom(at, rate) {
+  // play() at once, inside the tap (iOS allows no later start); the seek once the file's length is known
+  rate = rate || P.rate;
+  const want = srcFor(S.take, rate), same = player.src.endsWith(want);
+  if (!same) { player.src = want; }
+  P.take = S.take; P.rate = rate; P.at = at;
+  const seek = () => { try { player.currentTime = at / rate; } catch (e) {} };
+  if (same && player.readyState >= 1) seek(); else player.addEventListener("loadedmetadata", seek, { once: true });
+  player.play().catch(() => {});
+  tick();
+}
+function togglePlay() {
+  if (P.take === S.take && !player.paused) { player.pause(); return; }
+  const t = takeById(S.take);
+  playFrom(P.take === S.take && P.at < (t ? t.seconds : 1e9) - 0.2 ? P.at : 0);
+}
+function stopPlaying() { player.pause(); }
+function setSpeed(rate) {
+  if (rate === P.rate) return;
+  if (P.take === S.take && !player.paused) playFrom(P.at, rate);
+  else { P.rate = rate; if (P.take === S.take) { player.src = srcFor(S.take, rate); } render(); }
+}
+let raf = 0;
+function tick() {
+  cancelAnimationFrame(raf);
+  if (P.take === S.take && player.src && !isNaN(player.currentTime) && (player.readyState >= 1)) P.at = player.currentTime * P.rate;
+  const t = takeById(S.take);
+  const prog = $("[data-play-prog]"), at = $("[data-play-at]");
+  if (prog && t && t.seconds) prog.style.width = `${Math.min(100, 100 * P.at / t.seconds)}%`;
+  if (at) at.textContent = fmt(P.at);
+  drawCursor();
+  if (!player.paused) raf = requestAnimationFrame(tick);
+}
+["play", "pause", "ended"].forEach((e) => player.addEventListener(e, () => {
+  const b = $(".playbtn"); if (b) { b.innerHTML = player.paused ? ICON.play : ICON.pause; b.setAttribute("aria-label", player.paused ? "Play" : "Pause"); }
+  if (e === "ended") { const t = takeById(S.take); P.at = t ? t.seconds : P.at; }
+  tick();
+}));
+document.addEventListener("click", (ev) => {  // the position bar: tap a place to play from there
+  const bar = ev.target.closest("[data-seek]");
+  if (!bar) return;
+  const t = takeById(S.take);
+  if (!t) return;
+  const to = (e) => { const r = bar.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * t.seconds; };
+  playFrom(to(ev));
+});
+
+// --- live: meters, where the take is, how the transcription goes (every status)
+function live() {
+  const s = S.status;
+  if (!s) return;
+  const rec = s.recording, mon = s.monitor;
+  $$("[data-dev-line]").forEach((el) => { const h = devLine(); if (el.innerHTML !== h) el.innerHTML = h; });
+  $$("[data-act=record]").forEach((b) => { b.disabled = !s.devices.capture; });
+  const meters = rec ? rec.meters_dbfs : mon ? mon.meters_dbfs : null, peaks = rec ? rec.peaks_dbfs : mon ? mon.peaks_dbfs : null;
+  $$("[data-meter]").forEach((el) => {
+    const ch = Number(el.dataset.meter), v = meters ? meters[ch] : null, i = el.firstElementChild, b = el.lastElementChild;
+    i.style.width = v == null ? "0" : meterPct(v) + "%";
+    i.style.background = v > -6 ? "var(--red-dot)" : v > -12 ? "var(--amber)" : "var(--ink2)";
+    if (peaks && peaks[ch] != null && rec) { b.style.display = "block"; b.style.left = `calc(${meterPct(peaks[ch])}% - 2px)`; } else b.style.display = "none";
+  });
+  $$("[data-meter-text]").forEach((el) => { const v = meters ? meters[Number(el.dataset.meterText)] : null; el.textContent = v == null ? "–" : dbText(v); });
+  const note = $("#monNote");
+  if (note) note.textContent = rec ? "" : s.monitor_error ? `Not listening: ${s.monitor_error}.` : !mon && listening() ? "Listening…" : !listening() ? "Not listening (idle a while): tap anywhere to listen again." : "";
+  if (S.screen === "recording" && rec) {
+    const p = position(rec), w = $("[data-where]"), ws = $("[data-where-s]"), beats = $("[data-beats]");
+    if (w) { w.textContent = p ? p.big : fmt(rec.seconds); w.classList.toggle("count", !!(p && p.counting)); }
+    if (ws) ws.textContent = p ? (p.counting ? "Count-in" : `beat ${p.beat} of ${p.beats}`) : "Recording";
+    if (beats) {
+      beats.hidden = !(p && !p.counting);
+      if (p && !p.counting) beats.innerHTML = Array.from({ length: p.beats }, (_, k) => `<i class="${k < p.beat ? "on" : ""}"></i>`).join("");
+    }
+    $("[data-clock]").textContent = fmt(rec.seconds);
+    const peak = $("[data-peak]");
+    if (peak) { peak.textContent = rec.clipped ? "Clipping: turn the input's gain down a little" : `Peak ${dbText(rec.peak_dbfs)} · no clipping`; peak.classList.toggle("clip", rec.clipped); }
+  }
+  const job = s.job;
+  if (job && S.screen === "take" && job.take === S.take) {
+    const d = $("[data-doing]"), pr = $("[data-job-prog]"), tm = $("[data-job-time]");
+    if (d) d.textContent = `${job.paused ? "Held while recording" : job.doing}…`;
+    if (pr && job.estimate_s) pr.style.width = `${Math.min(95, 100 * job.elapsed_s / job.estimate_s)}%`;
+    if (tm) tm.textContent = `${fmt(job.elapsed_s)}${job.estimate_s ? ` of about ${fmt(job.estimate_s)}` : ""}`;
+  }
+  if (!dragging) $$("[data-level-text]").forEach((el) => { el.textContent = dbText(s.level_offset_db); });
+  $$("[data-level]").forEach((el) => { if (document.activeElement !== el && !dragging) el.value = s.level_offset_db; });
+}
+
+// --- recording
+async function record() {
+  const c = C(), i = chosenInst(), inp = chosenInput();
+  const r = await api("POST", "/api/record/start", { instrument: i.kind, input: inp.input, bpm: c.bpm, beats_per_bar: c.bpb,
+    count_in: !!c.countIn, click: !!c.click, title: c.title || "" });
+  recordingId = r.take; S.take = r.take; S.from = "ready"; S.screen = "recording"; render(); wakeLock(true);
+}
+let recordingId = null, lock = null;
+async function wakeLock(on) {  // the screen stays on while recording (where the browser can)
+  try {
+    if (on && "wakeLock" in navigator && !lock) lock = await navigator.wakeLock.request("screen");
+    if (!on && lock) { await lock.release(); lock = null; }
+  } catch (e) { lock = null; }
+}
+
+// --- the status, often while something happens
+let pollTimer = null, version = null, dragging = false, lastTouch = Date.now(), monitorAt = 0, lastJob = "";
+const LISTEN_IDLE_MS = 10 * 60e3;
+function listening() { return !document.hidden && Date.now() - lastTouch < LISTEN_IDLE_MS; }
+function monitorTick() {
+  const s = S.status;
+  if (!s || s.recording || !["on", "ready", "record"].includes(S.screen) || !listening()) return;
+  if (Date.now() - monitorAt < 2000) return;
+  monitorAt = Date.now();
+  api("POST", "/api/monitor").catch(() => {});
+}
+async function poll(once) {
+  clearTimeout(pollTimer);
+  let s;
+  try { s = await api("GET", "/api/status"); } catch (e) { s = null; }
+  if (s) {
+    const prev = S.status; S.status = s;
+    if (s.error && s.error !== S.lastServerError) { S.lastServerError = s.error; showError(s.error); }
+    if (s.recording && S.screen !== "recording") { recordingId = s.recording.take; S.take = recordingId; S.screen = "recording"; render(); wakeLock(true); }
+    else if (!s.recording && S.screen === "recording") {
+      S.take = recordingId || (prev && prev.recording && prev.recording.take); S.from = "ready"; S.screen = "take"; wakeLock(false);
+      await refresh(); render();
+    }
+    const job = JSON.stringify([s.job && s.job.take, s.job && s.job.stage, s.queue, s.review && s.review.take]);
+    if (s.takes_version !== version || job !== lastJob) {
+      const first = version === null; version = s.takes_version; const jobChanged = job !== lastJob; lastJob = job;
+      if (!first || jobChanged) { await refresh(); if (S.screen !== "recording" && !editing()) render(); }
+    }
+    live();
+    monitorTick();
+  } else {
+    S.status = null;
+    $("#end").innerHTML = '<span class="chip off"><span class="dot"></span>Not reachable</span>';
+  }
+  const busy = s && (s.state === "recording" || s.state === "analyzing");
+  const working = s && (s.job || (s.queue || []).length || s.review);
+  pollTimer = setTimeout(poll, busy ? 120 : working ? 700 : s && s.monitor ? 300 : 1500);
+}
+function editing() { const a = document.activeElement; return a && (a.id === "renameIn" || a.id === "titleIn" || a.id === "bpmIn"); }
+
+// --- taps
+document.addEventListener("click", (ev) => {
+  lastTouch = Date.now();
+  const el = ev.target.closest("[data-act]");
+  if (!el || el.disabled) return;
+  const a = el.dataset.act, d = el.dataset, c = C();
+  if (a === "dismiss") showError("");
+  else if (a === "go") go(d.to);
+  else if (a === "step") go(d.step, { walk: false });
+  else if (a === "start-over") go("on", { walk: true });
+  else if (a === "restore") restore();
+  else if (a === "answered") { if (d.step === "details") readDetails(); answered(d.step); }
+  else if (a === "inst") {  // another instrument: straight back to Ready (from Ready); the same one: its inputs
+    const other = d.kind !== c.instrument; set({ instrument: d.kind }); if (other && !S.walk) answered("on"); }
+  else if (a === "input") { const i = chosenInst(); if (i) { set({ inputs: { ...(c.inputs || {}), [i.kind]: Number(d.n) } }); if (!S.walk) answered("on"); } }
+  else if (a === "bpm") { readDetails(); set({ bpm: Math.max(20, Math.min(300, Math.round(c.bpm) + Number(d.d))) }); }
+  else if (a === "bpb") { readDetails(); set({ bpb: Number(d.v) }); }
+  else if (a === "toggle") { readDetails(); set({ [d.k]: !c[d.k] }); }
+  else if (a === "record") act(record);
+  else if (a === "record-again") go("record");
+  else if (a === "stop-rec") act(() => api("POST", "/api/record/stop"));
+  else if (a === "open") openTake(d.id, S.screen === "takes" ? "takes" : "ready");
+  else if (a === "play") togglePlay();
+  else if (a === "speed") setSpeed(Number(d.v));
+  else if (a === "view") { S.view = d.v; render(); }
+  else if (a === "transcribe") act(() => api("POST", `/api/takes/${encodeURIComponent(d.id)}/transcribe`));
+  else if (a === "review") act(() => api("POST", `/api/takes/${encodeURIComponent(d.id)}/review`));
+  else if (a === "rename") { S.renaming = d.id; S.confirm = null; render(); const i = $("#renameIn"); if (i) { i.focus(); i.select(); } }
+  else if (a === "rename-cancel") { S.renaming = null; render(); }
+  else if (a === "rename-save") { const v = ($("#renameIn") || {}).value || ""; S.renaming = null;
+    act(async () => { await api("PUT", `/api/takes/${encodeURIComponent(d.id)}/title`, { title: v }); await refresh(); render(); }); }
+  else if (a === "delete") { S.confirm = d.id; S.renaming = null; render(); }
+  else if (a === "delete-no") { S.confirm = null; render(); }
+  else if (a === "delete-yes") {
+    S.confirm = null;
+    act(async () => { if (P.take === d.id) { stopPlaying(); P.take = null; } await api("DELETE", `/api/takes/${encodeURIComponent(d.id)}`); await refresh();
+      if (S.screen === "take" && S.take === d.id) { S.take = null; go(S.from === "takes" ? "takes" : "ready"); } else render(); });
+  }
+});
+function readDetails() {  // the tempo typed and the name, kept before anything else on the step changes
+  const b = $("#bpmIn"), t = $("#titleIn");
+  if (b) { const v = Number(b.value); if (v >= 20 && v <= 300) S.choices.bpm = Math.round(v); }
+  if (t) S.choices.title = t.value.trim().slice(0, 120);
+  save();
+}
+document.addEventListener("change", (ev) => {
+  if (ev.target.id === "bpmIn" || ev.target.id === "titleIn") { readDetails(); if (ev.target.id === "bpmIn") render(); }
+  if (ev.target.dataset.level !== undefined) { dragging = false; setLevel(Number(ev.target.value)); }
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" && ev.target.id === "renameIn") { const b = $("[data-act=rename-save]"); if (b) b.click(); }
+  else if (ev.key === "Enter" && (ev.target.id === "bpmIn" || ev.target.id === "titleIn")) ev.target.blur();
+  else if (ev.key === "Escape" && (S.confirm || S.renaming)) { S.confirm = null; S.renaming = null; render(); }
+});
+function setLevel(v) {
+  v = Math.max(-30, Math.min(12, Math.round(v)));
+  act(async () => { const r = await api("PUT", "/api/settings", { level_offset_db: v }); if (S.status) S.status.level_offset_db = r.level_offset_db; live(); });
+}
+document.addEventListener("input", (ev) => {
+  if (ev.target.dataset.level === undefined) return;
+  dragging = true;
+  $$("[data-level-text]").forEach((el) => { el.textContent = dbText(Number(ev.target.value)); });
+});
+document.addEventListener("pointerdown", () => { const was = listening(); lastTouch = Date.now(); if (!was) monitorTick(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { lastTouch = Date.now(); refresh().then(render); poll(true); } });
+// a screen or take named in the address (#ready, #takes, #take=ID): for trying the page out
+function fromHash() {
+  const h = location.hash.slice(1);
+  if (h.startsWith("take=")) { openTake(h.slice(5), "takes"); return true; }
+  if (["on", "details", "ready", "record", "takes"].includes(h)) { go(h); return true; }
+  return false;
+}
+window.addEventListener("hashchange", fromHash);
+
+(async function startUp() {
+  try { await loadAll(); } catch (e) { showError(`Could not load: ${e.message}`); S.setup = S.setup || { instruments: [], inputs: [], meters: [2, 3, 4], review: {} }; S.choices = S.choices || { ...DEFAULTS }; }
+  S.screen = readyOk() ? "ready" : "on";
+  S.walk = !readyOk();
+  if (STEPS.includes(S.screen)) S.snapshot = null;
+  if (!fromHash()) render();
+  poll(true);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Bring a recording in as a take of the transcribe app, and have it transcribed (transcriber/importer.py).
+# Runs where the app runs (on the control unit: its config is /etc/take-transcriber.toml).
+#   tools/import-take FILE --instrument dobro --bpm 100 [--click] [--downbeat S] [--channel N] [--title T]
+here=$(cd "$(dirname "$0")/.." && pwd)
+PYTHONPATH="$here" exec "$here/.venv/bin/python" -m transcriber.importer "$@"

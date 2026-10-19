@@ -208,8 +208,9 @@ class Engine:
                     title: str = "Click", meta: dict | None = None) -> str:
         """Record over a click in `tempo` ({"bpm", "pickup_beats", "beats_per_bar"}): a bar's
         count-in (with `count_in`), then every beat through `beats` beats from the first note
-        (with `through`); `beats` None: every beat until the take is stopped (a free take's click,
-        no pickup). The take's sidecar gets `meta` and, once lined up, where beat 0 is."""
+        (with `through`); `beats` None: until the take is stopped (a free take's click, no pickup),
+        every beat with `through`, else the count-in alone. The take's sidecar gets `meta` and,
+        once lined up, where beat 0 is."""
         with self.lock:
             if self.rec:
                 raise Busy("already recording")
@@ -220,8 +221,8 @@ class Engine:
         rate = self.cfg.playback.playback.rate
         if beats is None:
             tempo = {**tempo, "pickup_beats": 0.0}
-            stream = playalong.ClickStream(tempo, rate, count_in_bars=1 if count_in else 0)
-            click = {"beats": None, "count_in_bars": 1 if count_in else 0, "through": True}
+            stream = playalong.ClickStream(tempo, rate, count_in_bars=1 if count_in else 0, through=through)
+            click = {"beats": None, "count_in_bars": 1 if count_in else 0, "through": bool(through)}
             rec = _Recording(take_id="", rate=self.cfg.capture.capture.rate, backing_title=title, backing_rate=rate,
                              tempo=dict(tempo), guide="click", beat0_s=stream.beat0_s, click=click,
                              count_in_s=stream.beat0_s, stream=stream, meta=dict(meta or {}))

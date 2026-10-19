@@ -6,6 +6,6 @@ host=${1:-practice}
 here=$(cd "$(dirname "$0")/.." && pwd)
 rsync -a --delete \
     --exclude .venv --exclude __pycache__ --exclude .pytest_cache \
-    --exclude '/takes*' --exclude '/backing*' --exclude '/exercise-takes*' --exclude '/exercises-dev' --exclude '/chord-checks*' --exclude .git --exclude /local \
+    --exclude '/takes*' --exclude '/backing*' --exclude '/exercise-takes*' --exclude '/exercises-dev' --exclude '/chord-checks*' --exclude '/transcribe-takes*' --exclude .git --exclude /local \
     "$here/" "$host:practice-recorder/"
 ssh "$host" practice-recorder/setup/install.sh

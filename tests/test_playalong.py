@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from recorder import dsp
 from recorder.config import REPO, load_config
-from recorder.playalong import align_and_clean, click_track, find_click
+from recorder.playalong import ClickStream, align_and_clean, click_track, find_click
 from exercises.server import create_app  # play-along takes are made in the exercise app
 
 
@@ -190,3 +190,20 @@ def test_stream_limiter_passes_audio_under_the_ceiling():
     rate = 48000
     x = (0.5 * np.sin(2 * np.pi * 330 * np.arange(rate) / rate)).astype(np.float32)
     assert np.array_equal(dsp.StreamLimiter(rate, -1.0).process(x), x)
+
+
+@pytest.mark.parametrize("through", [True, False])
+def test_an_open_ended_click_is_click_track_sample_for_sample(through):
+    """A click until stopped (the transcribe app's, the exercise app's free take): with `through` every
+    beat, without it the count-in alone and then silence, as `click_track` makes them, so a take is
+    lined up again from the sidecar."""
+    rate, tempo = 48000, {"bpm": 150.0, "pickup_beats": 0.0, "beats_per_bar": 3}
+    stream = ClickStream(tempo, rate, count_in_bars=1, through=through)
+    played = np.concatenate([stream.read(4800) for _ in range(40)])  # 4 s, in 0.1 s blocks
+    beats = stream.beats_through(len(played) / rate)
+    y, beat0 = click_track(tempo, rate, beats, count_in_bars=1, through=through)
+    assert beat0 == pytest.approx(stream.beat0_s)
+    n = min(len(y), len(played))
+    assert np.array_equal(played[:n], y[:n])
+    after = played[int((stream.beat0_s - 0.01) * rate):]
+    assert (np.abs(after).max() > 0.05) == through  # without it: nothing from the first note on

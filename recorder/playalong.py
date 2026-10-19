@@ -343,9 +343,12 @@ def with_click(notes: np.ndarray, rate: int, notes_beat0_s: float, tempo: dict, 
 class ClickStream:
     """A click with no last beat (a free take's), made as it is played: `click_track`'s count-in
     and beats for a tempo with no pickup, sample for sample, so the take is lined up again from a
-    `click_track` through the beats it played (`beats_through`)."""
+    `click_track` through the beats it played (`beats_through`). Without `through`, only the
+    count-in plays, then silence until the take is stopped (`click_track(..., through=False)`)."""
 
-    def __init__(self, tempo: dict, rate: int, count_in_bars: int = 1, level_dbfs: float = -12.0):
+    def __init__(self, tempo: dict, rate: int, count_in_bars: int = 1, level_dbfs: float = -12.0,
+                 through: bool = True):
+        self.through = through
         self.rate = rate
         self.spb = 60.0 / float(tempo["bpm"])
         self.bpb = int(tempo.get("beats_per_bar", 4))
@@ -362,6 +365,8 @@ class ClickStream:
         out = np.zeros(frames, dtype=np.float32)
         k = max(self.k0, int(np.floor(((p0 - self.dur) / self.rate - self.lead) / self.spb)))
         while (i := int(round((self.lead + k * self.spb) * self.rate))) < p1:
+            if not self.through and k >= 0:
+                break  # the count-in is over: silence from here
             if i + self.dur > p0:
                 a, b = max(i, p0), min(i + self.dur, p1)
                 out[a - p0:b - p0] += self.clicks[k % self.bpb == 0][a - i:b - i]

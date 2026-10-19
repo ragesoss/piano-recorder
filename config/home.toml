@@ -19,6 +19,13 @@ port = 8002
 stop = ["/api/record/stop", "/api/stop"]
 
 [[apps]]
+id = "transcribe"
+name = "Transcribe"
+about = "Record a take and see it as notation and tab"
+port = 8006
+stop = ["/api/record/stop"]
+
+[[apps]]
 id = "chords"
 name = "Chords"
 about = "The chord being played, and checks of it"

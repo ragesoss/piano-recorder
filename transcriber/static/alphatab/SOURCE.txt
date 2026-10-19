@@ -1,0 +1,10 @@
+alphaTab 1.8.4 (released 2026-07-05), from npm: @coderline/alphatab@1.8.4
+  package sha1 4b6874b056f54a0271348f5f6ed8ee5d9b8dfc95
+  integrity sha512-VN5rfTZZWgA63Ny1aDKCp02k3Qm9CHhg4Q9AnK0kHm7G+fNDNZo36TeToPDFoJ6VpB9+AHcCrHwHFUP1tKqdsw==
+Files, as they are in the package:
+  alphaTab.min.js          dist/alphaTab.min.js (the UMD build)
+  font/Bravura.woff2       dist/font/Bravura.woff2 (the music font: SIL Open Font License 1.1, font/Bravura-OFL.txt)
+  font/Bravura.woff        dist/font/Bravura.woff
+  LICENSE                  alphaTab's licence: Mozilla Public License 2.0
+  LICENSE.header           the libraries it includes, and their licences (MIT, BSD-3-Clause)
+Not taken: the player's SoundFont (the page plays the take's own sound, not a synthesizer).

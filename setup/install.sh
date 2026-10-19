@@ -5,7 +5,7 @@
 set -eu
 app=$(cd "$(dirname "$0")/.." && pwd)
 
-sudo apt-get install -y -q alsa-utils flac python3-venv >/dev/null
+sudo apt-get install -y -q alsa-utils flac ffmpeg python3-venv >/dev/null
 
 [ -d "$app/.venv" ] || python3 -m venv "$app/.venv"
 "$app/.venv/bin/pip" install -q --upgrade pip
@@ -36,6 +36,14 @@ if [ ! -f /etc/chord-listener.toml ]; then
 fi
 mkdir -p "$(PYTHONPATH="$app" "$app/.venv/bin/python" -c "from recorder.config import load_config; print(load_config('/etc/chord-listener.toml').takes_dir)")"
 
+# The transcribe app (transcriber/): its own config, and its take folders. It runs the transcription
+# project's pipeline and review generator from ~/dobro-transcription (its [pipeline] and [review]).
+if [ ! -f /etc/take-transcriber.toml ]; then
+    sudo install -m 644 "$app/config/transcribe.toml" /etc/take-transcriber.toml
+    echo "installed /etc/take-transcriber.toml"
+fi
+mkdir -p "$(PYTHONPATH="$app" "$app/.venv/bin/python" -c "from recorder.config import load_config; print(load_config('/etc/take-transcriber.toml').takes_dir)")"
+
 # The services: (re)installed and restarted on every run. room-home is the
 # home page on port 80, linking this and the other apps (home/server.py).
 if [ ! -f /etc/room-home.toml ]; then
@@ -47,12 +55,12 @@ fi
 user=$(id -un)
 unit_tmp=$(mktemp)
 trap 'rm -f "$unit_tmp"' EXIT
-for unit in practice-recorder exercise-recorder chord-listener room-home; do
+for unit in practice-recorder exercise-recorder chord-listener take-transcriber room-home; do
     sed -e "s|@USER@|$user|g" -e "s|@APP@|$app|g" "$app/setup/$unit.service" >"$unit_tmp"
     sudo install -m 644 "$unit_tmp" /etc/systemd/system/$unit.service
 done
 sudo systemctl daemon-reload
-for unit in practice-recorder exercise-recorder chord-listener room-home; do
+for unit in practice-recorder exercise-recorder chord-listener take-transcriber room-home; do
     sudo systemctl enable -q $unit
     sudo systemctl restart $unit
 done
@@ -72,3 +80,7 @@ echo "control unit ready: $app, takes in $takes, service $state"
 # Configs installed before are kept as they were: say what they lack.
 grep -q '127.0.0.1:8002' /etc/practice-recorder.toml || echo "note: /etc/practice-recorder.toml has no exercise app (127.0.0.1:8002) among its peers"
 grep -q 'port = 8002' /etc/room-home.toml || echo "note: /etc/room-home.toml does not list the exercise app (port 8002)"
+for f in /etc/practice-recorder.toml /etc/exercise-recorder.toml; do
+    grep -q '127.0.0.1:8006' "$f" || echo "note: $f has no transcribe app (127.0.0.1:8006) among its peers"
+done
+grep -q 'port = 8006' /etc/room-home.toml || echo "note: /etc/room-home.toml does not list the transcribe app (port 8006)"

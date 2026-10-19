@@ -1,0 +1,67 @@
+# The transcribe app's config (transcriber/), installed as /etc/take-transcriber.toml by setup/install.sh.
+# The same devices and inputs as the exercise app (config/exercises.toml): the 18i8, inputs 3, 4 and 7.
+
+capture = "scarlett-18i8-gen3"
+playback = "scarlett-18i8-gen3"
+# As the exercise app keeps them: 0 the Nadine (input 3), 1 the room mic (input 4), 2 the piezo (rear line
+# input 7). A take's folder holds the instrument's input alone (take-01.flac) and all three (raw/).
+keep_channels = [2, 3, 6]
+# The take folders ("~" is the home of the user the service runs as): what "Review it" hands the review app.
+takes_dir = "~/transcribe-takes"
+# Before recording, this app asks each of these to let go of the inputs and the speakers (recorder/peers.py):
+# 8000 the practice recorder, 8001 the ambient synth, 8002 the exercise app, 8003 the chord app, 8004 the Ugly
+# Duckling String Band. It answers /api/yield itself (refused while it records).
+peers = ["http://127.0.0.1:8000", "http://127.0.0.1:8001", "http://127.0.0.1:8002", "http://127.0.0.1:8003",
+         "http://127.0.0.1:8004"]
+
+# As in config/exercises.toml.
+[inputs.7]
+name = "Piezo"
+details = "Fishman Full Circle, through the Fishman Pro-EQ Platinum DI, into rear line input 7"
+for = "bass"
+
+[inputs.3]
+name = "Nadine"
+details = "Ear Trumpet Labs Nadine, on the bass"
+for = "bass"
+
+[inputs.4]
+name = "Room mic"
+details = "MXL 990 (cardioid large-diaphragm condenser, phantom power), gain about halfway (2026-10-17)"
+
+# What this app records, as the pipeline names it (`transcribe --instrument`), and the input that carries it
+# unless the page says another: the dobro on the room mic; the bass on the Nadine, as the corpus's bass takes
+# (dobro-transcription tunes/bass/*: "the Nadine's channel alone").
+[instruments.dobro]
+name = "Dobro"
+input = 4
+
+[instruments.bass]
+name = "Bass"
+input = 3
+
+# The transcription project's package as synced to the unit, and the venv that has its dependencies (numpy,
+# scipy, librosa, soundfile): the review app's. A run gets a few threads and nice 19.
+[pipeline]
+python = "~/dobro-transcription/review/.venv/bin/python"
+src = "~/dobro-transcription/pipeline/src"
+threads = 2
+nice = 19
+
+# "Review it": the review app's generator (review/make_review.py take-check), run in the project's folder with
+# its venv; --install local puts the review in REVIEW_DATA, which the review app (port 8005) reads.
+[review]
+root = "~/dobro-transcription"
+python = "~/dobro-transcription/review/.venv/bin/python"
+data = "~/review-data"
+port = 8005
+
+[web]
+host = "0.0.0.0"
+port = 8006
+
+[loudness]
+# As the practice recorder's (config/practice.toml); this app plays only its click.
+target_dbfs = -21.0
+limit_dbfs = -1.0
+max_gain_db = 16.0

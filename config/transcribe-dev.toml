@@ -1,0 +1,47 @@
+# The transcribe app on the desktop, with the fake device and the transcription project's checkout.
+
+capture = "fake"
+playback = "fake"
+# As on the control unit (config/transcribe.toml): the fake device's four channels stand in.
+keep_channels = [2, 3, 0]
+takes_dir = "transcribe-takes-dev"
+
+[inputs.1]
+name = "Piezo"
+details = "Fishman Full Circle, through the Fishman Pro-EQ Platinum DI"
+for = "bass"
+
+[inputs.3]
+name = "Nadine"
+details = "Ear Trumpet Labs Nadine, on the bass"
+for = "bass"
+
+[inputs.4]
+name = "Room mic"
+details = "The condenser, pointed at the player"
+
+[instruments.dobro]
+name = "Dobro"
+input = 4
+
+[instruments.bass]
+name = "Bass"
+input = 3
+
+[pipeline]
+python = "python3"
+src = "~/play/dobro-transcription/pipeline/src"
+
+[review]
+root = "~/play/dobro-transcription"
+python = "python3"
+data = "transcribe-takes-dev/.review-data"
+
+[web]
+host = "127.0.0.1"
+port = 8006
+
+[loudness]
+target_dbfs = -21.0
+limit_dbfs = -1.0
+max_gain_db = 30.0

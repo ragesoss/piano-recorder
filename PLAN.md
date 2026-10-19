@@ -696,6 +696,86 @@ same way).
   `*.pre-chords.bak`). Not yet tried on the LIVA: listening to the 18i8, or a recording taking the
   inputs from it.
 
+### 8. The transcribe app (started 2026-10-19)
+
+The player's request: record a take on the phone and see the transcription pipeline's notation and tab for
+it right there, with playback; "Review it" sends the take to the review app (dobro-transcription's, port
+8005), whose answers turn the draft into the take's answer key.
+
+- **A seventh program on the control unit:** `transcriber/`, port 8006, `setup/take-transcriber.service`, its
+  own config (`/etc/take-transcriber.toml` from `config/transcribe.toml`) and take folders
+  (`~/transcribe-takes`). The exercise app's devices and inputs (the 18i8; inputs 3, 4 and 7). It uses the
+  recorder's engine, click and line-up, and takes turns as the others do (`peers`: 8000-8004; the practice
+  recorder, the exercise app, the ambient synth and the band list 8006). The chord app asks no one, so it
+  needs no change. A tile on the home page.
+- **The look and flow** are the exercise app's redesign (step 6): dark, purple for what to tap, steps that
+  open on Ready as left, the choices kept on the unit (`/api/choices`).
+  - **Choosing:** two steps. What you are playing (the dobro or the bass, `[instruments.*]` in the config)
+    and which input carries it (the dobro the room mic, input 4; the bass the Nadine, input 3, as the corpus's
+    bass takes; any kept input can be chosen, with its level). Then the take: the tempo, the beats in a bar
+    (4, 3 or 2), a bar's count-in (on), the click all through (on), a name if wanted. A new instrument or
+    input chosen from Ready goes straight back to it; the take's step has its "Back to Ready".
+  - **Recording:** the record screen (the input's level, the click's level on the speakers, Record), then
+    the take (the count-in counted down, then the bar and beat; the input's meter and peak; Stop).
+  - **The take:** first how its transcription goes (the stage, the time, an estimate from the takes this
+    unit has done), with its sound playable meanwhile; then the tempo, the meter, the bars and notes found
+    and how long transcribing took, the notation and tab (or the tab alone), and the take's own sound at
+    full or half speed with a cursor over the beat played and its bar lit. A tap on a bar plays from there.
+    "Review it", rename, delete (asked on the page), the FLAC and the MusicXML.
+  - **Takes:** newest first, to reopen, rename or delete.
+- **The timing:** over the click, `Engine.start_click` with no last beat (`playalong.ClickStream`, as the
+  exercise app's free take); the count-in alone with the click off (new: `ClickStream(through=False)`, the
+  count-in and then silence until Stop; `click_track(..., through=False)` the same sample for sample, so a
+  take lines up again from its sidecar); neither, a plain take. The click is found in the take as the
+  exercise app finds it (`find_click`, over every kept input): bar 1's downbeat.
+- **After the take** (`transcriber/jobs.py`, one take at a time):
+  - **Its folder,** laid out as a folder of the corpus (dobro-transcription `tunes/<instrument>/<name>/`;
+    `transcriber/store.py`): `take-01.flac` (the instrument's input alone, mono, 48 kHz, 24-bit FLAC),
+    `takes.csv` (the corpus's columns, `read_takes` reads it), `meta.json` (instrument, bpm, beats_per_bar,
+    count_in_bars, click, title, recorded_at, the app's version; the input, the downbeat found, the
+    transcription's state and time, the review's id), `raw/` (every kept input and the engine's sidecar),
+    `play/` (the page's sound), `transcription.musicxml` and `transcription.json`. The engine's own copy is
+    deleted.
+  - **Its sound for the page:** `play/full.mp3` and `play/half.mp3` (ffmpeg's `atempo=0.5`: half speed with
+    the pitch kept, the review app's way).
+  - **The transcription:** `transcriber/job/run_pipeline.py` in the review app's venv on the unit (numpy 2.2.4,
+    scipy 1.18.1, librosa 1.0.0, soundfile 0.14.0), with `~/dobro-transcription/pipeline/src` on its path, at
+    nice 19 and two threads; held still (SIGSTOP) while this app records, and none starts then. Over the
+    click: `--metronome --downbeat S`, the score's beats the click's. With the click off: the beat tracker
+    from the tempo given (`transcribe.chords.beat_grid`), whose tempo the pipeline is told when within 15%
+    of it, and `--downbeat` from the count-in if there was one; the score's beats are placed by its notes.
+    `transcription.json`: each note's time, beat, bar, pitch, string, fret, technique and length, and every
+    beat of the score in the take's time (what the page's cursor follows). `takes.csv` then gets bar 1's
+    downbeat as `beat0_s` (the one told, else the transcription's: what the review side reads while the
+    take has no key), the tempo transcribed at and the pickup.
+- **The notation:** alphaTab 1.8.4 (MPL-2.0; the npm package's `alphaTab.min.js`, its Bravura font under the
+  SIL OFL 1.1, `transcriber/static/alphatab/SOURCE.txt`), served by the app: no CDN. It reads the pipeline's
+  MusicXML as it is; for drawing only, the tab staff's voice 5 becomes voice 1 (alphaTab drew an empty voice 1
+  there as a rest in every bar). Its player is not used: the page plays the take itself and puts the cursor
+  where `transcription.json`'s beats say. It signs the score "rendered by alphaTab".
+- **"Review it":** `cd ~/dobro-transcription && PYTHONPATH=.:pipeline/src review/.venv/bin/python -m
+  review.make_review take-check FOLDER --install local`, in the background; the id from its first line,
+  kept in `meta.json`; the page links to `http://<host>:8005/#/r/<id>` (the review app's links). Until
+  `make_review.py` lists `take-check` among its kinds (looked for each time the page loads), the page says
+  the review app doesn't check takes yet.
+- **Bringing a recording in:** `tools/import-take FILE --instrument dobro --bpm 100 [--click]
+  [--downbeat S] [--channel N] [--title T]` on the unit makes a take folder of it and has the app transcribe
+  it.
+- **Tried on the desktop** (fake device; the pipeline from `~/play/dobro-transcription`, Core i7-12700K; nice
+  19, two threads): takes over the click, with the count-in alone, and with neither, on the dobro and the bass,
+  the folder as above (read by `read_takes`). Transcribing, by `tools/import-take`: Red Wing (80 s) over its
+  click 4.0 s, as free play from 96 bpm 15.7 s (the tracker found 99.4; the quantizer's tempo search without a
+  click is the slow part), the bass's Cherokee Shuffle (162 s, from its downbeat, no click) 18.5 s; 527 MB at
+  the most for Red Wing. Rendering both mp3s: under 1 s. "Review it" against the review side's take-check as it
+  was being written (its worktree): the review made in 8 s, linked as `#/r/take-check-2026-10-19-075545`. The
+  page in headless Chrome at 390x844, 820x1180 and 1180x820: every step, a recording, the take drawn, played,
+  the cursor following, half speed, a tap on bar 3 playing from 5.18 s, the takes renamed and a delete asked;
+  no console errors, no sideways scroll.
+- **On the unit (estimated, not measured):** its Core i7-5500U runs one thread about 2.5-3.5 times slower than
+  the desktop's, so Red Wing over a click about 10-15 s, as free play 40-55 s, a 3-minute bass take 45-65 s.
+  The page's first estimate is 0.4 s a second of take until the unit has done some.
+- **Not yet deployed.**
+
 ## Open questions
 
 - ~~Which instrument?~~ The piano (2026-10-10). The speakers are across

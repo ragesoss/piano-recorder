@@ -101,6 +101,12 @@ function describe(a) {
   const s = a.status;
   if (!a.up) return ["Not running", false, true];
   if (a.id === "practice" || a.id === "exercises") return recorderState(s);
+  if (a.id === "transcribe") {  // the same engine, and a transcription after each take
+    if (s.state === "recording") return recorderState(s);
+    if (s.job || (s.queue || []).length) return ["Transcribing a take", true];
+    if (s.review) return ["Making a review", true];
+    return ["Ready", false];
+  }
   if (a.id === "ambient") {
     const st = s.state;
     const sc = s.explain && s.explain.scale;

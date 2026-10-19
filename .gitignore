@@ -14,6 +14,8 @@ __pycache__/
 /exercises-dev/
 # The chord app's checks (config/chords-dev.toml: chord-checks-dev/).
 /chord-checks*/
+# The transcribe app's takes (config/transcribe-dev.toml: transcribe-takes-dev/).
+/transcribe-takes*/
 *.wav
 *.flac
 *.mp3
