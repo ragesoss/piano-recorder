@@ -781,6 +781,7 @@ it right there, with playback; "Review it" sends the take to the review app (dob
   app restarted), and the ambient synth and the band restarted to read their peers. On the unit: Red Wing's take 1
   (80 s) imported by `tools/import-take` over its click, transcribed in 14.0 s (183 notes, 32 bars); "Review it" made
   `take-check-2026-10-19-082229` (8 questions) in about 5 s.
+- **The piano deployed 2026-10-19 at 09:31**: `[instruments.piano]` (input 4, the room mic) added by hand to `/etc/take-transcriber.toml` (`.pre-piano.bak` kept), the review app's `take-check` with the piano deployed before it.
 - **The piano** (2026-10-19, the player: "piano should be added as an option for transcriber"). A third
   instrument, `[instruments.piano]`, on input 4, the room mic (the MXL 990), as the exercise app records the piano:
   every piano exercise take's sidecar (2026-10-17) has input 4 carrying the piano and inputs 3 and 7 nothing, so a
