@@ -525,6 +525,36 @@ on the same screen as the controls, so a take needs little preparation.
     unit (`--audio-only`, 184 MB there). The player chose their own SoundFonts where there are
     any (the Beard, the Cleveland), GS for the rest, after an A/B with GS's steel-string guitar
     and acoustic bass. Not yet heard over the speakers on the unit.
+- **The board** (2026-10-19, the player's request: "i want the index of the exercises app to be a board
+  showing which exercises are wanted, by instrument, so i can jump straight to an exercise i want to record.
+  (an instrument-specific screen could remain as an optional narrower index / starting point)").
+  - **The app opens on the board** ("What's wanted"), not on Ready. A column for each instrument with
+    something wanted: wanted again (with why), then no take yet, then what was recorded here since and is
+    waiting for the project to bring it in (dashed, "Recorded today 3:58 PM"). The instruments with nothing
+    wanted are named at the top, as links to their lists. Above the columns: Play-along, Free play, and
+    "As you left it" (the next take as saved, "Back to it" to its record screen).
+  - **A tap sets the exercise up and opens its record screen** (the score, Record): on the instrument of
+    its kind played last, with the inputs that take had (else the first the project knows of that kind,
+    else "a banjo (not listed)"). Ready stays as the screen for the click, count-in and tempo (the record
+    screen's "over the click at 80", or the crumb).
+  - **An instrument's list** (the old picker: what it wants first, the good ones, the tunes, the score of the
+    one tapped) is "All 29" on its column; "Set up 026" opens the record screen. `#dobro` in the address
+    opens it, so a bookmark can start there. The page keeps its screen in the address (`#ready`,
+    `#record`, ...), so a reload (Safari drops tabs it has not shown for a while) comes back to it.
+  - **The steps:** "What sort" is gone (the board asks it). A play-along or free take walks from the board:
+    on what, which backing or anything from the speakers, Ready. The crumbs: Music room, Exercises (the
+    board), the instrument (On what), the exercise or backing, Ready, Record, the take. "Record something
+    else" goes to the board.
+  - Also: the record screen's sentence at 32 px (44 before), so the score starts higher; the voice is "your
+    voice" ("with your voice"); exercises sharing a number (the voice's 001s) are named by title in Ready's
+    "Swap to" and the crumbs; an exercise the project does not list (`dobro-021-hammer-or-pick-doubled`) is
+    "Not in the project's list", not "Needs a take"; a long "wanted again" note no longer spills out of
+    its row; choices not yet sent go when the page is hidden or unloaded.
+  - Tried on the desktop (fake device; the unit's 94 exercises, status and 24 takes mirrored over its API,
+    the audio silent; Chrome headless via Playwright at 1180x820, 820x1180 and 390x844): the board, a jump,
+    the crumbs, an instrument's list, Set up, Ready, the voice, a play-along walked and backed out of, a
+    reload on `#dobro`, a take over the click and "Next wanted" from it. No console errors, no sideways
+    scroll. The tests pass (142). Not yet deployed.
 - **Next:** a tool to bring exercise takes into dobro-transcription with
   their `takes.csv` rows (`tools/pull-take` reads only the practice
   recorder's takes; exercise takes need `/etc/exercise-recorder.toml`),
