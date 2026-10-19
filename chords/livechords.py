@@ -1,4 +1,4 @@
-# Copied from dobro-transcription pipeline/src/transcribe/livechords.py (3be3b04) by tools/sync-livechords.
+# Copied from dobro-transcription pipeline/src/transcribe/livechords.py (61470b1) by tools/sync-livechords.
 # Change it there and copy it again; do not edit this copy.
 """Chords in the moment, for a band that follows: per beat, what the audio heard so far says the chord
 is, where in a chart the player is, and the key. Causal: every answer at a time t uses only audio
@@ -23,6 +23,9 @@ before t. The pieces and settings are the ones `tools/realtime_chords_study.py` 
 - Following a chart (`ChartFollower`): a forward HMM over the chart's beats, moving on one beat at a
   time, now and then holding a beat or jumping to a bar's first beat; it predicts the next beat's
   chord before the beat, 0.99-1.00 on takes played as written.
+- A bass alone (`bass_line_scores`, 2026-10-18): each beat's note, from its partials, scored for each
+  chord by how often a bass line plays it there (the root, the fifth by turns), for the chart follower
+  in place of the chroma's scores, which hear a low note's partials as its own chord.
 - The key (`KeyGuess`): the pitch classes heard so far against the Krumhansl-Kessler profiles; with
   the key, its bluegrass chords (I IV V V7 ii vi iii II II7 VI7 III7 I7 bVII) are favoured.
 """
@@ -674,6 +677,11 @@ def _fill(a: list, own: list, h: list, lh: list, fill: list | None = None) -> li
     return out
 
 
+STACK_TRACE: list | None = None  # for studies: when a list, `_stacked` appends each note it tests on a found
+# note's partial: ([(found note, its partial number)], the note, its fundamental's peak, the found notes' share,
+# and (as a candidate) [(its peak, the found notes' share there)] at its first 8 partials with a peak)
+
+
 def _stacked(notes: set, level_of: dict, idx: np.ndarray, A: np.ndarray, expect: np.ndarray, chance: np.ndarray,
              fund: np.ndarray, none: int, search: NoteSearch) -> dict:
     """Notes struck on another note's partials, which the set search cannot tell from those partials, since
@@ -751,6 +759,10 @@ def _stacked(notes: set, level_of: dict, idx: np.ndarray, A: np.ndarray, expect:
             q0 = first[m]
             if q0 == none or not any(n < m and q0 in row(n)[6] for n in found):
                 continue
+            if STACK_TRACE is not None:
+                STACK_TRACE.append(([(PIANO_RANGE[0] + n, row(n)[0].index(q0) + 1) for n in sorted(found)
+                                     if n < m and q0 in row(n)[6]], PIANO_RANGE[0] + m, row(m)[2][0],
+                                    shares(tuple(sorted(found - {m})), m).get(q0, 0.0)))
             if row(m)[2][0] < search.stack_ratio * shares(tuple(sorted(found - {m})), m).get(q0, 0.0):
                 found.discard(m)
                 level_of.pop(m, None)
@@ -765,6 +777,13 @@ def _stacked(notes: set, level_of: dict, idx: np.ndarray, A: np.ndarray, expect:
         cands = {m for n in found for q in row(n)[0][1:search.stack_partials] if q != none
                  for m in by_fundamental.get(q, ()) if m not in found}
         F = tuple(sorted(found))
+        if STACK_TRACE is not None:
+            for m in sorted(cands):
+                pred = shares(F, m)
+                under = [(PIANO_RANGE[0] + n, row(n)[0].index(first[m]) + 1) for n in F if first[m] in row(n)[0][1:]]
+                q, a = idx[m].tolist(), A[m].tolist()
+                STACK_TRACE.append((under, PIANO_RANGE[0] + m, row(m)[2][0], pred.get(first[m], 0.0),
+                                    [(a[k], pred.get(q[k], 0.0)) for k in range(min(H, 8)) if q[k] != none]))
         tested = [(m, pred) for m in cands for pred in (shares(F, m),)
                   if not row(m)[2][0] < search.stack_ratio * pred.get(first[m], 0.0)]
         best = None
@@ -894,6 +913,68 @@ def chord_scores(treble: np.ndarray, bass: np.ndarray | None, w_bass: float = 0.
     if bass is not None and w_bass:
         s = s + w_bass * ((BI if inversions else B) @ (bass / (bass.sum() + 1e-12)))
     return s
+
+
+# --- a bass alone: its note as a chord's root or fifth ---------------------------------------------
+# A bass playing alone gives one note at a time, and one note is ambiguous: a bluegrass bass plays the root and the
+# fifth by turns, so an E over A is A's fifth as often as E's root. The chroma's scores cannot say so: a low note's
+# partials (the octave, twelfth, two octaves, seventeenth and the flat seventh at the 7th) are its own major chord with
+# a seventh, so `chord_scores` hears E1 alone as E7, 0.5-0.8 over A, and the chart follower (beta 10) takes two beats
+# of the fifth for the V chord (Cherokee Shuffle on the bass, 2026-10-18). `bass_line_scores` reads the note's pitch
+# class and scores each chord by how often a bass line plays that note over it.
+
+# the share of beats a bass line's note is a chord's root, fifth, third, seventh (a seventh chord's) or another note
+# (a walk, a passing tone): the notes sounding on each beat of the bass play-alongs' keys (Cherokee Shuffle 432 beats:
+# root 0.69, fifth 0.19, the 2nd, 3rd and major 7th about 0.035 each; Saint Anne's Reel 384: 0.65, 0.30, 0.02, 0.01)
+BASS_LINE = {"root": 0.67, "fifth": 0.24, "third": 0.03, "seventh": 0.02, "other": 0.005}
+BASS_LINE_RANGE = (28, 52)  # E1 to E3: where the bass's note is looked for
+BASS_LINE_PARTIALS = 6  # its partials summed (1/h each, on the compressed saliences: `bass.BassParams.name_power`)
+BASS_LINE_SHARPNESS = 4.0  # each pitch class's share of the note: its salience over the strongest's, to this power
+BASS_LINE_SCALE = 0.1  # log-likelihoods to score units: the chart follower (beta 10) weighs them as likelihoods
+
+
+def _bass_line_table(line=BASS_LINE) -> np.ndarray:
+    """P(the bass's pitch class | chord), (len(CHORDS), 12)."""
+    P = np.full((len(CHORDS), 12), line["other"])
+    for k, (r, q) in enumerate(CHORDS):
+        iv = ALL_QUALITIES[q]
+        P[k, (r + iv[1]) % 12] = line["third"]
+        if len(iv) > 3:
+            P[k, (r + iv[3]) % 12] = line["seventh"]
+        P[k, (r + 7) % 12] = line["fifth"]
+        P[k, r] = line["root"]
+    return P / P.sum(axis=1, keepdims=True)
+
+
+BASS_LINE_TABLE = _bass_line_table()
+
+
+def bass_classes(V: np.ndarray, rng: tuple[int, int] = BASS_LINE_RANGE,
+                 partials: int = BASS_LINE_PARTIALS) -> np.ndarray:
+    """Each pitch class's salience as the bass's note (12): the sum of its partials' saliences (`V` as
+    `window_salience` gives them, cube-root compressed; the h-th weighted 1/h) at its strongest octave in `rng`.
+    Compressed, so a resonance's one strong peak does not outweigh a note's series (`bass.py`, "name_power")."""
+    R = np.maximum(np.asarray(V, dtype=float), 0.0)
+    q = np.zeros(12)
+    for m in range(rng[0], rng[1] + 1):
+        i = m - LO
+        s = sum(R[i + o] / h for h, o in enumerate(HARMONIC_SEMIS[:partials], start=1) if i + o < len(R))
+        q[m % 12] = max(q[m % 12], s)
+    return q
+
+
+def bass_line_scores(V: np.ndarray, sharpness: float = BASS_LINE_SHARPNESS, scale: float = BASS_LINE_SCALE,
+                     table: np.ndarray = BASS_LINE_TABLE) -> np.ndarray:
+    """Each of CHORDS scored by the bass's note in a window (`V`, its semitone saliences): the log of how likely a
+    bass line is to play it over the chord (`BASS_LINE`), the note a mixture of the pitch classes by their share
+    (`bass_classes` over the strongest, to `sharpness`; a note half as salient as the strongest counts 1/16), times
+    `scale`. An E counts for E (its root) 2.8 times as much as for A (its fifth), where the chroma's scores made it
+    130-3600 times."""
+    q = bass_classes(V)
+    if q.max() <= 0:
+        return np.zeros(len(CHORDS))
+    q = (q / q.max()) ** sharpness
+    return scale * np.log(table @ (q / q.sum()))
 
 
 # --- the key ---------------------------------------------------------------------------------------
