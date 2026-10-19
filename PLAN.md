@@ -554,7 +554,12 @@ on the same screen as the controls, so a take needs little preparation.
     the audio silent; Chrome headless via Playwright at 1180x820, 820x1180 and 390x844): the board, a jump,
     the crumbs, an instrument's list, Set up, Ready, the voice, a play-along walked and backed out of, a
     reload on `#dobro`, a take over the click and "Next wanted" from it. No console errors, no sideways
-    scroll. The tests pass (142). Not yet deployed.
+    scroll. The tests pass (142). Deployed 2026-10-19 at 16:02 (everything idle).
+  - **Still open for the exercise app** (`docs/ui-issues.md`): the score's room on the record screen and during
+    a take (the sentence is smaller; the side column and the score's own scale are not yet looked at); not yet
+    used on the iPad. Next with dobro-transcription's generic exercises (its `docs/strings-plan.md`): each new
+    instrument's set is a column of its own once pushed, recorded as "a mandolin (not listed)" until
+    `instruments.csv` has a row for it.
 - **Next:** a tool to bring exercise takes into dobro-transcription with
   their `takes.csv` rows (`tools/pull-take` reads only the practice
   recorder's takes; exercise takes need `/etc/exercise-recorder.toml`),
