@@ -775,6 +775,12 @@ it right there, with playback; "Review it" sends the take to the review app (dob
   the desktop's, so Red Wing over a click about 10-15 s, as free play 40-55 s, a 3-minute bass take 45-65 s.
   The page's first estimate is 0.4 s a second of take until the unit has done some.
 - **Not yet deployed.**
+- **Deployed 2026-10-19 at 08:21-08:23.** The peers on the unit by hand first (`/etc/*.toml.pre-transcribe.bak`
+  kept): 8006 added to the practice recorder's, the exercise app's, the ambient synth's and the band's lists, and the
+  tile to `/etc/room-home.toml`; then `tools/deploy` (the recorders, the chord app, the home page and the transcribe
+  app restarted), and the ambient synth and the band restarted to read their peers. On the unit: Red Wing's take 1
+  (80 s) imported by `tools/import-take` over its click, transcribed in 14.0 s (183 notes, 32 bars); "Review it" made
+  `take-check-2026-10-19-082229` (8 questions) in about 5 s.
 
 ## Open questions
 
