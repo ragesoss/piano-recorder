@@ -98,7 +98,8 @@ def create_app(cfg: Config) -> FastAPI:
         else:
             while engine.rec is not None and engine.rec.take_id == take_id:
                 time.sleep(0.1)
-        jobs.pause(False)
+        if engine.rec is None:  # not if the next take started while this one was lined up: its own end lets go
+            jobs.pause(False)
         try:
             work.path(take_id)
         except TakeNotFound:  # it never started (the device busy or gone): no take
