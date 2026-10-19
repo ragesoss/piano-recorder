@@ -130,11 +130,13 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.get("/alphatab/{path:path}")
     def alphatab(path: str):
-        """alphaTab's script, its music font (Bravura, SIL OFL 1.1) and their licences."""
+        """alphaTab's script, its music font (Bravura, SIL OFL 1.1), its player's SoundFont (sonivox.sf2,
+        Apache-2.0) and their licences."""
         full = (ALPHATAB / path).resolve()
         if not SAFE_PATH.match(path) or ALPHATAB.resolve() not in full.parents or not full.is_file():
             raise HTTPException(404, "no such file")
-        types = {".js": "text/javascript", ".woff2": "font/woff2", ".woff": "font/woff", ".txt": "text/plain"}
+        types = {".js": "text/javascript", ".woff2": "font/woff2", ".woff": "font/woff", ".txt": "text/plain",
+                 ".sf2": "application/octet-stream"}
         return FileResponse(full, media_type=types.get(full.suffix, "text/plain"),
                             headers={"Cache-Control": "max-age=86400"})
 

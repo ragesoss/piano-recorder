@@ -525,6 +525,16 @@ def test_the_page_draws_with_alphatab_from_the_app_itself(client):
         assert client.get(f"/fonts/{name}").status_code == 200
 
 
+def test_the_transcription_plays_through_alphatabs_synthesizer_with_its_own_soundfont(client):
+    page = client.get("/").text
+    assert 'font: "/alphatab/soundfont/sonivox.sf2"' in page and "alphaTab.PlayerMode.EnabledSynthesizer" in page
+    assert 'data-act="play-score"' in page and "Play the transcription" in page and "Play the take" in page
+    sf = client.get("/alphatab/soundfont/sonivox.sf2")
+    assert sf.status_code == 200 and sf.headers["content-type"] == "application/octet-stream"
+    assert sf.content[:4] == b"RIFF" and sf.content[8:12] == b"sfbk" and len(sf.content) == 1351896
+    assert "Apache License, Version 2.0" in client.get("/alphatab/soundfont/LICENSE").text
+
+
 def test_the_choices_come_back_as_left(client):
     assert client.get("/api/choices").json() == {}
     client.put("/api/choices", json={"instrument": "bass", "bpm": 120, "bpb": 3})

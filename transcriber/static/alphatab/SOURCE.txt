@@ -7,4 +7,9 @@ Files, as they are in the package:
   font/Bravura.woff        dist/font/Bravura.woff
   LICENSE                  alphaTab's licence: Mozilla Public License 2.0
   LICENSE.header           the libraries it includes, and their licences (MIT, BSD-3-Clause)
-Not taken: the player's SoundFont (the page plays the take's own sound, not a synthesizer).
+  soundfont/sonivox.sf2    dist/soundfont/sonivox.sf2 (1,351,896 bytes; the player's General MIDI sounds:
+                           SONiVOX EAS, Apache License 2.0, Copyright (c) 2004-2006 Sonic Network Inc.,
+                           soundfont/LICENSE; soundfont/README.md, its notes)
+The page plays the take's own sound, and with "Play the transcription" the score through alphaTab's
+synthesizer and this SoundFont. To try another font: put its .sf2 in soundfont/ and change the page's
+SOUND constant (the font, and a General MIDI program for each instrument).

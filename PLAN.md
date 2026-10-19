@@ -751,8 +751,38 @@ it right there, with playback; "Review it" sends the take to the review app (dob
 - **The notation:** alphaTab 1.8.4 (MPL-2.0; the npm package's `alphaTab.min.js`, its Bravura font under the
   SIL OFL 1.1, `transcriber/static/alphatab/SOURCE.txt`), served by the app: no CDN. It reads the pipeline's
   MusicXML as it is; for drawing only, the tab staff's voice 5 becomes voice 1 (alphaTab drew an empty voice 1
-  there as a rest in every bar). Its player is not used: the page plays the take itself and puts the cursor
-  where `transcription.json`'s beats say. It signs the score "rendered by alphaTab".
+  there as a rest in every bar). The page plays the take itself and puts the cursor where `transcription.json`'s
+  beats say. It signs the score "rendered by alphaTab".
+- **"Play the transcription"** (2026-10-19; the player, after the first real use: "the transcriptions should
+  include a 'play' button to play a render of the transcription itself"): beside "Play the take" at the foot of
+  the take, the score as written, played by alphaTab's own player (its synthesizer, in a worker) with alphaTab's
+  cursor on the beat played and its bar lit, the played bar kept in view. One sound at a time: either button
+  stops the other. Full or half speed applies to both. A tap on a bar, or on the position bar, plays the sound
+  last chosen from there; the position bar shows the take's time for the beat the transcription is on.
+  - **The SoundFont:** `sonivox.sf2` from the same npm package (`dist/soundfont/`, 1,351,896 bytes; SONiVOX EAS,
+    Apache License 2.0, Copyright 2004-2006 Sonic Network Inc.; `static/alphatab/soundfont/LICENSE`), served by
+    the app at `/alphatab/soundfont/`. It loads when "Play the transcription" is first pressed (the player is
+    made inside that tap, so the audio may start), and the browser keeps it a day.
+  - **The sounds:** General MIDI programs (0-based), set on the score's track when it loads: the dobro 25,
+    Acoustic Guitar (steel), the nearest; the bass 32, Acoustic Bass; the piano 0, Acoustic Grand Piano.
+  - **Each note once:** the pipeline writes every note on both staves (the notation, and the tab), and alphaTab
+    plays every staff. In alphaTab's `midiLoad` event (the MIDI before the player gets it) the second note-on of
+    a pitch at the same tick is taken out (the tab's kept: its pull-offs and hammer-ons), with the matching
+    note-offs and bends. Today's dobro take: 170 note-ons to 85, its 85 notes.
+  - **To change the sound by ear:** the page's `SOUND` constant (the font's path, a program for each
+    instrument); a font is put in `static/alphatab/soundfont/`. The room's own fonts (ambient-room
+    `sounds/dobro.sf2` and `upright.sf2`) are prototypes the player says don't sound right yet: a later option,
+    not used now.
+  - **Tried on the desktop** in headless Chrome at 390x844, 820x1180 and 1180x820, on today's take (35 s,
+    17 bars): the transcription played (the cursor moving, the take's time 0 to 3.7 s after 2 s), the take
+    played after it and stopped it, half speed, a tap on bar 3 playing from it, no console errors, no sideways
+    scroll. Over `http://` from another host (as `practice.local` is reached) the browser gives no secure
+    context, so alphaTab plays through a ScriptProcessor rather than an AudioWorklet (Chrome warns it is
+    deprecated); it played the same. Tried again the same way once moved onto the piano's commits (ff4e8ac):
+    the same. A piano take's grand staff should play with program 0 (its two staves hold different notes, so
+    nothing is taken out); not tried in a browser yet, with no piano take on the desktop or the unit.
+  - The review app's take check plays its bars' scores the same way (dobro-transcription `docs/review-app.md`,
+    "Played as written"), with the same font. Not deployed.
 - **"Review it":** `cd ~/dobro-transcription && PYTHONPATH=.:pipeline/src review/.venv/bin/python -m
   review.make_review take-check FOLDER --install local`, in the background; the id from its first line,
   kept in `meta.json`; the page links to `http://<host>:8005/#/r/<id>` (the review app's links). Until

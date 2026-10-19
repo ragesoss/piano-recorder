@@ -229,6 +229,20 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
 .player .bar .track { height: 8px; border-radius: 4px; background: var(--line); width: 100%; position: relative; overflow: hidden; }
 .player .bar .track i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--purple); width: 0; }
 .player .t { font-size: 13px; color: var(--ink2); display: flex; justify-content: space-between; }
+/* the two sounds: the take's own, and the transcription as written (alphaTab's synthesizer, /alphatab/soundfont/) */
+.player .plays { display: flex; gap: 8px; flex: none; }
+.player .plays .playbtn { width: auto; height: 52px; padding: 0 18px 0 14px; gap: 8px; font-size: 16px; font-weight: 700; white-space: nowrap; }
+.player .plays .playbtn.synth { background: var(--purple-tint); color: var(--purple-ink); }
+.player .plays .playbtn.synth[aria-pressed="true"] { background: var(--purple-fill); color: #fff; }
+.player .plays .playbtn:disabled { opacity: .55; }
+@media (max-width: 599px) { .player .plays { width: 100%; } .player .plays .playbtn { flex: 1; padding: 0 10px; font-size: 15px; } }
+/* alphaTab's cursor while it plays the transcription; the page's own (.at-cursor, .at-bar) while the take plays */
+#scoreHost .at-cursor-bar { background: rgba(139, 92, 246, 0.16); }
+#scoreHost .at-cursor-beat { background: var(--red-dot); width: 3px; }
+#scoreHost .at-selection div { background: rgba(139, 92, 246, 0.12); }
+#scoreHost .at-highlight * { fill: var(--purple-ink); stroke: var(--purple-ink); }
+#scoreHost:not(.synth) .at-cursors { display: none !important; }
+#scoreHost.synth .at-cursor, #scoreHost.synth .at-bar { display: none !important; }
 
 /* the takes */
 .tk { border: 1.5px solid var(--line); border-radius: 18px; background: var(--surf); display: flex; flex-direction: column; }
@@ -296,6 +310,10 @@ const ICON = {
   dot: '<svg class="svg-i" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="#FF5147" stroke="#FFFFFF" stroke-width="2"></circle></svg>',
 };
 const HOME = `http://${location.hostname}/`;
+// "Play the transcription": alphaTab's synthesizer with this SoundFont (alphaTab's own, sonivox.sf2, Apache-2.0) and a
+// General MIDI program (0-based) for each instrument: 25 Acoustic Guitar (steel), the nearest to the dobro; 32 Acoustic
+// Bass; 0 Acoustic Grand Piano. To try another font by ear: put its .sf2 in static/alphatab/soundfont/ and change these.
+const SOUND = { font: "/alphatab/soundfont/sonivox.sf2", program: { dobro: 25, bass: 32, guitar: 25, piano: 0 } };
 const STEPS = ["on", "details"];
 const DEFAULTS = { instrument: null, inputs: {}, bpm: 90, bpb: 4, countIn: true, click: true, title: "" };
 
@@ -655,7 +673,7 @@ function actionsHtml(t) {
 }
 function playerHtml(t) {
   const on = P.take === t.id && !player.paused;
-  return `<div class="player" aria-label="Play the take"><button type="button" class="playbtn" data-act="play" aria-label="${on ? "Pause" : "Play"}">${on ? ICON.pause : ICON.play}</button>
+  return `<div class="player" aria-label="Play the take or its transcription"><div class="plays">${takeBtnHtml(on)}${scoreBtnHtml(t)}</div>
     <div class="seg" role="radiogroup" aria-label="Speed"><button type="button" aria-pressed="${P.rate === 1}" data-act="speed" data-v="1">Full</button><button type="button" aria-pressed="${P.rate === 0.5}" data-act="speed" data-v="0.5">Half</button></div>
     <div class="pos"><div class="bar" data-seek><span class="track"><i data-play-prog></i></span></div><div class="t tnum"><span data-play-at>${fmt(P.take === t.id ? P.at : 0)}</span><span>${fmt(t.seconds)}</span></div></div></div>`;
 }
@@ -716,7 +734,8 @@ async function loadScore(t) {
     core: { fontDirectory: "/alphatab/font/", useWorkers: false, engine: "svg", enableLazyLoading: false },
     display: { layoutMode: "Page", scale: scaleFor(), resources: RES },
     notation: { rhythmMode: view === "tab" ? "ShowWithBars" : "Hidden", elements },
-    player: { enablePlayer: false },
+    player: { playerMode: alphaTab.PlayerMode.Disabled, soundFont: SOUND.font, enableCursor: true, enableAnimatedBeatCursor: true,
+      enableUserInteraction: false, scrollMode: alphaTab.ScrollMode.Off },
   });
   SC.api = api; SC.scale = scaleFor();
   api.scoreLoaded.on((score) => {
@@ -724,7 +743,9 @@ async function loadScore(t) {
     if (grand) score.tracks.forEach((x) => x.staves.forEach((st) => { st.showStandardNotation = true; st.showTablature = false; st.showSlash = false; st.showNumbered = false; }));
     else if (view === "tab" && tr && tr.staves.length > 1) tr.staves[0].showStandardNotation = false;
   });
-  api.error.on((e) => { host.innerHTML = `<p class="score-empty">The notation could not be drawn: ${esc((e && e.message) || e)}</p>`; });
+  api.error.on((e) => { if (Q.api === api && Q.on) { Q.failed = (e && e.message) || String(e); Q.want = null; playBtns(); return; }
+    host.innerHTML = `<p class="score-empty">The notation could not be drawn: ${esc((e && e.message) || e)}</p>`; });
+  synthFor(api, t);
   api.postRenderFinished.on(() => { if (SC.api === api) buildMap(api); });
   api.load(new TextEncoder().encode(text));
 }
@@ -815,20 +836,89 @@ host.addEventListener("click", (ev) => {
   const b = barAtPoint(ev);
   if (!b) return;
   const t = timeAt(b.tick / 960);
-  if (t != null) playFrom(Math.max(0, t - 0.12));
+  if (P.src === "score") playScore(b.tick);
+  else if (t != null) playFrom(Math.max(0, t - 0.12));
 });
 window.addEventListener("resize", () => {  // a phone turned: the score's scale for its width
   clearTimeout(window._rs);
   window._rs = setTimeout(() => { if (SC.api && SC.scale !== scaleFor()) { SC.scale = scaleFor(); SC.api.settings.display.scale = SC.scale; SC.api.updateSettings(); SC.api.render(); } }, 250);
 });
 
+// --- the transcription's sound: the score drawn, played as written by alphaTab's synthesizer (SOUND), its cursor
+// following. Turned on when first asked for (the SoundFont then loads, 1.35 MB, kept a day). The pipeline writes each note
+// on both staves (notation, and tab) and alphaTab plays every staff, so each note's second copy is taken out of the MIDI.
+const Q = { api: null, on: false, ready: false, playing: false, want: null, done: false, failed: "" };
+function synthFor(api, t) {
+  Object.assign(Q, { api, on: false, ready: false, playing: false, want: null, done: false, failed: "" });
+  api.scoreLoaded.on((score) => {
+    const program = SOUND.program[t.instrument];
+    if (program != null) score.tracks.forEach((tr) => { tr.playbackInfo.program = program; });
+  });
+  api.midiLoad.on((midi) => midi.tracks.forEach((tr) => {
+    // the same note at the same tick twice: the notation staff's and the tab's (the tab's kept: its pull-offs, hammers)
+    const seen = new Set();
+    tr.events = tr.events.reverse().filter((e) => {
+      if (e.noteKey === undefined) return true;
+      const k = e instanceof alphaTab.midi.NoteOnEvent ? `on|${e.tick}|${e.noteKey}` : `${e.type}|${e.tick}|${e.channel}|${e.noteKey}|${e.value}`;
+      if (seen.has(k)) return false;
+      seen.add(k); return true;
+    }).reverse();
+  }));
+  api.playerReady.on(() => { if (Q.api !== api) return; Q.ready = true; if (Q.want != null) { const w = Q.want; Q.want = null; startScore(w); } playBtns(); });
+  api.playerStateChanged.on((e) => { if (Q.api !== api) return; Q.playing = e.state === alphaTab.synth.PlayerState.Playing; playBtns(); });
+  api.playerPositionChanged.on((e) => {
+    if (Q.api !== api || P.src !== "score" || !Q.playing) return;
+    const at = timeAt(e.currentTick / 960);
+    if (at != null) P.at = at;
+    const br = SC.bars && SC.bars.find((b) => e.currentTick >= b.tick && e.currentTick < b.end);
+    if (br) follow(br);
+    tick();
+  });
+  api.playerFinished.on(() => { if (Q.api !== api) return; Q.playing = false; Q.done = true; playBtns(); });
+}
+function playScore(fromTick) {
+  const api = SC.api;
+  if (!api || !SC.ready || Q.api !== api || Q.failed) return;
+  player.pause();
+  P.take = S.take; P.src = "score"; Q.done = false; host.classList.add("synth");
+  api.playbackSpeed = P.rate;
+  if (!Q.on) {  // the first time: the synthesizer made inside the tap (an audio context may only start in one)
+    Q.on = true;
+    api.settings.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
+    api.updateSettings();
+  }
+  if (!Q.ready) { Q.want = fromTick; api.play(); playBtns(); return; }  // (play() now lets the audio start; it plays once ready)
+  startScore(fromTick);
+}
+function startScore(fromTick) {
+  const api = SC.api;
+  if (!api || Q.api !== api) return;
+  api.tickPosition = fromTick || 0;
+  api.play();
+}
+function pauseScore() { if (Q.api && Q.playing) Q.api.pause(); Q.want = null; }
+function takeBtnHtml(on) {
+  return `<button type="button" class="playbtn" data-act="play" aria-pressed="${on}">${on ? ICON.pause : ICON.play}<span>${on ? "Pause the take" : "Play the take"}</span></button>`;
+}
+function scoreBtnHtml(t) {
+  const tr = (t && t.transcription) || {}, drawn = tr.state === "done";
+  const label = Q.failed ? "No sound for the transcription" : Q.want != null ? "Loading the sound…" : Q.playing ? "Pause the transcription" : "Play the transcription";
+  return `<button type="button" class="playbtn synth" data-act="play-score" aria-pressed="${Q.playing}"${drawn && !Q.failed ? "" : " disabled"}${Q.failed ? ` title="${esc(Q.failed)}"` : ""}>${Q.playing ? ICON.pause : ICON.play}<span>${label}</span></button>`;
+}
+function playBtns() {  // the two buttons as things stand (without drawing the screen again)
+  const t = takeById(S.take), a = $("[data-act=play]"), b = $("[data-act=play-score]");
+  if (a) a.outerHTML = takeBtnHtml(P.take === S.take && !player.paused);
+  if (b) b.outerHTML = scoreBtnHtml(t);
+}
+
 // --- the take's own sound, at full or half speed (the pitch kept: play/half.mp3, ffmpeg's atempo)
 const player = $("#player");
-const P = { take: null, rate: 1, at: 0 };
+const P = { take: null, rate: 1, at: 0, src: "take" };  // src: the sound last chosen, the take's or the transcription's
 function srcFor(id, rate) { return `/api/takes/${encodeURIComponent(id)}/play/${rate === 1 ? "full" : "half"}.mp3`; }
 function playFrom(at, rate) {
   // play() at once, inside the tap (iOS allows no later start); the seek once the file's length is known
   rate = rate || P.rate;
+  pauseScore(); P.src = "take"; host.classList.remove("synth");
   const want = srcFor(S.take, rate), same = player.src.endsWith(want);
   if (!same) { player.src = want; }
   P.take = S.take; P.rate = rate; P.at = at;
@@ -839,12 +929,15 @@ function playFrom(at, rate) {
 }
 function togglePlay() {
   if (P.take === S.take && !player.paused) { player.pause(); return; }
+  if (P.src === "score" && Q.done) P.at = 0;
   const t = takeById(S.take);
   playFrom(P.take === S.take && P.at < (t ? t.seconds : 1e9) - 0.2 ? P.at : 0);
 }
-function stopPlaying() { player.pause(); }
+function stopPlaying() { player.pause(); pauseScore(); }
 function setSpeed(rate) {
   if (rate === P.rate) return;
+  if (SC.api) SC.api.playbackSpeed = rate;  // the transcription at the same speed
+  if (P.src === "score") { P.rate = rate; render(); return; }
   if (P.take === S.take && !player.paused) playFrom(P.at, rate);
   else { P.rate = rate; if (P.take === S.take) { player.src = srcFor(S.take, rate); } render(); }
 }
@@ -860,7 +953,7 @@ function tick() {
   if (!player.paused) raf = requestAnimationFrame(tick);
 }
 ["play", "pause", "ended"].forEach((e) => player.addEventListener(e, () => {
-  const b = $(".playbtn"); if (b) { b.innerHTML = player.paused ? ICON.play : ICON.pause; b.setAttribute("aria-label", player.paused ? "Play" : "Pause"); }
+  playBtns();
   if (e === "ended") { const t = takeById(S.take); P.at = t ? t.seconds : P.at; }
   tick();
 }));
@@ -870,6 +963,7 @@ document.addEventListener("click", (ev) => {  // the position bar: tap a place t
   const t = takeById(S.take);
   if (!t) return;
   const to = (e) => { const r = bar.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * t.seconds; };
+  if (P.src === "score") { const b = beatAt(to(ev)); playScore(b == null ? 0 : Math.max(0, b * 960)); return; }
   playFrom(to(ev));
 });
 
@@ -991,6 +1085,7 @@ document.addEventListener("click", (ev) => {
   else if (a === "stop-rec") act(() => api("POST", "/api/record/stop"));
   else if (a === "open") openTake(d.id, S.screen === "takes" ? "takes" : "ready");
   else if (a === "play") togglePlay();
+  else if (a === "play-score") { if (Q.playing) pauseScore(); else playScore(P.at > 0 && !Q.done ? Math.max(0, (beatAt(P.at) || 0) * 960) : 0); }
   else if (a === "speed") setSpeed(Number(d.v));
   else if (a === "view") { S.view = d.v; render(); }
   else if (a === "transcribe") act(() => api("POST", `/api/takes/${encodeURIComponent(d.id)}/transcribe`));
