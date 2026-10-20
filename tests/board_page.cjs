@@ -79,7 +79,14 @@ const LANE = W <= 640 ? ".cell h3" : ".lane";  // lanes across the columns; on a
     if (id === "listen") {
       check(r.live === 1, `listen: the open review no card links to, live (${r.live})`);
       const on = await page.$eval('.card[data-id="guitalele-key"] .summary', (e) => e.textContent).catch(() => "");
-      check(on.includes("Live") && on.includes("6 questions to answer"), `the review a card links to, on that card: ${on}`);
+      check(on.includes("Live") && on.includes("6 questions to answer") && on.includes("Pipeline"), `the review a card links to, on that card: ${on}`);
+      // an archived review: no card of its own; on the card that links to it, "Archived" and no live count
+      const arch = await page.$eval('.card[data-id="free-bluegrass-review"] .summary', (e) => e.textContent).catch(() => "");
+      check(arch.includes("Archived") && arch.includes("9 of 33 answered") && !arch.includes("Live") && !arch.includes("to answer")
+        && arch.includes("Agent-written"), `the archived review on the card that links to it: ${arch}`);
+      const lone = await page.$eval(".card.live .meta", (e) => e.textContent).catch(() => "");
+      check(lone.includes("Pipeline"), `the live review card says who made it: ${lone}`);
+      check(!(await page.$('.card[data-id="live:review:2026-10-20-arco"]')), "an archived review has no live card");
     }
     if (id === "play") check(r.live === 1, `play: the exercises to record, live (${r.live})`);
     if (["listen", "play", "agent"].includes(id)) await shot(id);

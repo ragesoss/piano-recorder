@@ -41,15 +41,18 @@ pytestmark = pytest.mark.skipif(ENV is None, reason="needs node with Playwright 
 REVIEWS = [
     {"id": "take-check-2026-10-19-180234", "title": "Check the take: Guitalele tune", "kind": "take-check",
      "subtitle": "Recorded 2026-10-19T16:35:54, strings, 139.7 bpm", "created": "2026-10-19", "demo": False,
-     "questions": 6, "answered": 0, "last_answer": ""},
+     "questions": 6, "answered": 0, "last_answer": "", "origin": "pipeline", "archived": False},
     {"id": "2026-10-19-free-bluegrass", "title": "Free bluegrass recordings: keep or drop", "kind": "free",
      "subtitle": "The 2026-10-19 harvest's starter set, heard by ear", "created": "2026-10-19", "demo": False,
-     "questions": 33, "answered": 9, "last_answer": "2026-10-19T19:33:32-07:00"},
+     "questions": 33, "answered": 9, "last_answer": "2026-10-19T19:33:32-07:00", "origin": "agent", "archived": True},
     {"id": "take-check-2026-10-19-082229", "title": "Check the take: Test: Red Wing take 1 (imported)", "kind": "take-check",
      "subtitle": "Recorded 2026-10-19T08:22:28, dobro, 100 bpm", "created": "2026-10-19", "demo": False,
-     "questions": 8, "answered": 0, "last_answer": ""},
+     "questions": 8, "answered": 0, "last_answer": "", "origin": "pipeline", "archived": False},
     {"id": "2026-10-19-coyote-trail", "title": "Coyote Trail", "demo": False, "questions": 2, "answered": 2},
-]  # the first two have cards linking to them (guitalele-key, free-bluegrass-review): shown on those cards
+    {"id": "2026-10-20-arco", "title": "The arco challenge", "kind": "free", "demo": False, "questions": 4,
+     "answered": 1, "origin": "agent", "archived": True},
+]  # the first two have cards linking to them (guitalele-key, free-bluegrass-review): shown on those cards, the second
+#   archived ("Archived"); the arco one archived and linked by none: no card
 EXERCISES = ([{"id": f"dobro-{i}", "instrument": "dobro", "status": "needed", "to_review": 0} for i in range(3)]
              + [{"id": f"banjo-{i}", "instrument": "banjo", "status": "needed", "to_review": 0} for i in range(8)]
              + [{"id": f"generic-{i}", "instrument": "generic", "status": "needed", "to_review": 0} for i in range(21)])

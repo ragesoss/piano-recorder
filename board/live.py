@@ -4,7 +4,10 @@ never stored. Read from their own APIs; an app that does not answer has no cards
 - The review app (dobro-transcription's review/, port 8005): a card for each review with questions not
   yet answered (work "listen"). A card on the board that links to the review (`#/r/<id>`, the review app's own
   links) and is not done carries it instead (`live_summary`), so the review is not on the board twice. (`GET /api/reviews`: its title, how many questions, how many answered; demos left out),
-  linking to it (`#/r/<id>`, the review app's links).
+  linking to it (`#/r/<id>`, the review app's links). Each says who made the review (`origin`: "pipeline", the
+  project's scripts, or "agent", written by an AI agent; shown as a badge). A review the player archived (done
+  with it, answered or not: `archived`) has no card of its own; a card that links to it says "Archived" and how
+  many were answered, in place of a live count (`live_archived`).
 - The exercise app (port 8002): one card (work "play"), how many exercises each instrument still wants a take of
   (`GET /api/exercises`, counted as its board counts them: wanted again or no take yet, and not recorded
   here since), linking to its board (and `#<instrument>` for each one's list).
@@ -45,21 +48,30 @@ def _card(**kw) -> dict:
     return base | kw
 
 
+ORIGINS = ("pipeline", "agent")  # the review app's `origin` (its review/model.py)
+
+
 def review_cards(reviews: list[dict], port: int, area: str) -> list[dict]:
+    """A card for each review with questions left; an archived one's card only to fold onto a card that links to
+    it (`fold_reviews` keeps none of its own)."""
     out = []
     for r in reviews:
         if not isinstance(r, dict) or r.get("demo") or not r.get("id"):
             continue
         q, done = int(r.get("questions") or 0), int(r.get("answered") or 0)
         left = q - done
-        if left <= 0:
+        archived = bool(r.get("archived"))
+        if left <= 0 and not archived:
             continue
         rid = str(r["id"])
+        answered = f"{done} of {q} answered"
         out.append(_card(
             id=f"live:review:{rid}", live="review", review_id=rid, work="listen", area=area, title=str(r.get("title") or rid),
-            status="doing" if done else "next",
-            summary=f"{left} question{'s' if left != 1 else ''} to answer" + (f" ({done} of {q} answered)" if done else ""),
-            open_questions=left,
+            status="done" if archived else "doing" if done else "next",
+            summary=f"Archived: {answered}" if archived else
+            f"{left} question{'s' if left != 1 else ''} to answer" + (f" ({answered})" if done else ""),
+            open_questions=0 if archived else left, archived=archived, answered_text=answered,
+            origin=r.get("origin") if r.get("origin") in ORIGINS else "", origin_note=str(r.get("origin_note") or ""),
             links=[{"label": "Open the review", "port": port, "path": f"/#/r/{urllib.parse.quote(rid)}", "repo": ""}],
             details=str(r.get("subtitle") or ""), source="The review app", created=str(r.get("created") or ""),
             updated=str(r.get("last_answer") or r.get("created") or "")[:10]))
@@ -70,8 +82,9 @@ REVIEW_LINK = re.compile(r"^https?://[^/]+/#/r/([A-Za-z0-9._%-]+)$")  # the revi
 
 
 def fold_reviews(cards: list[dict], live: list[dict]) -> list[dict]:
-    """A live review that a card links to (and is not done) goes onto that card as its live_summary; the live cards
-    left are returned. The cards are changed in place (the request's own copies)."""
+    """A live review that a card links to (and is not done) goes onto that card as its live_summary (an archived
+    one as "Archived", `live_archived`); the live cards left are returned, archived reviews' never. The cards are
+    changed in place (the request's own copies)."""
     link = REVIEW_LINK
     holders: dict[str, list[dict]] = {}
     for c in cards:
@@ -84,10 +97,13 @@ def fold_reviews(cards: list[dict], live: list[dict]) -> list[dict]:
     for lc in live:
         mine = holders.get(lc.get("review_id", "")) if lc.get("live") == "review" else None
         if not mine:
-            kept.append(lc)
+            if not lc.get("archived"):
+                kept.append(lc)
             continue
         for c in mine:
             c["live_summary"], c["live_link"] = lc["summary"], lc["links"][0]
+            c["live_archived"], c["live_detail"] = bool(lc.get("archived")), lc.get("answered_text", "")
+            c["live_origin"] = lc.get("origin", "")
     return kept
 
 

@@ -259,12 +259,18 @@ class Apps:
     def __init__(self):
         self.reviews = [
             {"id": "take-check-1", "title": "Check the take: Red Wing", "kind": "take-check", "subtitle": "dobro, 100 bpm",
-             "created": "2026-10-19", "demo": False, "questions": 8, "answered": 0, "last_answer": ""},
+             "created": "2026-10-19", "demo": False, "questions": 8, "answered": 0, "last_answer": "",
+             "origin": "pipeline", "origin_note": "", "archived": False},
             {"id": "free-1", "title": "Free recordings", "kind": "free", "subtitle": "", "created": "2026-10-19",
-             "demo": False, "questions": 33, "answered": 9, "last_answer": "2026-10-19T19:33:32-07:00"},
+             "demo": False, "questions": 33, "answered": 9, "last_answer": "2026-10-19T19:33:32-07:00",
+             "origin": "agent", "origin_note": "the harvest review", "archived": False},
             {"id": "done-1", "title": "All answered", "demo": False, "questions": 2, "answered": 2},
             {"id": "demo-1", "title": "A demo", "demo": True, "questions": 3, "answered": 0},
-        ]
+            {"id": "arch-1", "title": "Done with it", "kind": "free", "demo": False, "questions": 5, "answered": 2,
+             "origin": "agent", "archived": True, "archived_at": "2026-10-20T21:40:00-07:00"},
+            {"id": "arch-2", "title": "Done with, all answered", "kind": "grid", "demo": False, "questions": 2,
+             "answered": 2, "origin": "pipeline", "archived": True},
+        ]  # arch-1 and arch-2 archived (the player done with them): no live card of their own
         self.exercises = (
             [{"id": f"dobro-{i}", "instrument": "dobro", "status": "needed", "to_review": 0} for i in range(3)]
             + [{"id": "dobro-9", "instrument": "dobro", "status": "wanted", "to_review": 1}]
@@ -334,6 +340,32 @@ def test_a_review_a_card_links_to_is_shown_on_that_card(tmp_path, apps):
         assert r["live_link"] == {"label": "Open the review", "href": f"http://testserver:{port}/#/r/take-check-1", "repo": ""}
         assert "live_summary" not in card(c, "exercise-board")
         assert c.get("/api/status").json()["live"] == 1
+
+
+def test_who_made_a_review_and_an_archived_one(tmp_path, apps):
+    """A live review card says who made the review (the review app's `origin`); an archived review has no card of
+    its own, and a card that links to it says "Archived" in place of a live count."""
+    c, d = make(tmp_path, review=apps.url, exercises=DOWN)
+    base = json.loads(FIXTURE.read_text())
+    by = {x["id"]: x for x in base["cards"]}
+    by["retro-record"]["links"].append({"label": "Its review", "href": "http://practice.local:8005/#/r/arch-1", "repo": "dobro-transcription"})
+    (d / "cards.json").write_text(json.dumps(base))
+    with c:
+        b = c.get("/api/board").json()
+        live = {x["id"]: x for x in b["live"]}
+        assert set(live) == {"live:review:take-check-1", "live:review:free-1"}  # neither archived one
+        assert live["live:review:take-check-1"]["origin"] == "pipeline"
+        assert (live["live:review:free-1"]["origin"], live["live:review:free-1"]["origin_note"]) == ("agent", "the harvest review")
+        r = card(c, "retro-record")
+        assert (r["live_archived"], r["live_summary"], r["live_detail"], r["live_origin"]) == (
+            True, "Archived: 2 of 5 answered", "2 of 5 answered", "agent")
+        assert c.get("/api/status").json()["live"] == 2  # an archived review is not counted
+    cards = live_mod.review_cards(apps.reviews, 8005, "dobro")
+    assert {x["review_id"]: x["status"] for x in cards if x["archived"]} == {"arch-1": "done", "arch-2": "done"}
+    assert all(x["open_questions"] == 0 for x in cards if x["archived"])
+    assert [x["review_id"] for x in live_mod.fold_reviews([], cards)] == ["take-check-1", "free-1"]
+    old = [{"id": "x", "title": "From before the origin", "questions": 3, "answered": 0}]  # a review app not yet updated
+    assert live_mod.review_cards(old, 8005, "dobro")[0]["origin"] == "" and not live_mod.review_cards(old, 8005, "dobro")[0]["archived"]
 
 
 def test_the_other_apps_down_leave_their_cards_out(tmp_path, apps):

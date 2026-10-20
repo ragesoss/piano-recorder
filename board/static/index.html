@@ -151,6 +151,13 @@ h1, h2, h3, p { margin: 0; }
 .livepill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 11px; background: #173322; color: var(--green);
   font-size: 13px; font-weight: 700; }
 .livepill i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+/* the review app's: who made a review (a glyph and a word), and a review archived (the player done with it) */
+.origin { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 6px; border-radius: 11px; border: 1.5px solid var(--ink3);
+  color: var(--ink2); font-size: 13px; font-weight: 700; white-space: nowrap; vertical-align: middle; }
+.summary .origin, .live-note .origin { margin-left: 6px; }
+.archpill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 6px; border-radius: 11px; border: 1.5px dashed var(--ink3);
+  color: var(--ink2); font-size: 13px; font-weight: 700; }
+.origin-line { color: var(--ink2); font-size: 15px; }
 
 /* the sheets: a card, filters, a new card. Over the board on an iPad; the whole screen on a phone */
 dialog { padding: 0; border: 1.5px solid var(--line); border-radius: 22px; background: var(--surf2); color: var(--ink);
@@ -425,7 +432,20 @@ const ICON = {
   hardware: '<path d="M9 3v5M15 3v5M6 8h12v3.2a6 6 0 0 1-12 0zM12 17.2V21"></path>',
   all: '<rect x="4" y="4" width="6.8" height="6.8" rx="1.6"></rect><rect x="13.2" y="4" width="6.8" height="6.8" rx="1.6"></rect><rect x="4" y="13.2" width="6.8" height="6.8" rx="1.6"></rect><rect x="13.2" y="13.2" width="6.8" height="6.8" rx="1.6"></rect>',
   unsynced: '<svg class="svg-i" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-dasharray="4 3"></circle></svg>',
+  // the review app's: who made a review (a gear: its scripts; a pen: an agent), and archived
+  gear: '<circle cx="12" cy="12" r="4.6"></circle><circle cx="12" cy="12" r="1.5"></circle><path stroke-width="3.2" stroke-linecap="butt" d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.35 5.35l2.12 2.12M16.53 16.53l2.12 2.12M5.35 18.65l2.12-2.12M16.53 7.47l2.12-2.12"></path>',
+  pen: '<path d="M4.5 19.5l1-4.3L15.7 5a2 2 0 0 1 2.8 0l.5.5a2 2 0 0 1 0 2.8L8.8 18.5z"></path><path d="M13.6 7.1l3.3 3.3"></path>',
+  box: '<rect x="3.5" y="4.5" width="17" height="4.5" rx="1"></rect><path d="M5.5 9v9.5a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V9M10 13h4"></path>',
 };
+// a review's origin as the review app shows it (review/static/index.html: ORIGIN), always with its word
+const ORIGIN = { pipeline: ["gear", "Pipeline", "Made by the project's own scripts from the pipeline's output, with no AI."],
+  agent: ["pen", "Agent-written", "An AI agent wrote or chose its questions, readings and explanations."] };
+function originHtml(o) { return ORIGIN[o] ? `<span class="origin ${o}">${glyph(ORIGIN[o][0], 13)}${ORIGIN[o][1]}</span>` : ""; }
+function liveLine(c) {  // a card's line for the review it links to: live, or archived (the player is done with it)
+  return c.live_archived
+    ? `<span class="archpill">${glyph("box", 13)}Archived</span> ${esc(c.live_detail || "")}${originHtml(c.live_origin)}`
+    : `<span class="livepill"><i aria-hidden="true"></i>Live</span> ${esc(c.live_summary)}${originHtml(c.live_origin)}`;
+}
 // one glyph for each kind of work, always with its word
 function glyph(id, size = 16) { return `<svg class="svg-i" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${ICON[id] || ""}</svg>`; }
 function workHtml(w) { return w ? `<span class="work">${glyph(w, 14)}${esc(WORK_WORD[w] || w)}</span>` : ""; }
@@ -442,13 +462,13 @@ function cardHtml(c, lanes) {
   if (nl) flags.push(`<span class="flag">${ICON.link}${nl} link${nl === 1 ? "" : "s"}</span>`);
   if (c.pending) flags.push(`<span class="flag unsynced">${ICON.unsynced}Not synced</span>`);
   const drag = canDrag && !c.live ? ' draggable="true"' : "";
-  const meta = (c.live ? '<span class="livepill"><i aria-hidden="true"></i>Live</span>' : "") + impHtml(c.importance) + work + (lanes ? "" : areaHtml(c.area));
+  const meta = (c.live ? '<span class="livepill"><i aria-hidden="true"></i>Live</span>' : "") + (c.live === "review" ? originHtml(c.origin) : "") + impHtml(c.importance) + work + (lanes ? "" : areaHtml(c.area));
   const eff = effortText(c);
   return `<button type="button" class="card imp${c.importance}${c.live ? " live" : ""}" data-id="${esc(c.id)}" data-work="${esc(c.work)}" data-status="${esc(c.status)}"${drag}>
     <span class="title">${esc(c.title)}</span>
     <span class="meta">${meta}</span>
     ${c.summary ? `<span class="summary">${esc(c.summary)}</span>` : ""}
-    ${c.live_summary ? `<span class="summary"><span class="livepill"><i aria-hidden="true"></i>Live</span> ${esc(c.live_summary)}</span>` : ""}
+    ${c.live_summary ? `<span class="summary">${liveLine(c)}</span>` : ""}
     ${c.live && !eff ? "" : `<span class="people">${c.live ? "" : whoHtml(c.who)}${eff ? `<span class="effort">${esc(eff)}</span>` : ""}</span>`}
     ${flags.length ? `<span class="flags">${flags.join("")}</span>` : ""}</button>`;
 }
@@ -640,12 +660,13 @@ function renderSheet(keep) {
   const draft = dlg.querySelector("#noteText") ? dlg.querySelector("#noteText").value : "";
   const waitDraft = dlg.querySelector("#waitText") ? dlg.querySelector("#waitText").value : null;
   const moreOpen = dlg.querySelector("details.more") ? dlg.querySelector("details.more").open : false;
-  const head = `<div class="sh-head"><div class="t"><div class="meta">${c.live ? '<span class="livepill"><i aria-hidden="true"></i>Live</span>' : ""}${workHtml(c.work)}${areaHtml(c.area)}${impHtml(c.importance)}${c.pending ? `<span class="flag unsynced">${ICON.unsynced}Not synced yet</span>` : ""}</div>
+  const head = `<div class="sh-head"><div class="t"><div class="meta">${c.live ? '<span class="livepill"><i aria-hidden="true"></i>Live</span>' : ""}${c.live === "review" ? originHtml(c.origin) : ""}${workHtml(c.work)}${areaHtml(c.area)}${impHtml(c.importance)}${c.pending ? `<span class="flag unsynced">${ICON.unsynced}Not synced yet</span>` : ""}</div>
       <h2 id="sheetTitle">${esc(c.title)}</h2></div><button type="button" class="btn close" data-act="close">Done</button></div>`;
   if (c.live) {
     dlg.innerHTML = head + `<div class="sh-body">
       ${c.summary ? `<p style="font-size:18px;font-weight:600">${esc(c.summary)}</p>` : ""}
       ${c.details ? `<div class="md">${markdown(c.details)}</div>` : ""}
+      ${c.live === "review" && ORIGIN[c.origin] ? `<p class="origin-line">${originHtml(c.origin)} ${ORIGIN[c.origin][2]}${c.origin_note ? ` ${esc(c.origin_note)}.` : ""}</p>` : ""}
       <ul class="links">${(c.links || []).map((l, i) => linkHtml(l, i === 0)).join("")}</ul>
       <p class="live-note">Live from ${c.live === "review" ? "the review app" : "the exercise app"}: it changes there as you go, and is not kept on the board.</p></div>`;
     return;
@@ -662,7 +683,7 @@ function renderSheet(keep) {
   const notes = (c.notes || []).map((n) => `<li><small>${esc(niceTime(n.at))}${n.pending ? " · not synced yet" : ""}</small>${esc(n.text)}</li>`).join("");
   const wait = c.status === "waiting" || c.waiting_on;
   dlg.innerHTML = head + `<div class="sh-body">
-    ${c.live_summary ? `<div class="live-note">Live from the review app: <b>${esc(c.live_summary)}</b>.<ul class="links" style="margin-top:8px">${linkHtml(c.live_link, true)}</ul></div>` : ""}
+    ${c.live_summary ? `<div class="live-note">${c.live_archived ? `Archived in the review app (done with, answered or not): <b>${esc(c.live_detail || "")}</b>.` : `Live from the review app: <b>${esc(c.live_summary)}</b>.`}${originHtml(c.live_origin) ? ` ${originHtml(c.live_origin)}` : ""}<ul class="links" style="margin-top:8px">${linkHtml(c.live_link, true)}</ul></div>` : ""}
     <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
     <div class="group"><span class="k" id="moveK">Move to</span>${seg("Move to", COLS, c.status, "data-status")}</div>
     ${wait ? `<div class="group"><label class="k" for="waitText">Waiting on</label><div class="field"><input id="waitText" type="text" maxlength="300" value="${esc(waitDraft ?? c.waiting_on)}" placeholder="Who or what"><button type="button" class="btn" data-act="wait">Save</button></div></div>` : ""}
