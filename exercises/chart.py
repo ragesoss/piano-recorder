@@ -73,6 +73,8 @@ SOUNDS = {
     "guitar": Sound("a steel-string guitar (GeneralUser GS)", "generaluser.sf2", 25),
     "banjo": Sound("a banjo (GeneralUser GS)", "generaluser.sf2", 105),
     "piano": Sound("a grand piano (GeneralUser GS)", "GeneralUser-GS.sf2", 0),
+    # an exercise for any instrument (dobro-transcription's exercises/generic): plucked, as most of them are played
+    "generic": Sound("a nylon-string guitar (GeneralUser GS)", "GeneralUser-GS.sf2", 24),
 }
 
 

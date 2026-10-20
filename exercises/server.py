@@ -64,6 +64,9 @@ class SettingsIn(BaseModel):
 
 
 OTHER_KIND_RE = re.compile(r"^[a-z][a-z0-9 -]{0,29}$")  # "other:guitar": a kind of instrument, not one the project knows
+# exercises for any instrument (dobro-transcription's exercises/generic, ids generic-NNN-...): played on whatever the
+# take says, which it must name (a known instrument, or a kind); its sidecar's `instrument` is that kind
+ANY_KIND = "generic"
 
 
 def instrument_meta(instrument_id: str, known: list[dict]) -> dict | None:
@@ -277,6 +280,13 @@ def create_app(cfg: Config) -> FastAPI:
         on = played_on(body, exercises.instruments(), cfg.inputs)
         if ex is not None and len(on.get("instruments", [])) > 1:
             raise HTTPException(400, "an exercise is for one instrument")
+        if ex is not None and ex.instrument == ANY_KIND:
+            insts = on.get("instruments", [])
+            if len(insts) != 1 or not insts[0]["kind"]:
+                raise HTTPException(400, "an exercise for any instrument needs to know what it is played on: "
+                                         "an instrument, or its kind (other:mandolin)")
+            meta["exercise_instrument"] = ANY_KIND
+            meta["instrument"] = insts[0]["kind"]  # what it was played on, as a free take's
         meta |= on
         kinds = [i["kind"] for i in on.get("instruments", []) if i["kind"]]
         if not meta.get("instrument") and len(kinds) == 1:  # a free take: at least the kind
