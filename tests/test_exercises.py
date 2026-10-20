@@ -13,7 +13,7 @@ from recorder.server import create_app as create_piano_app
 PAGE = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>'
 
 
-def add_exercise(root, ex_id, bpm=240, pickup=1.0, bars=2, beats_per_bar=4, pages=1):
+def add_exercise(root, ex_id, bpm=240, pickup=1.0, bars=2, beats_per_bar=4, pages=1, instrument="bass"):
     d = root / ex_id
     d.mkdir(parents=True)
     names = []
@@ -21,7 +21,7 @@ def add_exercise(root, ex_id, bpm=240, pickup=1.0, bars=2, beats_per_bar=4, page
         (d / f"page-{n}.svg").write_text(PAGE)
         names.append(f"page-{n}.svg")
     (d / "exercise.json").write_text(json.dumps({
-        "title": f"Exercise {ex_id}", "instrument": "bass", "bars": bars, "pages": names,
+        "title": f"Exercise {ex_id}", "instrument": instrument, "bars": bars, "pages": names,
         "tempo": {"bpm": bpm, "pickup_beats": pickup, "beats_per_bar": beats_per_bar},
         "beats": pickup + bars * beats_per_bar}))
 
@@ -254,3 +254,85 @@ def test_hearing_needs_the_charts_audio(client, tmp_path):
     add_chart(tmp_path / "exercises", "bass-002-roots", name="../bass-001-walks/page-1.svg")  # its own folder only
     assert client.post("/api/exercises/bass-002-roots/hear").status_code == 404
     assert next(e for e in client.get("/api/exercises").json() if e["id"] == "bass-002-roots")["audio"] == {}
+
+
+# --- the exercises for any instrument (dobro-transcription's exercises/generic: generic-NNN-...)
+
+def test_an_exercise_for_any_instrument_records_what_it_was_played_on(client, tmp_path):
+    exdir = tmp_path / "exercises"
+    add_exercise(exdir, "generic-001-major-scale", bpm=240, pickup=0.0, instrument="generic")
+    status = {"generated": "2026-10-19T17:00:00-07:00", "exercises": {
+        "generic-001-major-scale": {"status": "good", "note": "", "app_takes": [], "played_on": {"guitar": 1}}},
+        "instruments": [{"id": "cleveland", "kind": "bass", "short": "Cleveland", "name": "New Standard Cleveland",
+                         "details": ""}]}
+    (exdir / "status.json").write_text(json.dumps(status))
+    ex = next(e for e in client.get("/api/exercises").json() if e["id"] == "generic-001-major-scale")
+    assert ex["instrument"] == "generic" and ex["played_on"] == {"guitar": 1}
+    assert next(e for e in client.get("/api/exercises").json() if e["id"] == "bass-001-walks")["played_on"] == {}
+    # it must say what it is played on: an instrument, or a kind
+    for body in ({}, {"instrument_id": "other:"}, {"instruments": []}):
+        r = client.post("/api/record/start", json={"exercise": "generic-001-major-scale", **body})
+        assert r.status_code == 400 and "any instrument" in r.json()["detail"], body
+    for inst, kind, name in (("other:mandolin", "mandolin", "a mandolin (not listed)"),
+                             ("cleveland", "bass", "New Standard Cleveland")):
+        take = client.post("/api/record/start", json={"exercise": "generic-001-major-scale", "instrument_id": inst}).json()["take"]
+        wait_idle(client)
+        side = json.loads((tmp_path / "takes" / f"{take}.json").read_text())
+        assert side["exercise"] == "generic-001-major-scale" and side["exercise_instrument"] == "generic"
+        assert side["instrument"] == kind and side["instrument_id"] == inst and side["instrument_name"] == name
+        assert side["instruments"] == [{"instrument_id": inst, "instrument_name": name, "kind": kind}]
+        t = next(x for x in client.get("/api/takes").json() if x["id"] == take)
+        assert t["exercise"] == "generic-001-major-scale" and t["instruments"][0]["kind"] == kind
+    # an instrument's own exercise keeps its kind, as before
+    take = client.post("/api/record/start", json={"exercise": "bass-001-walks", "instrument_id": "cleveland"}).json()["take"]
+    wait_idle(client)
+    side = json.loads((tmp_path / "takes" / f"{take}.json").read_text())
+    assert side["instrument"] == "bass" and "exercise_instrument" not in side
+
+
+def test_a_status_files_odd_played_on_is_left_out(client, tmp_path):
+    exdir = tmp_path / "exercises"
+    add_exercise(exdir, "generic-002-thirds", instrument="generic")
+    (exdir / "status.json").write_text(json.dumps({"exercises": {
+        "generic-002-thirds": {"status": "needed", "played_on": {"mandolin": "two", "banjo": True, "uke": 2}},
+        "bass-001-walks": {"status": "good", "played_on": ["mandolin"]}}}))
+    exs = {e["id"]: e for e in client.get("/api/exercises").json()}
+    assert exs["generic-002-thirds"]["played_on"] == {"uke": 2} and exs["bass-001-walks"]["played_on"] == {}
+
+
+def test_push_exercise_names_an_exercise_for_any_instrument_generic():
+    import runpy
+    push = runpy.run_path(str(REPO / "tools" / "push-exercise"), run_name="push_exercise")
+    of = push["instrument_of"]
+    assert of("generic-001-major-scale", "Any instrument") == "generic"
+    assert of("x-001", "Any instrument") == "generic" and of("generic-001-x", "Guitar") == "generic"
+    assert of("bass-001-walks", "Upright Bass") == "bass" and of("dobro-021-x", "Dobro") == "dobro"
+    assert of("guitar-001-open-strings", "Guitar") == "guitar" and of("red-wing", "Dobro") == "dobro"
+    assert of("generic-001-major-scale", "Any instrument", "dobro") == "dobro"  # --instrument wins
+
+
+def test_pull_take_reads_the_exercise_apps_takes_with_exercises(tmp_path):
+    """tools/pull-take with an ssh and scp that only say what they were asked (no control unit)."""
+    import os
+    import subprocess
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    log = tmp_path / "log"
+    (bin_ / "ssh").write_text(f'#!/bin/sh\necho "ssh $*" >> {log}\necho /home/u/exercise-takes\n')
+    (bin_ / "scp").write_text(f'#!/bin/sh\necho "scp $*" >> {log}\nfor a; do last=$a; done\n'
+                              'case "$2" in *.wav|*.json) touch "$last/$(basename "$2")";; *) exit 1;; esac\n')
+    for f in ("ssh", "scp"):
+        (bin_ / f).chmod(0o755)
+    env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}"}
+    tool = str(REPO / "tools" / "pull-take")
+    r = subprocess.run([tool, "--exercises", "2026-10-20_101500", str(tmp_path / "out")], env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    calls = log.read_text()
+    assert 'load_config("/etc/exercise-recorder.toml").takes_dir' in calls and "ssh practice" in calls
+    assert "scp -q practice:/home/u/exercise-takes/2026-10-20_101500.wav" in calls
+    assert (tmp_path / "out" / "2026-10-20_101500.wav").exists() and (tmp_path / "out" / "2026-10-20_101500.json").exists()
+    log.unlink()
+    r = subprocess.run([tool, "2026-10-20_101500", str(tmp_path / "out2"), "other-host"], env=env, capture_output=True, text=True)
+    assert r.returncode == 0 and "load_config().takes_dir" in log.read_text() and "ssh other-host" in log.read_text()
+    for bad in (["--exercises"], ["../x", str(tmp_path / "o")], ["2026; rm", str(tmp_path / "o")]):
+        assert subprocess.run([tool, *bad], env=env, capture_output=True, text=True).returncode == 2, bad

@@ -41,6 +41,7 @@ HERE = Path(__file__).resolve().parent
 STYLE = HERE / "exercise-page.mss"
 REMOTE_CONFIG = "/etc/exercise-recorder.toml"
 AUDIO = "chart.wav"
+ANY_KIND = "generic"  # an exercise for any instrument (as exercises/server.py)
 
 sys.path.insert(0, str(HERE.parent))
 from exercises import chart  # noqa: E402  (the play order the click counts, and the audio)
@@ -76,6 +77,18 @@ def read_score(path: Path) -> dict:
     title = root.findtext("work/work-title") or root.findtext("movement-title") or path.stem
     return {"title": title, "part": part_name(root), "tempo": {"bpm": bpm, "pickup_beats": pickup,
             "beats_per_bar": beats_per_bar}, "beats": beats, "bars": len(order) - (1 if pickup else 0)}
+
+
+def instrument_of(ex_id: str, part: str, given: str | None = None) -> str:
+    """The exercise's kind of instrument: `given` (--instrument), else "generic" for an exercise for any instrument
+    (dobro-transcription's exercises/generic: its id generic-NNN-..., its part "Any instrument"), else from the
+    part's name (bass, dobro, guitar, ...)."""
+    if given:
+        return given
+    part = part.lower()
+    if ex_id.startswith(ANY_KIND + "-") or part == "any instrument":
+        return ANY_KIND
+    return "bass" if "bass" in part else "dobro" if "dobro" in part else part or "unknown"
 
 
 def part_name(root) -> str:
@@ -188,7 +201,8 @@ def main() -> None:
     ap.add_argument("score", nargs="*", metavar="SCORE|ID", help="the score (with --audio-only: exercise ids, or none for all)")
     ap.add_argument("--id", help="lower-case letters, digits and hyphens (default: from the file name)")
     ap.add_argument("--title")
-    ap.add_argument("--instrument", help="default: from the part's name (bass, dobro)")
+    ap.add_argument("--instrument", help="default: from the part's name (bass, dobro), or generic for an exercise "
+                                         "for any instrument (generic-NNN-...)")
     ap.add_argument("--note", default="")
     ap.add_argument("--readme", type=Path, help="the instructions to show with the score (default: README.md beside it)")
     ap.add_argument("--no-readme", action="store_true", help="send no instructions (a tune's README is about its recording)")
@@ -216,8 +230,7 @@ def main() -> None:
     if not ID_RE.match(ex_id):
         sys.exit(f"bad id {ex_id!r}: lower-case letters, digits and hyphens")
     info = read_score(score)
-    part = info.pop("part").lower()
-    instrument = a.instrument or ("bass" if "bass" in part else "dobro" if "dobro" in part else part or "unknown")
+    instrument = instrument_of(ex_id, info.pop("part"), a.instrument)
     mscore = find_mscore(a.mscore)
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / ex_id

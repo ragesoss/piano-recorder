@@ -14,6 +14,25 @@ from recorder.playalong import click_track, with_click
 STEP = {0: ("C", 0), 2: ("D", 0), 4: ("E", 0), 5: ("F", 0), 6: ("F", 1), 7: ("G", 0), 9: ("A", 0), 11: ("B", 0)}
 
 
+def test_an_exercise_for_any_instrument_is_heard_plucked_its_legato_from_its_one_staff(tmp_path):
+    """dobro-transcription's exercises/generic: one treble staff, no tab, the hammer-ons and slides on it."""
+    s = chart.sound_for("generic")
+    assert s.program == 24 and "nylon" in s.name and s is not chart.sound_for("guitar")
+    note = lambda m, marks="": f"<note>{pitch(m)}<duration>4</duration><voice>1</voice><type>quarter</type><staff>1</staff>{marks}</note>"
+    bar = (note(62, '<notations><technical><hammer-on type="start" number="1">H</hammer-on></technical><slur type="start" number="1"/></notations>')
+           + note(64, '<notations><technical><hammer-on type="stop" number="1"></hammer-on></technical><slur type="stop" number="1"/></notations>')
+           + note(62, '<notations><slide type="start" number="1" line-type="solid"/><slur type="start" number="1"/></notations>')
+           + note(64, '<notations><slide type="stop" number="1" line-type="solid"/><slur type="stop" number="1"/></notations>'))
+    p = tmp_path / "g.musicxml"
+    p.write_text('<score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Any instrument</part-name></score-part>'
+                 '</part-list><part id="P1"><measure number="1"><attributes><divisions>4</divisions><time><beats>4</beats>'
+                 '<beat-type>4</beat-type></time><clef number="1"><sign>G</sign><line>2</line></clef></attributes>'
+                 '<direction><sound tempo="80"/></direction>' + bar + "</measure></part></score-partwise>")
+    notes, info = chart.read_notes(p)
+    assert [(n.start, n.midi, n.picked, n.slide) for n in notes] == [(0, 62, True, False), (1, 64, False, False),
+                                                                      (2, 62, True, False), (3, 64, False, True)]
+
+
 def pitch(midi):
     step, alter = STEP[midi % 12]
     return f"<pitch><step>{step}</step>{f'<alter>{alter}</alter>' if alter else ''}<octave>{midi // 12 - 1}</octave></pitch>"

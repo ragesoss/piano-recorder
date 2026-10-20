@@ -298,6 +298,21 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
 .rec-head .sentence button { font: inherit; font-weight: 700; color: var(--purple-ink); background: var(--purple-tint); border: 0;
   border-radius: 14px; padding: 0 12px; margin: 2px 0; }
 .rec-head .meta { display: flex; align-items: center; gap: 10px; font-size: 17px; color: var(--ink2); flex-wrap: wrap; }
+/* an exercise for any instrument: what it is played on, one tap to change */
+.onpicks { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.onpicks .k { font-size: 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); }
+.onpick { min-height: 44px; padding: 0 16px; border-radius: 22px; border: 1.5px solid var(--line); background: var(--surf2);
+  font-size: 16px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.onpick small { font-size: 13px; font-weight: 400; color: var(--ink3); }
+.onpick[aria-pressed="true"] { background: var(--purple-fill); border-color: var(--purple-fill); color: #fff; font-weight: 700; }
+.onpick[aria-pressed="true"] small { color: #E6DCFF; }
+.onpick.more { background: transparent; border-style: dashed; border-color: var(--purple); color: var(--purple-ink); }
+/* 1 on what: a kind not listed, typed */
+.kindform { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1.5px dashed var(--dash); border-radius: 16px; }
+.kindform label { font-size: 15px; color: var(--ink3); }
+.kindform input { min-height: 44px; width: 100%; padding: 0 12px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surf2);
+  font-size: 17px; }
+.kindform .btn { justify-content: center; }
 .rec-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; padding: 16px 28px 24px 40px; }
 .score { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--surf); border: 1.5px solid var(--line);
   border-radius: 22px; padding: 14px 16px; }
@@ -511,14 +526,20 @@ const S = {
   showGood: false, showReadme: false, sheet: false, peaks: {}, error: "",
   preview: null, previewOpen: false,  // the exercise whose score the picker shows (open: as a sheet, when narrow)
 };
-const DEFAULTS = { instruments: [], inputs: {}, kind: null, exercise: null, tempo: {}, countIn: true, clickThrough: true,
+const DEFAULTS = { instruments: [], inputs: {}, kind: null, exercise: null, anyInstrument: null, tempo: {}, countIn: true, clickThrough: true,
   backing: null, backingCountIn: true, freeClick: false, freeBpm: 92, freeBpb: 4, freeCountIn: true };
 const C = () => S.choices;
-const ORDER = ["dobro", "bass", "guitar", "banjo", "piano", "voice"];
-const NAMES = { bass: "Bass", dobro: "Dobro", guitar: "Guitar", banjo: "Banjo", piano: "Piano", voice: "Voice" };
+// the exercises for any instrument (dobro-transcription's exercises/generic, generic-NNN-...): played on whatever the
+// take names (a known instrument, or any kind not listed), in any key; a column of their own on the board
+const ANY = "generic";
+const ORDER = ["dobro", "bass", "guitar", "banjo", "piano", "voice", ANY];
+const NAMES = { bass: "Bass", dobro: "Dobro", guitar: "Guitar", banjo: "Banjo", piano: "Piano", voice: "Voice", [ANY]: "Any instrument" };
+// the kinds the player has and the project does not list yet (2026-10-19), offered for an exercise for any instrument
+const SUGGEST = ["mandolin", "guitalele", "mountain dulcimer"];
 const KIND_RE = /^[a-z][a-z0-9 -]{0,29}$/;
 function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
 function kindName(k) { return NAMES[k] || (k ? cap(k) : "Other"); }
+function kindWord(k) { return k === ANY ? "any instrument" : k; }  // "Nothing else wanted for any instrument"
 function article(kind) { return /^[aeiou]/.test(kind) ? "an" : "a"; }
 function notListed(kind) { return kind ? `${article(kind)} ${kind} (not listed)` : "an instrument (not listed)"; }
 function fmt(s) { s = Math.max(0, Math.floor(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
@@ -544,16 +565,45 @@ function instInfo(id) {
   return null;
 }
 function chosen() { return (C().instruments || []).map(instInfo).filter(Boolean); }
-function kinds() {
+function kinds() {  // every kind there is: of the instruments, the exercises (Any instrument's too) and the takes
   const rank = (k) => (ORDER.indexOf(k) < 0 ? 99 : ORDER.indexOf(k));
-  const all = new Set([...ORDER, ...S.instruments.map((i) => i.kind), ...S.exercises.map((e) => e.instrument || "")]);
+  const all = new Set([...ORDER, ...S.instruments.map((i) => i.kind), ...S.exercises.map((e) => e.instrument || ""),
+    ...S.takes.flatMap((t) => (t.instruments || []).map((i) => i.kind))]);
   return [...all].filter(Boolean).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 }
+function instrumentKinds() { return kinds().filter((k) => k !== ANY); }  // what a take can be played on
 function andList(xs) { return xs.length < 2 ? xs.join("") : xs.slice(0, -1).join(", ") + " and " + xs[xs.length - 1]; }
 function onWord(insts) { return insts.length && insts.every((i) => i.kind === "voice") ? "with" : "on"; }  // "with your voice"
 function takeIds(t) { return t.instruments ? t.instruments.map((i) => i.instrument_id) : t.instrument_id ? [t.instrument_id] : []; }
+// an exercise for any instrument: one of its takes; the instrument played on for these last (as chosen, else by the
+// takes), or none (then the take asks)
+function isAnyTake(t) { return !!t.exercise && ((exById(t.exercise) || {}).instrument === ANY || t.exercise.startsWith(`${ANY}-`)); }
+function hasKind(id) { const i = instInfo(id); return !!(i && i.kind); }
+function lastAny() {
+  if (hasKind(C().anyInstrument)) return C().anyInstrument;
+  for (const t of S.takes) { const ids = takeIds(t); if (isAnyTake(t) && ids.length === 1 && hasKind(ids[0])) return ids[0]; }
+  return null;
+}
+function anyKind() { const id = lastAny(); return id ? instInfo(id).kind : ""; }
+function anyRecent() {  // the instruments these have been played on, the one in hand first (up to five)
+  const ids = [];
+  const add = (id) => { if (hasKind(id) && !ids.includes(id)) ids.push(id); };
+  add(lastAny());
+  for (const t of S.takes) { const x = takeIds(t); if (isAnyTake(t) && x.length === 1) add(x[0]); }
+  return ids.slice(0, 5);
+}
+function noteAny() {  // the instrument chosen for an exercise for any instrument: the one offered next time
+  const e = exById(C().exercise);
+  if (C().kind === "exercise" && e && e.instrument === ANY && chosen().length === 1 && chosen()[0].kind) S.choices.anyInstrument = chosen()[0].id;
+}
+function setAnyOn(id) {  // play this exercise for any instrument on this one, its inputs as it had them last
+  S.choices.instruments = [id];
+  S.choices.inputs = lastInputs(id) || defaultInputs(chosen());
+  noteAny(); save(); render();
+}
 // an exercise set up from the board: on the instrument of its kind played last (as its inputs were), else the first known
 function lastInstrument(kind) {
+  if (kind === ANY) return lastAny();
   if (chosen().length === 1 && chosen()[0].kind === kind) return chosen()[0].id;
   for (const t of S.takes) { const ids = takeIds(t); if (ids.length === 1 && instInfo(ids[0]) && instInfo(ids[0]).kind === kind) return ids[0]; }
   const k = S.instruments.find((i) => i.kind === kind);
@@ -584,7 +634,20 @@ function exLabel(e) {  // short: its number, or its title where others of its ki
   return n && exercisesFor(e.instrument || "").filter((x) => exNum(x) === n).length === 1 ? n : shortTitle(e);
 }
 function byNumber(a, b) { return (exNum(a) || "999").localeCompare(exNum(b) || "999") || a.title.localeCompare(b.title); }
+function anyState(e) {
+  // an exercise for any instrument, on the kind in hand (the one played last for these): a take of it here on that
+  // kind the project does not have yet (to review), wanted again, the project's take on that kind (good), or none
+  const k = anyKind();
+  if (!k) return null;
+  const on = () => `on the ${k}`;
+  const here = S.takes.filter((t) => t.exercise === e.id && (t.instruments || []).some((i) => i.kind === k) && !(e.project_takes || []).includes(t.id));
+  if (here.length) return { key: "review", label: `${here.length === 1 ? "1 new take" : `${here.length} new takes`} ${on()} to review`, n: here.length, last: here[0].started };
+  if (e.status === "wanted") return { key: "wanted", label: "Wanted again" };
+  if ((e.played_on || {})[k]) return { key: "good", label: `Good ${on()}` };
+  return { key: "needed", label: `Needs a take ${on()}` };
+}
 function exState(e) {
+  if (e.instrument === ANY && anyKind()) return anyState(e);
   if (e.to_review > 0) return { key: "review", label: e.to_review === 1 ? "1 new take to review" : `${e.to_review} new takes to review` };
   if (e.status === "wanted") return { key: "wanted", label: "Wanted again" };
   if (e.status === "good") return { key: "good", label: "Good" };
@@ -595,8 +658,14 @@ function todo(e) { const k = exState(e).key; return k === "needed" || k === "wan
 // on the board: what the project lists as wanted or needing a take (with no status file at all, what has no take here);
 // one recorded here since is shown apart, waiting for the project to bring it in
 function onBoard(e) {
+  if (e.instrument === ANY && anyKind()) return ["wanted", "needed", "review"].includes(exState(e).key);
   if (!S.exercises.some((x) => x.status)) return !e.takes;
   return e.status === "wanted" || e.status === "needed";
+}
+function boardGroup(e) {  // where the board shows it: "wanted" (again), "needed" (no take yet), "done" (recorded here, to review)
+  if (!onBoard(e)) return null;
+  if (e.instrument === ANY && anyKind()) { const k = exState(e).key; return k === "review" ? "done" : k; }
+  return e.to_review ? "done" : e.status === "wanted" ? "wanted" : "needed";
 }
 function exercisesFor(kind) { return S.exercises.filter((e) => (e.instrument || "") === kind).sort(byNumber); }
 function tempoOf(e) { return Number((C().tempo || {})[e.id] || e.tempo.bpm); }
@@ -642,17 +711,19 @@ function inputLabel(i) { return `In ${i.input} · ${i.name}`; }
 // a play-along or free play): an exercise from it is set up at once; a play-along or free take walks the steps.
 const STEPS = ["on", "which"];
 function exerciseBlocked() {  // why an exercise cannot be the next take, or ""
-  const ins = chosen();
+  const ins = chosen(), e = exById(C().exercise);
   if (ins.length > 1) return "two";
   if (!ins.length) return "none";
-  if (!ins[0].kind || !exercisesFor(ins[0].kind).length) return "noexercises";
+  if (e && e.instrument === ANY) return ins[0].kind ? "" : "nokind";  // any instrument, but it must say which
+  if (!ins[0].kind || !(exercisesFor(ins[0].kind).length || exercisesFor(ANY).length)) return "noexercises";
   return "";
 }
+function fits(e, inst) { return !!inst && (e.instrument === ANY ? !!inst.kind : (e.instrument || "") === inst.kind); }
 function stepOk(step) {
   const c = C();
-  if (step === "on") return chosen().length > 0 && (c.kind !== "exercise" || chosen().length === 1);
+  if (step === "on") return chosen().length > 0 && (c.kind !== "exercise" || (chosen().length === 1 && exerciseBlocked() !== "nokind"));
   if (step === "which") {
-    if (c.kind === "exercise") { const e = exById(c.exercise); return !!e && !exerciseBlocked() && (e.instrument || "") === chosen()[0].kind; }
+    if (c.kind === "exercise") { const e = exById(c.exercise); return !!e && !exerciseBlocked() && fits(e, chosen()[0]); }
     if (c.kind === "playalong") return !!backingById(c.backing);
     return c.kind === "free";
   }
@@ -761,10 +832,12 @@ function render() {
 }
 function go(screen, opts = {}) {
   if (screen === "which" && C().kind === "exercise") {  // which exercise: the list of the instrument's kind, else the board
-    const k = chosen().length === 1 ? chosen()[0].kind : "";
+    const cur = exById(C().exercise);  // (one for any instrument: their list)
+    const k = cur && cur.instrument === ANY ? ANY : chosen().length === 1 ? chosen()[0].kind : "";
     screen = k && exercisesFor(k).length ? "instrument" : "board";
     opts = { ...opts, kind: k };
   }
+  if (screen !== "on") S.toRecord = false;
   if (STEPS.includes(screen) && !STEPS.includes(S.screen) && !opts.keepSnapshot) { S.snapshot = JSON.parse(JSON.stringify(C())); S.entry = screen; }
   if (opts.walk !== undefined) S.walk = opts.walk;
   if (!STEPS.includes(screen)) S.walk = false;
@@ -792,7 +865,10 @@ function jump(id) {  // an exercise from the board or an instrument's list: set 
   const e = exById(id);
   if (!e) return;
   setUp(e);
-  go(readyOk() ? "record" : firstOpen() || "ready");
+  const to = readyOk() ? "record" : firstOpen() || "ready";
+  go(to);
+  S.toRecord = to === "on";  // asked what it is on (an exercise for any instrument, the first time): then its record screen
+  if (S.toRecord) render();
 }
 function startOther(kind) {  // a play-along or free play, from the board: the steps from what it is on
   S.snapshot = JSON.parse(JSON.stringify(C())); S.entry = "on";
@@ -805,6 +881,8 @@ function previewChosen() {  // the list's score, first: the exercise chosen if i
   S.previewOpen = false;
 }
 function answered(step) {  // a step's choice made: on to the next step, or back to Ready
+  if (step === "on") { noteAny(); save(); }
+  if (S.toRecord && step === "on") { go(firstOpen() || "record"); return; }
   if (S.walk) {
     const i = STEPS.indexOf(step);
     if (i < STEPS.length - 1) { go(STEPS[i + 1]); return; }
@@ -812,7 +890,7 @@ function answered(step) {  // a step's choice made: on to the next step, or back
   }
   go(firstOpen() || "ready");
 }
-function restore(to = "ready") { if (S.snapshot) { S.choices = S.snapshot; save(); } go(to); }
+function restore(to = S.toRecord ? "record" : "ready") { if (S.snapshot) { S.choices = S.snapshot; save(); } go(to); }
 
 function crumbsNav() {
   // the music room, the board (Exercises), then on an instrument's list its name; else each step of the
@@ -887,8 +965,18 @@ function renderOn() {
       + (KIND_RE.test(kind) ? instCard(`other:${kind}`, `Another ${kind} (not listed)`, ids, true) : "");
     return `<div class="kind"><span class="label">${esc(kindName(kind))}</span>${cards}</div>`;
   };
-  const unknownKinds = kinds().filter((k) => !S.instruments.some((i) => i.kind === k) && KIND_RE.test(k));
-  const other = unknownKinds.map((k) => instCard(`other:${k}`, cap(notListed(k)), ids, true)).join("") + instCard("other:", "Something else", ids, true);
+  const c0 = C(), e0 = exById(c0.exercise), anyEx = c0.kind === "exercise" && !!e0 && e0.instrument === ANY;
+  // kinds the project lists no instrument of: those it has exercises or takes of, for an exercise for any instrument
+  // the player's own (SUGGEST), and one typed here (Another kind) once chosen; then something else (no kind: not
+  // for an exercise for any instrument, which must say)
+  const listed = (k) => S.instruments.some((i) => i.kind === k);
+  const unknownKinds = [...new Set(instrumentKinds().concat(anyEx ? SUGGEST : [])
+    .concat(ids.filter((id) => id.length > 6 && id.startsWith("other:")).map((id) => id.slice(6))))]
+    .filter((k) => !listed(k) && KIND_RE.test(k));
+  const other = unknownKinds.map((k) => instCard(`other:${k}`, cap(notListed(k)), ids, true)).join("")
+    + (anyEx ? "" : instCard("other:", "Something else", ids, true))
+    + `<div class="kindform"><label for="kindIn">Another kind</label><input id="kindIn" type="text" maxlength="30" autocomplete="off"
+        autocapitalize="none" placeholder="ukulele" data-kind-in><button type="button" class="btn small" data-act="kind-other">Use it</button></div>`;
   const was = S.snapshot && !S.walk ? (S.snapshot.instruments || []).map(instInfo).filter(Boolean) : [];
   const inputsHtml = S.inputs.slice().sort((a, b) => a.input - b.input).map((inp) => {
     const opts = chosen().map((i) => [i.id, i.short])
@@ -901,7 +989,8 @@ function renderOn() {
   }).join("");
   const open = firstOpen(), c = C(), e = exById(c.exercise), blocked = c.kind === "exercise" ? exerciseBlocked() : "";
   let foot;
-  if (!chosen().length) foot = `<span class="hint">Choose one or two</span>`;
+  if (!chosen().length) foot = `<span class="hint">${anyEx ? "Choose the one it is played on" : "Choose one or two"}</span>`;
+  else if (blocked === "nokind") foot = `<span class="note"><b>${esc(exLabel(e))} is for any instrument, but it needs to know which.</b> Choose one, or name its kind.</span>`;
   else if (blocked === "two" || blocked === "noexercises") {  // an exercise is for one instrument, of a kind with exercises
     const note = blocked === "two" ? `<b>Two instruments:</b> an exercise is for one. Keep one, or record a play-along or free play.`
       : `<b>No exercises for ${esc(chosen()[0].kind ? kindName(chosen()[0].kind).toLowerCase() : "this instrument")} yet.</b> Record a play-along or free play.`;
@@ -910,12 +999,15 @@ function renderOn() {
   } else if (S.walk) foot = `<button type="button" class="btn go" data-act="answered" data-step="on">${c.kind === "free" ? "Next: anything from the speakers" : "Next: which backing"} ${ICON.next}</button>`;
   else {
     const note = open === "which" && c.kind === "exercise" && e ? `<b>${esc(exLabel(e))} is ${article(e.instrument)} ${esc(e.instrument)} exercise.</b> Pick ${article(chosen()[0].kind)} ${esc(chosen()[0].kind)} one next.` : "";
-    const label = !open ? "Back to Ready" : c.kind === "exercise" ? `Next: ${article(chosen()[0].kind)} ${chosen()[0].kind} exercise` : c.kind === "free" ? "Next: anything from the speakers" : "Next: which backing";
+    const label = !open ? (S.toRecord ? "Next: record it" : "Back to Ready") : c.kind === "exercise" ? `Next: ${article(chosen()[0].kind)} ${chosen()[0].kind} exercise` : c.kind === "free" ? "Next: anything from the speakers" : "Next: which backing";
     foot = `${note ? `<span class="note">${note}</span>` : ""}<button type="button" class="btn go" data-act="answered" data-step="on">${esc(label)} ${ICON.next}</button>`;
   }
-  return `<div class="body"><div class="q"><h1>What are you recording on?</h1>
-      <p>One instrument, or two at once.${was.length ? ` Until now: ${esc(andList(was.map((i) => i.the)))}.` : ""}</p></div>
-    <div class="on-grid"><div class="kinds">${kinds().map(col).join("")}${`<div class="kind"><span class="label">${unknownKinds.length ? esc(unknownKinds.map(kindName).join(", ")) + ", other" : "Other"}</span>${other}</div>`}</div>
+  const ask = anyEx ? `<h1>What are you playing it on?</h1>
+      <p>${esc(exName(e))} is for any instrument, in any key: one the project lists, or any other kind (“a mandolin (not listed)”).${was.length ? ` Until now: ${esc(andList(was.map((i) => i.the)))}.` : ""}</p>`
+    : `<h1>What are you recording on?</h1>
+      <p>One instrument, or two at once.${was.length ? ` Until now: ${esc(andList(was.map((i) => i.the)))}.` : ""}</p>`;
+  return `<div class="body"><div class="q">${ask}</div>
+    <div class="on-grid"><div class="kinds">${instrumentKinds().map(col).join("")}${`<div class="kind"><span class="label">${unknownKinds.length > 2 ? "Not listed" : unknownKinds.length ? esc(unknownKinds.map(kindName).join(", ")) + ", other" : "Other"}</span>${other}</div>`}</div>
       <aside class="panel" aria-label="Inputs"><div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px"><h2>Inputs</h2><span class="muted" style="font-size:15px">what each one carries</span></div>
         <div class="inputs">${inputsHtml || '<span class="muted">No inputs named in the config.</span>'}</div><p class="muted" id="monNote" style="font-size:14px;margin-top:10px"></p></aside></div></div>
     <div class="foot">${leftButton()}${foot}</div>`;
@@ -925,6 +1017,16 @@ function instCard(id, label, ids, unlisted = false) {
   const ins = sel ? inputsOf(id).map((i) => `In ${i.input}`).join(" + ") : "";
   return `<button type="button" role="checkbox" aria-checked="${sel}" class="card${unlisted ? " unlisted" : ""}${sel ? " sel" : ""}" data-act="inst" data-id="${esc(id)}">
     <span>${esc(label)}</span>${sel ? `<span class="sub"><span>${esc(ins || "no input")}</span>${ICON.boxcheck}</span>` : was ? `<span class="sub">until now</span>` : ""}</button>`;
+}
+function otherKind() {  // "Another kind": a kind of instrument the project does not list, typed ("mandolin")
+  const el = $("[data-kind-in]");
+  if (!el) return;
+  const k = el.value.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!KIND_RE.test(k)) { showError("Name a kind of instrument: letters, digits, spaces and hyphens, starting with a letter (“mandolin”)."); return; }
+  showError("");
+  const id = `other:${k}`;
+  if (C().kind === "exercise") { S.choices.instruments = [id]; S.choices.inputs = defaultInputs(chosen()); save(); render(); }
+  else if (!(C().instruments || []).includes(id)) toggleInstrument(id);
 }
 function toggleInstrument(id) {
   let ids = [...(C().instruments || [])];
@@ -940,8 +1042,9 @@ function toggleInstrument(id) {
 // it in. A tap sets one up (on the instrument of its kind played last) and opens its record screen. Each column
 // leads to the instrument's whole list; the instruments with nothing wanted are named at the top.
 function boardCard(e) {
-  const sel = C().kind === "exercise" && C().exercise === e.id, done = e.to_review > 0;
-  const info = done ? `<b>Recorded ${esc(when(e.last_take))}</b> · not in the project yet`
+  const sel = C().kind === "exercise" && C().exercise === e.id, done = boardGroup(e) === "done";
+  const st = done && e.instrument === ANY ? exState(e) : null;  // any instrument's: its take on the instrument in hand
+  const info = done ? `<b>Recorded ${esc(when(st ? st.last : e.last_take))}</b> · not in the project yet`
     : `${Math.round(e.tempo.bpm)} bpm · ${e.bars} bars${sel ? " · <b>set up</b>" : ""}`;
   const why = e.status === "wanted" && !done ? `<span class="why">${esc(e.status_note || "Wanted again")}</span>` : "";
   return `<button type="button" class="bcard${sel ? " sel" : ""}${done ? " done" : ""}" data-act="jump" data-id="${esc(e.id)}">
@@ -950,25 +1053,29 @@ function boardCard(e) {
 function renderBoard() {
   const cols = [], idle = [];
   for (const k of kinds()) {
-    const all = exercisesFor(k), on = all.filter(onBoard);
+    const all = exercisesFor(k), group = (g) => all.filter((e) => boardGroup(e) === g);
     if (!all.length) continue;
-    if (!on.length) { idle.push(k); continue; }
-    cols.push({ k, all, wanted: on.filter((e) => e.status === "wanted" && !e.to_review), needed: on.filter((e) => e.status !== "wanted" && !e.to_review),
-      done: on.filter((e) => e.to_review) });
+    if (!all.some(onBoard)) { idle.push(k); continue; }
+    cols.push({ k, all, wanted: group("wanted"), needed: group("needed"), done: group("done") });
   }
   const chev = ICON.chev.replace('stroke="#7E768B"', 'stroke="#B9A0FF"');
   const col = ({ k, all, wanted, needed, done }) => {
-    const n = wanted.length + needed.length, on = S.instruments.filter((i) => i.kind === k).length > 1 ? instInfo(lastInstrument(k)) : null;
+    const n = wanted.length + needed.length;
+    // which instrument: of its kind, when the project knows two; any instrument's, the one played on last (a tap asks
+    // the first time), and what it still wants on it
+    const on = k === ANY ? (lastAny() ? instInfo(lastAny()) : null)
+      : S.instruments.filter((i) => i.kind === k).length > 1 ? instInfo(lastInstrument(k)) : null;
+    const which = on ? ` · on ${esc(on.the)}` : k === ANY ? " · a tap asks what it is on" : "";
     return `<section class="bcol" aria-label="${esc(kindName(k))}"><div class="bcol-head"><h2>${esc(kindName(k))}</h2>
         <button type="button" class="all" data-act="kind" data-kind="${esc(k)}">All ${all.length}${chev}</button></div>
-      <div class="bcol-on">${n ? `<b>${n} to record</b>` : "Nothing to record"}${on ? ` · on ${esc(on.the)}` : ""}</div>
+      <div class="bcol-on">${n ? `<b>${n} to record</b>` : "Nothing to record"}${which}</div>
       <div class="bcol-list">${wanted.length ? `<h3 class="red">Wanted again</h3>${wanted.map(boardCard).join("")}` : ""}
         ${needed.length ? `<h3 class="red">No take yet</h3>${needed.map(boardCard).join("")}` : ""}
         ${done.length ? `<h3>Recorded, to review</h3>${done.map(boardCard).join("")}` : ""}</div></section>`;
   };
   const toRecord = cols.reduce((n, x) => n + x.wanted.length + x.needed.length, 0);
   const updated = S.exercises.map((e) => e.status_updated).filter(Boolean).sort().pop();
-  const idleHtml = idle.length ? ` Nothing wanted for ${andList(idle.map((k) => `<button type="button" data-act="kind" data-kind="${esc(k)}">${esc(kindName(k).toLowerCase())}</button>`))}.` : "";
+  const idleHtml = idle.length ? ` Nothing wanted for ${andList(idle.map((k) => `<button type="button" data-act="kind" data-kind="${esc(k)}">${esc(k === ANY ? `any instrument${anyKind() ? ` on the ${anyKind()}` : ""}` : kindName(k).toLowerCase())}</button>`))}.` : "";
   const nb = S.backings.length, nNew = S.backings.filter(isNew).length;
   const head = `<div class="board-head"><div class="q"><h1>What's wanted</h1>
       <p>${toRecord ? `${toRecord} to record.` : "Nothing to record: every exercise has a good take."}${idleHtml}${updated ? ` <span style="color:var(--faint)">The project's list of ${esc(when(updated))}.</span>` : ""}</p></div>
@@ -1019,10 +1126,13 @@ function renderExercises() {  // an instrument's exercises: what it still wants 
   const go = !pv ? `<span class="hint">Tap one to see its score</span>`
     : `<button type="button" class="btn go" data-act="jump" data-id="${esc(pv.id)}">${esc(useLabel(pv))} ${ICON.next}</button>`;
   const counts = [numbered.length ? `${numbered.length} exercise${numbered.length > 1 ? "s" : ""}` : "", tunes.length ? `${tunes.length} tune${tunes.length > 1 ? "s" : ""}` : ""].filter(Boolean);
-  return `<div class="body pick-body"><div class="q"><h1>${esc(kindName(kind))}</h1><p>${esc(andList(counts))}, what the project wants first. Tap one to see its score.</p></div>
+  const anyOn = kind === ANY ? anyKind() : "", forWhat = anyOn ? `the ${anyOn}` : kindWord(kind);
+  const lead = kind === ANY ? `${esc(andList(counts))} for any instrument, in any key: what the project wants${anyOn ? ` on the ${esc(anyOn)}` : ""} first. Tap one to see its score.`
+    : `${esc(andList(counts))}, what the project wants first. Tap one to see its score.`;
+  return `<div class="body pick-body"><div class="q"><h1>${esc(kindName(kind))}</h1><p>${lead}</p></div>
     <div class="pick"><div class="pick-list">
-      ${wanted.length ? `<h2 class="red">Wanted again · ${wanted.length}</h2>${wanted.map((e) => exRow(e, true)).join("")}` : `<div class="strip"><b>Wanted again</b> none for ${esc(kind)}</div>`}
-      ${needed.length ? `<h2 class="red">Needs a take · ${needed.length}</h2>${needed.map((e) => exRow(e, true)).join("")}` : `<div class="strip"><b>Needs a take</b> none for ${esc(kind)}</div>`}
+      ${wanted.length ? `<h2 class="red">Wanted again · ${wanted.length}</h2>${wanted.map((e) => exRow(e, true)).join("")}` : `<div class="strip"><b>Wanted again</b> none for ${esc(forWhat)}</div>`}
+      ${needed.length ? `<h2 class="red">Needs a take${anyOn ? ` on the ${esc(anyOn)}` : ""} · ${needed.length}</h2>${needed.map((e) => exRow(e, true)).join("")}` : `<div class="strip"><b>Needs a take</b> none for ${esc(forWhat)}</div>`}
       ${review.length ? `<h2>New takes to review · ${review.length}</h2>${review.map((e) => exRow(e)).join("")}` : ""}
       ${good.length ? `<h2>Good · ${good.length}</h2><div class="list">${shownGood.map((e) => small(e, `<span class="n">${esc(exNum(e))}</span><span class="t">${esc(shortTitle(e))}</span><span class="r">${Math.round(e.tempo.bpm)}${e.last_take ? ` · ${esc(when(e.last_take))}` : ""}</span>`)).join("")}
         ${good.length > shownGood.length || (S.showGood && good.length > 4) ? `<button type="button" data-act="show-good"><span class="more">${S.showGood ? "Fewer" : `All ${good.length} good ones`}</span></button>` : ""}</div>` : ""}
@@ -1101,7 +1211,7 @@ function renderReady() {
   if (c.kind === "exercise") {
     const st = exState(e), again = S.takes[0] && S.takes[0].exercise === e.id;
     const status = (again ? `<span style="color:var(--ink);font-weight:700">Again</span> · ` : "")
-      + (st.key === "needed" ? `<span class="red-ink" style="font-weight:700">Needs a take</span>`
+      + (st.key === "needed" ? `<span class="red-ink" style="font-weight:700">${esc(st.label)}</span>`
       : st.key === "wanted" ? `<span class="red-ink" style="font-weight:700">Wanted again</span>${e.status_note ? `: ${esc(e.status_note)}` : ""}`
       : st.key === "review" ? `last take ${esc(when(e.last_take))}, not reviewed yet`
       : `good${e.last_take ? ` · last take ${esc(when(e.last_take))}` : ""}`);
@@ -1167,6 +1277,15 @@ function chartPlace(pl, e) {  // where the chart is: its count-in, the pickup, t
 }
 
 // --- recording: the record screen (the score, the inputs, Record)
+function anyPicker() {  // an exercise for any instrument: what it is played on, a tap to change (the ones played on before)
+  const cur = chosen().length === 1 ? chosen()[0].id : null, recent = anyRecent();
+  const chips = recent.concat(cur && hasKind(cur) && !recent.includes(cur) ? [cur] : []).map((id) => {
+    const i = instInfo(id);
+    return `<button type="button" class="onpick" aria-pressed="${id === cur}" data-act="any-on" data-id="${esc(id)}">${esc(i.other ? cap(i.kind) : i.short)}${i.other ? " <small>not listed</small>" : ""}</button>`;
+  }).join("");
+  return `<span class="onpicks" role="group" aria-label="Played on"><span class="k">Played on</span>${chips}
+    <button type="button" class="onpick more" data-act="any-other">${recent.length ? "Something else" : "Choose"}</button></span>`;
+}
 function recSentence(link) {
   const p = sentenceParts(), c = C(), on = onWord(chosen());
   const part = (text, step) => link ? `<button type="button" data-act="step" data-step="${step}">${esc(text)}</button>` : `<b>${esc(text)}</b>`;
@@ -1198,7 +1317,7 @@ function renderRecord() {
   if (c.kind === "exercise") {
     const st = exState(e);
     meta = `<span class="pill ${st.key === "good" ? "purple" : "red"}">${esc(st.label)}</span>${st.key === "wanted" && e.status_note ? `<span>${esc(e.status_note)}</span>` : ""}
-      <span class="muted">${e.tempo.beats_per_bar}/4 · ${e.bars} bars${e.last_take ? ` · last take ${esc(when(e.last_take))}` : ""}</span>`;
+      <span class="muted">${e.tempo.beats_per_bar}/4 · ${e.bars} bars${e.last_take ? ` · last take ${esc(when(e.last_take))}` : ""}</span>${e.instrument === ANY ? anyPicker() : ""}`;
     main = `<div class="score">${scoreHtml(e, true)}</div>`;
   } else if (c.kind === "playalong") {
     meta = `<span class="muted">${esc(fmt(b.seconds))}${b.tempo ? ` · ${Math.round(b.tempo.bpm)} bpm` : ""}${b.note ? ` · ${esc(b.note)}` : ""}</span>`;
@@ -1270,7 +1389,8 @@ function renderRecorded() {
   const others = S.takes.filter((x) => x.id !== t.id && (t.exercise ? x.exercise === t.exercise : isFree(t) ? isFree(x) : !x.exercise && x.backing === t.backing)).slice(0, 8);
   const pl = S.status && S.status.playing, playingThis = pl && pl.take === t.id;
   const proj = e ? e.project_takes || [] : [];
-  const tip = e ? (() => { const nx = exercisesFor(e.instrument).filter(exNum).find((x) => todo(x) && x.id !== e.id); return nx ? `<button type="button" class="tip-next" data-act="jump" data-id="${esc(nx.id)}">Next wanted for ${esc(e.instrument)}: <b>${esc(exName(nx))}</b> <span class="tip-go">${ICON.swap} Set it up</span></button>` : `Nothing else wanted for ${esc(e.instrument)} now.`; })() : "";
+  const tip = e ? (() => { const nx = exercisesFor(e.instrument).filter(exNum).find((x) => todo(x) && x.id !== e.id); const forWhat = e.instrument === ANY && anyKind() ? `the ${anyKind()}` : kindWord(e.instrument);
+    return nx ? `<button type="button" class="tip-next" data-act="jump" data-id="${esc(nx.id)}">Next wanted for ${esc(forWhat)}: <b>${esc(exName(nx))}</b> <span class="tip-go">${ICON.swap} Set it up</span></button>` : `Nothing else wanted for ${esc(forWhat)} now.`; })() : "";
   const tk = (x, label) => {
     const on = pl && pl.take === x.id;
     return `<button type="button" class="tk${on ? " on" : ""}" data-act="${on ? "stop-play" : "play"}" data-id="${esc(x.id)}"><span class="play">${on ? ICON.stop : ICON.play}</span>
@@ -1534,6 +1654,9 @@ document.addEventListener("click", (ev) => {
   else if (a === "restore") restore(d.to);
   else if (a === "answered") answered(d.step);
   else if (a === "inst") toggleInstrument(d.id);
+  else if (a === "any-on") setAnyOn(d.id);
+  else if (a === "any-other") { go("on", { walk: false }); S.toRecord = true; render(); }  // and back to the record screen
+  else if (a === "kind-other") otherKind();
   else if (a === "carry") { S.choices.inputs = { ...carries(), [d.input]: d.v }; save(); render(); }
   else if (a === "just") { S.choices.instruments = [d.id]; S.choices.inputs = defaultInputs(chosen()); save(); answered("on"); }
   else if (a === "preview") { S.preview = d.id; S.previewOpen = true; render(); const sc = $(".pv-score"); if (sc) sc.scrollTop = 0; }
@@ -1597,6 +1720,7 @@ document.addEventListener("change", (ev) => {
     act(async () => { await api("PUT", `/api/takes/${encodeURIComponent(id)}/note`, { note }); await refresh(); }); }
 });
 document.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.target.dataset.note) ev.target.blur(); });
+document.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.target.dataset.kindIn !== undefined) { ev.preventDefault(); otherKind(); } });
 document.addEventListener("pointerdown", () => { const was = listening(); lastTouch = Date.now(); if (!was) monitorTick(); });
 window.addEventListener("pagehide", () => { saveNow(); flushNote(); });
 document.addEventListener("visibilitychange", () => { if (document.hidden) saveNow(); if (!document.hidden) { lastTouch = Date.now(); refresh().then(render); poll(true); } });

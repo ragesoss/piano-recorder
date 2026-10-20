@@ -11,8 +11,10 @@ by tools/push-exercise.
     <exercises_dir>/status.json          what the project has of each exercise (tools/push-status,
                                          from dobro-transcription's exercises/status.py): "good",
                                          "wanted" (a new take, and why) or "needed" (no take yet),
-                                         and which of this app's takes it has; and the
-                                         instruments the project knows, for the takes
+                                         and which of this app's takes it has (an exercise for
+                                         any instrument, "generic": the kinds it has takes on,
+                                         played_on); and the instruments the project knows, for
+                                         the takes
 """
 
 import json
@@ -40,6 +42,9 @@ class Exercise:
     status_note: str = ""  # why a new take is wanted
     project_takes: list[str] = field(default_factory=list)  # this app's takes the project has
     status_updated: str = ""  # when status.json was made
+    # an exercise for any instrument (instrument "generic"): the kinds the project has takes of it on, and how
+    # many (status.json's played_on: {"mandolin": 2}); {} for the others
+    played_on: dict = field(default_factory=dict)
 
 
 class ExerciseNotFound(Exception):
@@ -95,7 +100,10 @@ class Exercises:
                 if self._audio_path(d, raw) is not None else {},
                 source=raw.get("source", ""), note=raw.get("note", ""),
                 status=str(st.get("status", "")), status_note=str(st.get("note", "")),
-                project_takes=[str(t) for t in st.get("app_takes", [])], status_updated=str(status.get("generated", "")))
+                project_takes=[str(t) for t in st.get("app_takes", [])], status_updated=str(status.get("generated", "")),
+                played_on={str(k): int(v) for k, v in (st.get("played_on") or {}).items()
+                           if isinstance(v, (int, float)) and not isinstance(v, bool)}
+                if isinstance(st.get("played_on"), dict) else {})
         except (OSError, ValueError, KeyError, TypeError) as e:
             raise ExerciseNotFound(f"{exercise_id}: {e}")
 
