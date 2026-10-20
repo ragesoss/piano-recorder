@@ -221,6 +221,9 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
 .acts { display: flex; flex-wrap: wrap; gap: 10px; }
 .review-box { background: var(--surf2); border-radius: 18px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .review-box p { font-size: 15px; color: var(--ink2); }
+.review-box .k { font-size: 15px; font-weight: 700; color: var(--ink2); }
+.review-box .prog { flex: none; }
+.review-box .btn:disabled { opacity: .5; }
 .confirm { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 16px; border: 1.5px solid var(--red-ink); background: var(--red-tint); }
 .confirm .acts .btn { flex: 1; }
 
@@ -331,6 +334,7 @@ const S = {
   walk: false, snapshot: null, entry: null,
   take: null, from: "ready",  // the take shown, and whether it was reached by recording or from the list
   confirm: null, renaming: null, view: "both", error: "",
+  chart: null,  // "Draft a chord chart" open on a take: {take, instrument, title}
 };
 const C = () => S.choices;
 function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
@@ -439,14 +443,14 @@ function go(screen, opts = {}) {
   if (STEPS.includes(screen) && !STEPS.includes(S.screen)) { S.snapshot = JSON.parse(JSON.stringify(C())); S.entry = screen; }
   if (opts.walk !== undefined) S.walk = opts.walk;
   if (["ready", "record"].includes(screen)) S.walk = false;
-  if (screen !== "take") { stopPlaying(); S.confirm = null; }
+  if (screen !== "take") { stopPlaying(); S.confirm = null; S.chart = null; }
   if (screen === "takes") S.renaming = null;
   S.screen = screen;
   render();
   const b = $(".body"); if (b && !opts.keepScroll) b.scrollTop = 0;
   monitorTick();
 }
-function openTake(id, from) { S.take = id; S.from = from || S.from; S.confirm = null; go("take"); }
+function openTake(id, from) { if (S.take !== id) S.chart = null; S.take = id; S.from = from || S.from; S.confirm = null; go("take"); }
 function answered(step) {
   if (S.walk) { const i = STEPS.indexOf(step); go(i < STEPS.length - 1 ? STEPS[i + 1] : "ready"); return; }
   go(firstOpen() || "ready");
@@ -649,7 +653,7 @@ function renderTake() {
       <button type="button" aria-pressed="${S.view === "both"}" data-act="view" data-v="both">Notation and tab</button><button type="button" aria-pressed="${S.view === "tab"}" data-act="view" data-v="tab">Tab</button></div>`}
       <span class="hint">Tap a bar to play from there</span></div><div id="scoreSlot"></div></div>`;
   else main = `<div class="working"><span class="doing">Not transcribed yet</span><div class="acts"><button type="button" class="btn tint" data-act="transcribe" data-id="${esc(t.id)}">Transcribe it</button></div></div>`;
-  return `<div class="body take-body" id="takeBody">${head}${clickNote}${main}${reviewHtml(t)}${actionsHtml(t)}</div>${t.playable ? playerHtml(t) : ""}`;
+  return `<div class="body take-body" id="takeBody">${head}${clickNote}${main}${reviewHtml(t)}${chartHtml(t)}${actionsHtml(t)}</div>${t.playable ? playerHtml(t) : ""}`;
 }
 function workingHtml(job, t) {
   const st = S.status || {}, paused = job && job.paused;
@@ -684,8 +688,50 @@ function reviewHtml(t) {
   return `<div class="review-box"><span class="label">Review</span>${r.id ? `<p>In the review app since ${esc(when(r.made))}. Your answers there turn this draft into the take's answer key.</p>` : `<p>The review app checks the draft with you, and your answers turn it into the take's answer key.</p>`}${err}
     <div class="acts">${open}<button type="button" class="btn ${r.id ? "" : "fill"}" data-act="review" data-id="${esc(t.id)}"${s.review ? " disabled" : ""}>${r.id ? "Make the review again" : "Review it"}</button></div></div>`;
 }
+// "Draft a chord chart" (transcriber/chart.py): the transcription project's drafter reads a chord chart from the take's
+// recording, then the review app's chart check asks you to correct and confirm it. A small dialog first: the song's
+// title (if wanted) and what is on the recording (the take's own instrument where the drafter knows it, else "Not sure").
+function chartInstName(k) { const x = (((S.setup || {}).chart || {}).instruments || []).find((i) => i.kind === k); return x ? x.name : k || ""; }
+function chartTempo(t) { const tr = t.transcription || {}, b = (tr.state === "done" && tr.bpm) || t.bpm; return b ? Math.round(b * 10) / 10 : null; }
+function chartTime(job) { return `${fmt(job.elapsed_s)}${job.estimate_s ? ` of about ${fmt(job.estimate_s)}` : ""}`; }
+function chartHtml(t) {
+  if (!t.has_take) return "";
+  const cs = S.setup.chart || {}, c = t.chart || {}, job = (S.status || {}).chart;
+  const head = '<span class="label">Chord chart</span>';
+  if (job && job.take === t.id) {
+    const pct = job.estimate_s ? Math.min(95, 100 * job.elapsed_s / job.estimate_s) : 0;
+    return `<div class="review-box" aria-live="polite">${head}<p><b data-chart-doing>${esc(job.paused ? "Held while recording" : job.doing)}…</b> <span class="tnum" data-chart-time>${chartTime(job)}</span></p>
+      ${job.estimate_s ? `<div class="prog"><i data-chart-prog style="width:${pct}%"></i></div>` : ""}
+      <p class="muted" style="font-size:14px">${c.id ? "Drafting it again: the review stays as it is until the new one is made. " : ""}A long recording, or a band's, can take some minutes. You can record, listen or look at other takes meanwhile.</p></div>`;
+  }
+  const open = c.id ? `<a class="btn fill" href="${esc(reviewUrl(c))}">Open the chart check</a>` : "";
+  const err = c.error ? `<p class="red-ink">${c.id ? "Drafting it again didn't work" : "No chart could be drafted"}: ${esc(c.error)}</p>` : "";
+  if (!cs.available) return `<div class="review-box">${head}${open}<p>${esc(cap(cs.why || "the drafter isn't there yet"))}.</p>
+    <p>When it is there, “Draft a chord chart” reads a chord chart from this recording and sends it to the review app for you to correct and confirm.</p>
+    <button type="button" class="btn" disabled>Draft a chord chart</button></div>`;
+  if (S.chart && S.chart.take === t.id) return chartDialogHtml(t);
+  const about = c.id ? `<p>Drafted ${esc(when(c.made))}${c.title ? `, “${esc(c.title)}”` : ""}${c.instrument && c.instrument !== "auto" ? `, read as ${esc(chartInstName(c.instrument).toLowerCase())}` : ""}. In the review app you correct it and confirm it.</p>`
+    : "<p>The drafter reads a chord chart from this recording, and the review app asks you to correct it and confirm it.</p>";
+  return `<div class="review-box">${head}${about}${err}
+    <div class="acts">${open}<button type="button" class="btn ${c.id ? "" : "tint"}" data-act="chart" data-id="${esc(t.id)}"${job ? " disabled" : ""}>${c.id ? "Draft it again" : "Draft a chord chart"}</button></div>
+    ${job ? '<p class="muted" style="font-size:14px">Another take\'s chart is being drafted: one at a time.</p>' : ""}</div>`;
+}
+function chartDialogHtml(t) {
+  const d = S.chart, own = t.chart_instrument || "auto", bpm = chartTempo(t);
+  const chips = ((S.setup.chart || {}).instruments || []).map((i) => `<button type="button" aria-pressed="${d.instrument === i.kind}" data-act="chart-inst" data-k="${esc(i.kind)}">${esc(i.name)}</button>`).join("");
+  const read = own !== "auto" ? `Read from the take: ${esc(chartInstName(own))}.` : "“Not sure” lets the drafter tell from the sound.";
+  return `<div class="review-box" role="group" aria-label="Draft a chord chart"><span class="label">Draft a chord chart</span>
+    <label class="k" for="chartTitleIn">The song's title (if you like)</label>
+    <input id="chartTitleIn" class="text-in" type="text" maxlength="120" value="${esc(d.title)}" placeholder="No title">
+    <span class="k" id="chartInstK">What's on the recording</span>
+    <div class="kindset" role="radiogroup" aria-labelledby="chartInstK">${chips}</div>
+    <p class="muted" style="font-size:14px">${read}${bpm ? ` It is told ${bpm} bpm, ${t.beats_per_bar || 4} beats a bar.` : ""}</p>
+    <div class="acts"><button type="button" class="btn fill" data-act="chart-go" data-id="${esc(t.id)}">Draft it</button><button type="button" class="btn" data-act="chart-cancel">Cancel</button></div></div>`;
+}
+function readChartTitle() { const i = $("#chartTitleIn"); if (i && S.chart) S.chart.title = i.value; }
 function actionsHtml(t) {
-  if (S.confirm === t.id) return `<div class="confirm" role="alertdialog" aria-label="Delete this take?"><b>Delete this take?</b><span style="font-size:15px;color:var(--ink2)">${esc(takeName(t))}, ${esc(takeLine(t))}: its recording and its transcription.${t.review && t.review.id ? " The review stays in the review app." : ""}</span>
+  const kept = (t.review && t.review.id) || (t.chart && t.chart.id);
+  if (S.confirm === t.id) return `<div class="confirm" role="alertdialog" aria-label="Delete this take?"><b>Delete this take?</b><span style="font-size:15px;color:var(--ink2)">${esc(takeName(t))}, ${esc(takeLine(t))}: its recording and its transcription.${kept ? ` ${t.review && t.review.id && t.chart && t.chart.id ? "Its reviews stay" : "Its review stays"} in the review app.` : ""}</span>
     <div class="acts"><button type="button" class="btn red" data-act="delete-yes" data-id="${esc(t.id)}">${ICON.trash} Delete it</button><button type="button" class="btn" data-act="delete-no">Keep it</button></div></div>`;
   const renaming = S.renaming === t.id;
   return `${renaming ? `<div class="field"><label class="k" for="renameIn">Name</label><input id="renameIn" class="text-in" type="text" maxlength="120" value="${esc(t.title)}" placeholder="${esc(takeName({ ...t, title: "" }))}">
@@ -1029,6 +1075,13 @@ function live() {
     if (pr && job.estimate_s) pr.style.width = `${Math.min(95, 100 * job.elapsed_s / job.estimate_s)}%`;
     if (tm) tm.textContent = `${fmt(job.elapsed_s)}${job.estimate_s ? ` of about ${fmt(job.estimate_s)}` : ""}`;
   }
+  const ch = s.chart;
+  if (ch && S.screen === "take" && ch.take === S.take) {
+    const d = $("[data-chart-doing]"), pr = $("[data-chart-prog]"), tm = $("[data-chart-time]");
+    if (d) d.textContent = `${ch.paused ? "Held while recording" : ch.doing}…`;
+    if (pr && ch.estimate_s) pr.style.width = `${Math.min(95, 100 * ch.elapsed_s / ch.estimate_s)}%`;
+    if (tm) tm.textContent = chartTime(ch);
+  }
   if (!dragging) $$("[data-level-text]").forEach((el) => { el.textContent = dbText(s.level_offset_db); });
   $$("[data-level]").forEach((el) => { if (document.activeElement !== el && !dragging) el.value = s.level_offset_db; });
 }
@@ -1071,7 +1124,8 @@ async function poll(once) {
       S.take = recordingId || (prev && prev.recording && prev.recording.take); S.from = "ready"; S.screen = "take"; wakeLock(false);
       await refresh(); render();
     }
-    const job = JSON.stringify([s.job && s.job.take, s.job && s.job.stage, s.queue, s.review && s.review.take]);
+    const job = JSON.stringify([s.job && s.job.take, s.job && s.job.stage, s.queue, s.review && s.review.take,
+      s.chart && s.chart.take, s.chart && s.chart.stage]);
     if (s.takes_version !== version || job !== lastJob) {
       const first = version === null; version = s.takes_version; const jobChanged = job !== lastJob; lastJob = job;
       if (!first || jobChanged) { await refresh(); if (S.screen !== "recording" && !editing()) render(); }
@@ -1083,10 +1137,10 @@ async function poll(once) {
     $("#end").innerHTML = '<span class="chip off"><span class="dot"></span>Not reachable</span>';
   }
   const busy = s && (s.state === "recording" || s.state === "analyzing");
-  const working = s && (s.job || (s.queue || []).length || s.review);
+  const working = s && (s.job || (s.queue || []).length || s.review || s.chart);
   pollTimer = setTimeout(poll, busy ? 120 : working ? 700 : s && s.monitor ? 300 : 1500);
 }
-function editing() { const a = document.activeElement; return a && (a.id === "renameIn" || a.id === "titleIn" || a.id === "bpmIn"); }
+function editing() { const a = document.activeElement; return a && ["renameIn", "titleIn", "bpmIn", "chartTitleIn"].includes(a.id); }
 
 // --- taps
 document.addEventListener("click", (ev) => {
@@ -1118,6 +1172,15 @@ document.addEventListener("click", (ev) => {
   else if (a === "view") { S.view = d.v; render(); }
   else if (a === "transcribe") act(() => api("POST", `/api/takes/${encodeURIComponent(d.id)}/transcribe`));
   else if (a === "review") act(() => api("POST", `/api/takes/${encodeURIComponent(d.id)}/review`));
+  else if (a === "chart") { const t = takeById(d.id); S.chart = { take: d.id, instrument: (t && t.chart_instrument) || "auto", title: (t && t.title) || "" }; S.confirm = null; render(); }
+  else if (a === "chart-inst") { readChartTitle(); if (S.chart) S.chart.instrument = d.k; render(); }
+  else if (a === "chart-cancel") { S.chart = null; render(); }
+  else if (a === "chart-go") {
+    readChartTitle();
+    const body = { instrument: S.chart ? S.chart.instrument : null, title: S.chart ? S.chart.title.trim().slice(0, 120) : "" };
+    S.chart = null;
+    act(() => api("POST", `/api/takes/${encodeURIComponent(d.id)}/chart`, body));
+  }
   else if (a === "rename") { S.renaming = d.id; S.confirm = null; render(); const i = $("#renameIn"); if (i) { i.focus(); i.select(); } }
   else if (a === "rename-cancel") { S.renaming = null; render(); }
   else if (a === "rename-save") { const v = ($("#renameIn") || {}).value || ""; S.renaming = null;
@@ -1143,13 +1206,15 @@ document.addEventListener("change", (ev) => {
 document.addEventListener("keydown", (ev) => {
   if (ev.key === "Enter" && ev.target.id === "renameIn") { const b = $("[data-act=rename-save]"); if (b) b.click(); }
   else if (ev.key === "Enter" && (ev.target.id === "bpmIn" || ev.target.id === "titleIn")) ev.target.blur();
-  else if (ev.key === "Escape" && (S.confirm || S.renaming)) { S.confirm = null; S.renaming = null; render(); }
+  else if (ev.key === "Enter" && ev.target.id === "chartTitleIn") ev.target.blur();
+  else if (ev.key === "Escape" && (S.confirm || S.renaming || S.chart)) { readChartTitle(); S.confirm = null; S.renaming = null; S.chart = null; render(); }
 });
 function setLevel(v) {
   v = Math.max(-30, Math.min(12, Math.round(v)));
   act(async () => { const r = await api("PUT", "/api/settings", { level_offset_db: v }); if (S.status) S.status.level_offset_db = r.level_offset_db; live(); });
 }
 document.addEventListener("input", (ev) => {
+  if (ev.target.id === "chartTitleIn") { readChartTitle(); return; }
   if (ev.target.dataset.level === undefined) return;
   dragging = true;
   $$("[data-level-text]").forEach((el) => { el.textContent = dbText(Number(ev.target.value)); });

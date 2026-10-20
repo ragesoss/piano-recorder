@@ -122,6 +122,7 @@ function describe(a) {
     if (s.state === "recording") return recorderState(s);
     if (s.job || (s.queue || []).length) return ["Transcribing a take", true];
     if (s.review) return ["Making a review", true];
+    if (s.chart) return ["Drafting a chord chart", true];
     return ["Ready", false];
   }
   if (a.id === "ambient") {

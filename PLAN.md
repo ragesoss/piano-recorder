@@ -960,6 +960,36 @@ it right there, with playback; "Review it" sends the take to the review app (dob
     `[instruments.strings]` (`name = "Any stringed instrument"`, `input = 4`) added to `/etc/take-transcriber.toml`
     by hand and `sudo systemctl restart take-transcriber`. No new dependency: the generic path uses what the review
     venv has (numpy, scipy, librosa).
+- **"Draft a chord chart"** (2026-10-20, branch `chart-draft`; the player: "a path for starting with a recording that
+  goes through the pipeline to extract a chord chart, then that can get corrected / confirmed / reviewed";
+  dobro-transcription's card `band-song-chart`). On a take's page, under "Review it", for any take with its recording
+  (one brought in by `tools/import-take` too, transcribed or not): `transcriber/chart.py`.
+  - **The dialog:** in the box, the song's title (the take's name to start with; may be left empty) and what is on
+    the recording: Not sure, Bass, Guitar, Dobro, Piano, Voice, A band. The take's own instrument is chosen to start
+    with where the drafter knows it (any stringed instrument's kind when it is a guitar, a dobro or a bass), else Not
+    sure. It says the tempo and meter the drafter is told.
+  - **The run,** in the background, one chart at a time: `cd ~/dobro-transcription/pipeline && PYTHONPATH=src
+    ~/dobro-transcription/review/.venv/bin/python -m transcribe.chart_draft TAKE/take-01.flac TAKE/chart-draft --instrument I [--bpm N]
+    [--meter N] [--title T]` (the pipeline's venv, nice 19, two threads, its own process group, held with SIGSTOP
+    while this app records); then `make_review chart-check TAKE/chart-draft --install local --id
+    chart-check-<take id>`, as "Review it" runs the take check (the title goes to the drafter only: the chart check
+    names the review from the draft, "Check the chart: T"). `--bpm` is the tempo transcribed at, else the take's;
+    `--meter` its beats in a bar. The id is the same each time, so a chart drafted again keeps the review's answers.
+    A chart there was waits in `chart-draft.old/` and comes back if the draft fails. What both print goes to
+    `TAKE/chart.log`; `meta.json` keeps `chart` (the review's id, when, the instrument, the title, the seconds), or
+    the error with the review there was.
+  - **The page:** "Drafting the chart…" then "Making the review…", the time (and "of about" once this unit has
+    drafted one of that instrument), "Held while recording"; the rest of the app works meanwhile. Then "Open the
+    chart check" (`http://<host>:8005/#/r/<id>`) and "Draft it again". `POST /api/takes/ID/chart` (`instrument`,
+    `title`), `GET /api/setup`'s `chart` (available, why, the instruments), `/api/status`'s `chart`. A take is not
+    deleted while its chart is drafted. The home tile says "Drafting a chord chart".
+  - **Until the unit has both** (`pipeline/src/transcribe/chart_draft.py`, and `chart-check` among make_review.py's
+    kinds; looked for each time the page asks), the box says which is missing and the button waits.
+  - **Tried on the desktop:** `tests/test_transcriber.py` with stand-ins for the drafter and make_review (the commands,
+    their folders and paths, the id, a failed draft and a failed review, one at a time, held while recording: its
+    42 tests passed, the whole suite 249); the page in headless Chromium (muted) at 390x844, 820x1180 and 1180x820 against the stand-ins:
+    the dialog, drafting, another take's button waiting, the link; no sideways scroll. Not with the real drafter
+    (being written beside this). Not deployed.
 
 ### 9. The board (started 2026-10-19)
 

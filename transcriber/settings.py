@@ -7,7 +7,8 @@ devices, the kept inputs, takes_dir, peers, web and loudness there):
     [instruments.strings] name = "Any stringed instrument", input = 4
                                                        (the generic path: one staff, no tab; its kind chosen on
                                                        the page, `KINDS`, or "not sure")
-    [pipeline]            python, src, threads, nice    the transcription project's package, and how to run it
+    [pipeline]            python, src, threads, nice    the transcription project's package, and how to run it (its
+                                                       chord-chart drafter too: chart.py)
     [review]              root, python, data, port      the review app's generator (dobro-transcription)
 """
 
@@ -25,12 +26,23 @@ ONE_STAFF = ("strings",)  # written on one staff, no tab (any stringed instrumen
 # each is only a pitch range, a hint); none chosen is "not sure", and the range is read from the take
 KINDS = {"mandolin": "Mandolin", "banjo": "Banjo", "guitar": "Guitar", "guitalele": "Guitalele",
          "ukulele": "Ukulele", "dulcimer": "Mountain dulcimer", "dobro": "Dobro", "bass": "Bass"}
+# "Draft a chord chart" (chart.py): what the drafter's --instrument takes (dobro-transcription `transcribe.chart_draft`),
+# in the page's order; "auto": not sure, read from the recording
+CHART_INSTRUMENTS = {"auto": "Not sure", "bass": "Bass", "guitar": "Guitar", "dobro": "Dobro", "piano": "Piano",
+                     "voice": "Voice", "band": "A band"}
 
 
 def staves(kind: str) -> str:
     """How an instrument's transcription is written: "tab" (notation and tab), "grand" (a grand staff), "one" (one
     staff, no tab)."""
     return "grand" if kind in GRAND_STAFF else "one" if kind in ONE_STAFF else "tab"
+
+
+def chart_instrument(instrument: str, kind: str | None = None) -> str:
+    """The drafter's --instrument for a take: what it was played on, where the drafter knows it (any stringed
+    instrument's kind when that is one), else "auto"."""
+    played = kind if instrument == "strings" else instrument
+    return played if played in CHART_INSTRUMENTS else "auto"
 
 
 @dataclass(frozen=True)
