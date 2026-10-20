@@ -557,13 +557,39 @@ on the same screen as the controls, so a take needs little preparation.
     scroll. The tests pass (142). Deployed 2026-10-19 at 16:02 (everything idle).
   - **Still open for the exercise app** (`docs/ui-issues.md`): the score's room on the record screen and during
     a take (the sentence is smaller; the side column and the score's own scale are not yet looked at); not yet
-    used on the iPad. Next with dobro-transcription's generic exercises (its `docs/strings-plan.md`): each new
-    instrument's set is a column of its own once pushed, recorded as "a mandolin (not listed)" until
-    `instruments.csv` has a row for it.
-- **Next:** a tool to bring exercise takes into dobro-transcription with
-  their `takes.csv` rows (`tools/pull-take` reads only the practice
-  recorder's takes; exercise takes need `/etc/exercise-recorder.toml`),
-  which could also take the backing out on the desktop instead of the Pi.
+    used on the iPad.
+- **Exercises for any instrument** (2026-10-19, the player: "i want the relevant exercises to be
+  instrument-agnostic and key-agnostic (like, major scale, other scales, chords, simple melodies)"): dobro-transcription's
+  `exercises/generic/` (21: scales, arpeggios, strummed chords, techniques, five public-domain tunes), one treble
+  staff with no tab, played in any key on any instrument (the mandolin, guitalele, banjo, mountain dulcimer...).
+  - **Their kind is `generic`** (ids `generic-NNN-...`; `tools/push-exercise` names it from the id or the part
+    "Any instrument"), shown as "Any instrument": a column of its own on the board, at the end. Their chart is
+    heard as a nylon-string guitar (GeneralUser GS's, program 24).
+  - **What it is played on.** A tap on one opens its record screen on the instrument played last for these (the
+    choices' `anyInstrument`, else the newest such take); with none yet it first asks ("What are you playing it
+    on?"): any instrument the project lists, any kind it has exercises or takes of, the player's own (mandolin,
+    guitalele, mountain dulcimer: `SUGGEST`), or a kind typed in ("Another kind", on every take's "On what" now).
+    "Something else" (no kind) is not offered: the take must say. The record screen has "Played on": the
+    instruments these were played on, one tap to change, and "Something else" (the step, then back to the record
+    screen).
+  - **What is still wanted, on the instrument in hand.** status.json gives each its `played_on` (the kinds the
+    project has takes of it on, from takes.csv's `instrument`). The column, its list and the record screen say
+    what is wanted on the kind played last ("Needs a take on the mandolin", "20 to record · on a mandolin (not
+    listed)"), and what was recorded here on it and not yet brought in.
+  - **The sidecar:** `instrument` is the kind it was played on (as a free take's), `exercise_instrument` "generic",
+    with `instruments`, `instrument_id` and `instrument_name` as before. A take of one that names no kind is
+    refused (400).
+  - **Bringing a take in:** `tools/pull-take --exercises TAKE_ID DIR` copies an exercise take (its config
+    `/etc/exercise-recorder.toml`), then dobro-transcription's `exercises/bring_in.py DIR/TAKE_ID.wav --session ...`
+    puts it in its folder: raw/, the instrument's channel as take-NN.flac, the `takes.csv` row (a generic folder's
+    with `instrument` and `instrument_id`) and `takes.md`. For any exercise, not only these.
+  - Tried on the desktop (fake device; 72 exercises from an older mirror and the 21 pushed with `--to`; headless
+    Chrome via Playwright at 1180x820, 820x1180 and 390x844): the column, a first tap asking, a mandolin chosen
+    and its record screen, the instructions, a take and its sidecar, the board after it (20 to record, 001 waiting
+    to be brought in), the next one straight to its record screen, a kind typed in and back, the list on the
+    mandolin; a dobro exercise, a free take's steps with a kind typed (and one refused), `#dobro`. No console
+    errors, no sideways scroll. The tests pass (147). Not deployed.
+- **Next:** take a play-along's backing out on the desktop instead of the Pi.
 
 ### 7. The chord app (started 2026-10-16)
 
