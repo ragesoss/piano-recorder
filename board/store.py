@@ -7,7 +7,8 @@
                                     tools/pull-board once the new base is pushed)
     data_dir/changes.lock           taken (flock) for every append and every archive
 
-The app shows the base with the pending edits applied in order, so an edit shows at once.
+The app shows the base with the pending edits applied in order, so an edit shows at once: the cards' and the
+goals' (a goal's stage moved, a note on a goal).
 
     python -m board.store datadir             print the data folder (what the tools write to)
     python -m board.store pending             print the pending changes (whole lines, read under the lock)
@@ -45,7 +46,14 @@ WORK = ("listen", "play", "agent", "people", "hardware")
 EFFORT_PLAYER = ("", "5m", "15m", "30m", "1h", "2h", "half-day", "day+")
 EFFORT_CLAUDE = ("", "S", "M", "L", "XL")
 IMPORTANCE = (1, 2, 3)
-SETTABLE = ("status", "importance", "who", "work", "effort_player", "effort_claude", "waiting_on", "area")
+SETTABLE = ("status", "importance", "who", "work", "effort_player", "effort_claude", "waiting_on", "area", "goals")
+# the large-scale goals (2026-10-20): each at a stage of ten, from an idea (1) to released (10: put out into the
+# world, the repo cleaned up, open source, an app); a card serves any of them
+STAGE_NAMES = {1: "Idea", 2: "Idea with a plan", 3: "Testable prototype", 4: "Tested prototype", 5: "Rough but usable",
+               6: "Decent", 7: "Getting pretty good", 8: "Almost release-ready", 9: "Release-ready", 10: "Released"}
+STAGES = tuple(STAGE_NAMES)
+NOTE_BY = ("player", "claude")
+GOAL_COLORS = ("teal", "orange", "pink", "green", "gold", "blue", "red", "violet", "lime", "sky")
 TITLE_MAX = 200
 TEXT_MAX = 300  # waiting_on
 NOTE_MAX = 4000
@@ -88,6 +96,10 @@ def _str_list(v) -> list[str]:
     return [str(x) for x in v] if isinstance(v, list) else []
 
 
+def _unique(xs: list[str]) -> list[str]:
+    return list(dict.fromkeys(xs))
+
+
 def normalize(card: dict) -> dict:
     """A card with every field of the contract (defaults where the base leaves one out)."""
     c = dict(card)
@@ -110,12 +122,47 @@ def normalize(card: dict) -> dict:
         c[k] = str(c.get(k) or "")
     c["done"] = c.get("done") or None
     c["notes"] = [n for n in c.get("notes", []) if isinstance(n, dict)] if isinstance(c.get("notes"), list) else []
+    c["goals"] = _unique(_str_list(c.get("goals")))  # the goals it serves, most relevant first
     c["pending"] = 0
     c["pending_changes"] = []
     return c
 
 
-def check_set(fields: dict, areas: set[str]) -> dict:
+def is_stage(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and v in STAGES
+
+
+def stage_labels(base: dict) -> list[str] | None:
+    """The base's own labels for the ten stages ("stages", in order), when it has all ten; else None."""
+    raw = base.get("stages")
+    if isinstance(raw, list) and len(raw) == len(STAGES) and all(isinstance(x, str) and x.strip() for x in raw):
+        return [x.strip() for x in raw]
+    return None
+
+
+def normalize_goal(goal: dict) -> dict:
+    """A goal with every field of the contract: its history (oldest first, only the contract's stages, 1 to 10) and
+    notes (each by the player or Claude); "stage" is the last entry's (1 before any). Its color is checked in merge
+    (one not taken, if not given)."""
+    g = dict(goal)
+    g["id"] = str(g.get("id", ""))
+    g["name"] = str(g.get("name") or "") or g["id"]
+    for k in ("about", "release", "shipped"):  # release: what release-ready (9) means; shipped: released (10)
+        g[k] = str(g.get(k) or "")
+    raw = g.get("history") if isinstance(g.get("history"), list) else []
+    g["history"] = [dict(h) | {"date": str(h.get("date") or "")[:10], "note": str(h.get("note") or "")}
+                    for h in raw if isinstance(h, dict) and is_stage(h.get("stage"))]
+    raw = g.get("notes") if isinstance(g.get("notes"), list) else []
+    g["notes"] = [dict(n) | {"date": str(n.get("date") or "")[:10], "text": str(n.get("text") or ""),
+                             "by": n.get("by") if n.get("by") in NOTE_BY else ""}
+                  for n in raw if isinstance(n, dict) and n.get("text")]
+    g["stage"] = g["history"][-1]["stage"] if g["history"] else 1
+    g["pending"] = 0
+    g["pending_changes"] = []
+    return g
+
+
+def check_set(fields: dict, areas: set[str], goals: set[str] = frozenset()) -> dict:
     """The fields of a "set" change, checked against the contract (raises Invalid)."""
     if not isinstance(fields, dict) or not fields:
         raise Invalid("nothing to set")
@@ -143,6 +190,12 @@ def check_set(fields: dict, areas: set[str]) -> dict:
             v = v.strip()
         if k == "area" and v not in areas:
             raise Invalid("no such area")
+        if k == "goals":  # in the order given: the most relevant first
+            if not isinstance(v, list) or any(not isinstance(g, str) for g in v) or len(set(v)) != len(v):
+                raise Invalid("goals must be a list of goal ids, each once")
+            if any(g not in goals for g in v):
+                raise Invalid("no such goal")
+            v = list(v)
         out[k] = v
     return out
 
@@ -164,16 +217,40 @@ def _apply_set(card: dict, fields: dict, at: str) -> None:
     card["updated"] = _date(at)
 
 
+def goal_change(ch: dict) -> str:
+    """What a change in the log does to a goal: "stage", "note", or "" when it is not a goal's."""
+    if "goal" not in ch:
+        return ""
+    return "stage" if "stage" in ch else "note" if "note" in ch else ""
+
+
+def _goals(base: dict) -> dict[str, dict]:
+    goals: dict[str, dict] = {}
+    for raw in base.get("goals", []) if isinstance(base.get("goals"), list) else []:
+        if isinstance(raw, dict) and raw.get("id") and str(raw["id"]) not in goals:
+            g = normalize_goal(raw)
+            goals[g["id"]] = g
+    taken = {g["color"] for g in goals.values() if g.get("color") in GOAL_COLORS}
+    for g in goals.values():  # a goal without one of the ten colors: the first not taken
+        if g.get("color") not in GOAL_COLORS:
+            free = [c for c in GOAL_COLORS if c not in taken] or list(GOAL_COLORS)
+            g["color"] = free[0]
+            taken.add(free[0])
+    return goals
+
+
 def merge(base: dict, changes: list[dict]) -> dict:
     """The base with the pending changes applied in order: those whose ids are not in the base's "applied" (the
-    changes board.py has folded into these cards; the archive after a sync may lag). Each card says how many are
-    pending on it ("pending", "pending_changes"); a change for a card not there is left out (not lost: still in
-    the log)."""
+    changes board.py has folded into these cards; the archive after a sync may lag). Each card and each goal says
+    how many are pending on it ("pending", "pending_changes"); a change for a card or goal not there is left out
+    (not lost: still in the log). A base with no "goals" (pushed before them) has none, and its cards none."""
     folded = set(base.get("applied") or []) if isinstance(base.get("applied"), list) else set()
+    goals = _goals(base)
     cards: dict[str, dict] = {}
     for raw in base.get("cards", []) if isinstance(base.get("cards"), list) else []:
         if isinstance(raw, dict) and raw.get("id"):
             c = normalize(raw)
+            c["goals"] = [g for g in c["goals"] if g in goals]
             cards[c["id"]] = c
     in_base = set(cards)
     areas = {a["id"] for a in base.get("areas", []) if isinstance(a, dict) and a.get("id")}
@@ -181,16 +258,39 @@ def merge(base: dict, changes: list[dict]) -> dict:
         if ch.get("id") in folded:
             continue
         at = str(ch.get("at", ""))
+        kind = goal_change(ch)
+        if "goal" in ch:
+            g = goals.get(ch.get("goal"))
+            if not g or not kind:
+                continue
+            day, by = _date(at), ch.get("by", "player")
+            if kind == "stage":
+                if not is_stage(ch["stage"]):
+                    continue
+                note = str(ch.get("note") or "")
+                if any(h["date"] == day and h["stage"] == ch["stage"] and h["note"] == note for h in g["history"]):
+                    continue  # the base has it already
+                g["history"].append({"date": day, "stage": ch["stage"], "note": note, "at": at, "by": by, "pending": True})
+                g["stage"] = ch["stage"]
+            else:
+                text = str(ch["note"])
+                if not text or any(n["date"] == day and n["text"] == text for n in g["notes"]):
+                    continue
+                g["notes"].append({"date": day, "text": text, "by": by if by in NOTE_BY else "player", "at": at, "pending": True})
+            g["pending"] += 1
+            g["pending_changes"].append(ch.get("id"))
+            continue
         if isinstance(ch.get("new"), dict):
             c = normalize(ch["new"])
             if not c["id"] or c["id"] in in_base:  # already brought into the base (applied, not yet archived)
                 continue
+            c["goals"] = [g for g in c["goals"] if g in goals]
             c["new"] = True
             cards[c["id"]] = c
         elif "set" in ch and ch.get("card") in cards:
             c = cards[ch["card"]]
             try:
-                fields = check_set(ch["set"], areas | {c["area"]})
+                fields = check_set(ch["set"], areas | {c["area"]}, set(goals))
             except Invalid:
                 continue
             _apply_set(c, fields, at)
@@ -204,7 +304,7 @@ def merge(base: dict, changes: list[dict]) -> dict:
             continue
         c["pending"] += 1
         c["pending_changes"].append(ch.get("id"))
-    return {**base, "cards": list(cards.values())}
+    return {**base, "cards": list(cards.values()), "goals": list(goals.values()), "stages": stage_labels(base)}
 
 
 class Store:
@@ -258,6 +358,7 @@ class Store:
         base = self.base() or {"version": 1, "generated": None, "areas": [], "cards": []}
         out = merge(base, self.changes())
         out["has_base"] = self.base() is not None
+        out["pending"] = sum(c["pending"] for c in out["cards"]) + sum(g["pending"] for g in out["goals"])
         return out
 
     def card(self, card_id: str) -> dict:
@@ -268,6 +369,15 @@ class Store:
 
     def areas(self) -> set[str]:
         return {a["id"] for a in (self.base() or {}).get("areas", []) if isinstance(a, dict) and a.get("id")}
+
+    def goal(self, goal_id: str) -> dict:
+        for g in self.board()["goals"]:
+            if g["id"] == goal_id:
+                return g
+        raise NotFound(goal_id)
+
+    def goal_ids(self) -> set[str]:
+        return {g["id"] for g in _goals(self.base() or {}).values()}
 
     # --- writing
     @contextmanager
@@ -299,7 +409,7 @@ class Store:
         return {"id": str(uuid.uuid4()), "at": now_iso(), "by": "player", **body}
 
     def _set(self, card: dict, fields: dict) -> tuple[dict, dict | None]:
-        fields = check_set(fields, self.areas() | {card["area"]})
+        fields = check_set(fields, self.areas() | {card["area"]}, self.goal_ids())
         fields = {k: v for k, v in fields.items() if card.get(k) != v}
         if not fields:
             return card, None
@@ -330,6 +440,33 @@ class Store:
             change = self._change(card=card_id, note=text)
             self._append(change)
             return self.card(card_id), change
+
+    def move_goal(self, goal_id: str, stage: int, note: str = "") -> tuple[dict, dict | None]:
+        """A goal to another stage (1 to 10): a history entry, with a note (it may be empty). Returns the goal as now
+        shown and the change (None when it is at that stage already)."""
+        if not is_stage(stage):
+            raise Invalid("stage must be a whole number from 1 to 10")
+        note = str(note or "").strip()
+        if len(note) > NOTE_MAX:
+            raise Invalid(f"a note of {NOTE_MAX} characters at most")
+        with self.locked():
+            if self.goal(goal_id)["stage"] == stage:
+                return self.goal(goal_id), None
+            change = self._change(goal=goal_id, stage=stage, note=note)
+            self._append(change)
+            return self.goal(goal_id), change
+
+    def goal_note(self, goal_id: str, text: str) -> tuple[dict, dict]:
+        text = str(text or "").strip()
+        if not text:
+            raise Invalid("an empty note")
+        if len(text) > NOTE_MAX:
+            raise Invalid(f"a note of {NOTE_MAX} characters at most")
+        with self.locked():
+            self.goal(goal_id)
+            change = self._change(goal=goal_id, note=text)
+            self._append(change)
+            return self.goal(goal_id), change
 
     def new(self, body: dict) -> tuple[dict, dict]:
         """A new card from the page: title, area, who and work; the rest defaults."""

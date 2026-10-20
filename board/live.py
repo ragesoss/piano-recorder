@@ -44,7 +44,7 @@ def _port(url: str) -> int:
 def _card(**kw) -> dict:
     base = {"importance": 2, "who": ["player"], "work": "", "effort_player": "", "effort_claude": "",
             "waiting_on": "", "blocked_by": [], "links": [], "details": "", "source": "", "created": "",
-            "updated": "", "done": None, "notes": [], "pending": 0, "pending_changes": []}
+            "updated": "", "done": None, "notes": [], "goals": [], "pending": 0, "pending_changes": []}
     return base | kw
 
 

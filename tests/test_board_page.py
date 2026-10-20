@@ -1,5 +1,6 @@
 """The board's page in headless Chrome at 1180x820, 820x1180 and 390x844 (tests/board_page.cjs, Playwright for
-Node), against the fixture's cards and stand-ins for the review app and the exercise app.
+Node, muted), against the fixture's cards and stand-ins for the review app and the exercise app: cards pushed before
+the goals ("plain": the page as it was), and with them ("goals": board-goals.json, six goals).
 
 Needs node and Playwright's package (with its Chromium): found by node itself, or in $PLAYWRIGHT_NODE_PATH (a
 node_modules folder holding playwright). Skipped without them. The screenshots go to $BOARD_SHOTS if set."""
@@ -21,6 +22,7 @@ from board.server import create_app
 
 REPO = Path(__file__).resolve().parent.parent
 FIXTURE = REPO / "tests" / "fixtures" / "board-cards.json"
+FIXTURES = {"plain": FIXTURE, "goals": REPO / "tests" / "fixtures" / "board-goals.json"}
 SCRIPT = REPO / "tests" / "board_page.cjs"
 SIZES = ["1180x820", "820x1180", "390x844"]
 
@@ -94,14 +96,15 @@ def site(tmp_path_factory):
     apps.shutdown()
 
 
+@pytest.mark.parametrize("mode", list(FIXTURES))
 @pytest.mark.parametrize("size", SIZES)
-def test_the_page(site, size, tmp_path):
+def test_the_page(site, size, mode, tmp_path):
     url, data = site
-    shutil.copy(FIXTURE, data / "cards.json")  # each size from the fixture, with no edits
+    shutil.copy(FIXTURES[mode], data / "cards.json")  # each from its fixture, with no edits
     for f in ("changes.jsonl", "changes.applied.jsonl"):
         (data / f).unlink(missing_ok=True)
     shots = Path(os.environ.get("BOARD_SHOTS") or tmp_path)
     shots.mkdir(parents=True, exist_ok=True)
-    r = subprocess.run(["node", str(SCRIPT), url, size, str(shots)], env=ENV, capture_output=True, text=True, timeout=180)
+    r = subprocess.run(["node", str(SCRIPT), url, size, str(shots), mode], env=ENV, capture_output=True, text=True, timeout=180)
     assert r.returncode == 0, r.stderr + r.stdout
-    assert (shots / f"board-{size}-all.png").is_file()
+    assert (shots / (f"board-{size}-all.png" if mode == "plain" else f"board-{size}-goals-goals.png")).is_file()

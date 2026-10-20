@@ -2,18 +2,22 @@
 
     python -m board.server    (config from $ROOM_BOARD_CONFIG or /etc/room-board.toml)
 
-The cards are dobro-transcription's `board/cards.toml`, pushed here as JSON by tools/push-board. The
-player's edits are kept as a log (board/store.py) that tools/pull-board brings to the desktop; until
-then the board shows them applied. Live cards (board/live.py) come from the review app and the exercise
-app. The board holds no audio device, takes no turns with the recorders, and is in no peers list.
+The cards are dobro-transcription's `board/cards.toml`, pushed here as JSON by tools/push-board, with the
+project's large-scale goals (each at a stage from 1, an idea, to 10, released, with its history; a card
+serves any of them). The player's edits are kept as a log (board/store.py) that tools/pull-board brings to
+the desktop; until then the board shows them applied. Live cards (board/live.py) come from the review app
+and the exercise app. The board holds no audio device, takes no turns with the recorders, and is in no
+peers list.
 
-GET   /api/board                   the cards (the base with the pending edits) and the live cards
-GET   /api/status                  for the home page: "3 to listen · 2 to play", and counts
+GET   /api/board                   the cards and the goals (the base with the pending edits), the live cards
+GET   /api/status                  for the home page: "3 to listen · 2 to play", counts, each goal's stage
 POST  /api/cards                   {title, area, who, work}: a new card (into Backlog)
 PATCH /api/cards/{id}              {status, importance, who, work, effort_player, effort_claude,
-                                    waiting_on, area}: any of them
+                                    waiting_on, area, goals}: any of them
 POST  /api/cards/{id}/claude-next  "Claude: do this next": next, Claude among who, importance 1
 POST  /api/cards/{id}/notes        {note}
+POST  /api/goals/{id}/stage        {stage, note}: the goal moved to that stage (a history entry)
+POST  /api/goals/{id}/notes        {note}
 GET   /api/changes                 the edits not yet in the cards (the log, less the base's "applied")
 """
 
@@ -27,7 +31,7 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from . import live as live_mod
-from .store import WORK, Invalid, NotFound, Store, load_config
+from .store import STAGE_NAMES, WORK, Invalid, NotFound, Store, load_config
 
 STATIC = Path(__file__).parent / "static"
 FONTS = Path(__file__).parent.parent / "exercises" / "static" / "fonts"  # the exercise app's (SIL OFL 1.1)
@@ -38,9 +42,9 @@ WORK_WORDS = {"listen": "to listen", "play": "to play", "agent": "for the agent"
 TILE_TERMS = 3  # at most this many kinds named on the tile (the rest are in by_work)
 
 
-def counts(cards: list[dict], live: list[dict]) -> dict:
+def counts(cards: list[dict], live: list[dict], goals: list[dict] = (), stages: list[str] | None = None) -> dict:
     """What the home tile says: the cards in Next or Doing for each kind of work (the live ones too), in the
-    contract's order; and the player's, Claude's, and the columns' counts."""
+    contract's order; the player's, Claude's, and the columns' counts; and each goal's stage."""
     now = [c for c in cards if c["status"] in OPEN] + live
     by_work = {w: sum(c["work"] == w for c in now) for w in WORK}
     claude = [c for c in cards if "claude" in c["who"] and c["status"] in OPEN]
@@ -50,7 +54,9 @@ def counts(cards: list[dict], live: list[dict]) -> dict:
            "next": sum(c["status"] == "next" for c in cards),
            "waiting": sum(c["status"] == "waiting" for c in cards),
            "live": len(live), "cards": len(cards),
-           "pending": sum(c["pending"] for c in cards)}
+           "pending": sum(c["pending"] for c in cards) + sum(g["pending"] for g in goals),
+           "goals": [{"id": g["id"], "name": g["name"], "stage": g["stage"],
+                      "stage_name": stages[g["stage"] - 1] if stages else STAGE_NAMES[g["stage"]]} for g in goals]}
     words = [f"{n} {WORK_WORDS[w]}" for w, n in by_work.items() if n][:TILE_TERMS]
     out["state"] = " · ".join(words) if words else "Nothing in Next or Doing"
     return out
@@ -77,14 +83,14 @@ def create_app(cfg: dict) -> FastAPI:
                 c["live_link"] = href(c["live_link"], host)
         return b, [c | {"links": [href(l, host) for l in c["links"]]} for c in lc], up
 
-    def guard(fn, *a):
+    def guard(fn, *a, what="card"):
         try:
-            card, change = fn(*a)
+            got, change = fn(*a)
         except NotFound:
-            raise HTTPException(404, "no such card")
+            raise HTTPException(404, f"no such {what}")
         except Invalid as e:
             raise HTTPException(422, str(e))
-        return {"card": card, "change": change}
+        return {what: got, "change": change}
 
     def editable(card_id: str) -> str:
         if card_id.startswith("live:"):
@@ -114,13 +120,14 @@ def create_app(cfg: dict) -> FastAPI:
     def board(request: Request):
         b, cards, up = current(True, request.url.hostname or "practice.local")
         return {"version": b.get("version", 1), "generated": b.get("generated"), "has_base": b["has_base"],
-                "areas": b.get("areas", []), "cards": b["cards"], "live": cards, "live_up": up,
-                "pending": sum(c["pending"] for c in b["cards"])}
+                "areas": b.get("areas", []), "cards": b["cards"], "goals": b["goals"], "stages": b["stages"],
+                "live": cards, "live_up": up,
+                "pending": b["pending"]}
 
     @app.get("/api/status")
     def status():
         b, cards, _ = current(False)
-        out = counts(b["cards"], cards)
+        out = counts(b["cards"], cards, b["goals"], b["stages"])
         if not b["has_base"]:
             out["state"] = "No cards yet"
         return out
@@ -144,6 +151,14 @@ def create_app(cfg: dict) -> FastAPI:
     @app.post("/api/cards/{card_id}/notes")
     def add_note(card_id: str, body: dict = Body(...)):
         return guard(store.note, editable(card_id), body.get("note", ""))
+
+    @app.post("/api/goals/{goal_id}/stage")
+    def move_goal(goal_id: str, body: dict = Body(...)):
+        return guard(store.move_goal, goal_id, body.get("stage"), body.get("note", ""), what="goal")
+
+    @app.post("/api/goals/{goal_id}/notes")
+    def goal_note(goal_id: str, body: dict = Body(...)):
+        return guard(store.goal_note, goal_id, body.get("note", ""), what="goal")
 
     return app
 

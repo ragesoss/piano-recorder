@@ -1028,6 +1028,67 @@ with the hardware".
 - **The home tile:** what is in Next or Doing for each kind of work, the first three that have any ("4 to listen · 3
   to play · 14 for the agent"; `by_work` has all five), else "Nothing in Next or Doing"; "No cards yet" before the
   first push.
+- **The goals** (2026-10-20, the player: "our board needs something to represent the large-scale goals and our
+  progress towards them, and which cards are related to each. like, maybe a chart for each goal showing progress over
+  time ... and the color for each chart matches the color of cards that are part of that goal. (a card could have
+  multiple colors if it's relevant to more than one big goal)"). The goals are dobro-transcription's too, in
+  `board/cards.toml`; `board.py json` adds them (its `board/README.md` has the contract):
+  - `"goals": [{"id", "name", "about", "release", "shipped", "color", "history", "notes"}]`: `release` says what
+    release-ready (9) means for it, `shipped` what released (10) means (may be empty); `color` one of ten (below);
+    `history` `[{"date", "stage", "note"}]`, oldest first, the last the stage now; `notes` `[{"date", "text", "by"}]`,
+    `by` "player" or "claude". Each card has `"goals"`: the goals it serves, the most relevant first (may be `[]`).
+  - **The stages,** ten, as whole numbers: 1 Idea, 2 Idea with a plan, 3 Testable prototype, 4 Tested prototype,
+    5 Rough but usable, 6 Decent, 7 Getting pretty good, 8 Almost release-ready, 9 Release-ready, 10 Released. The
+    JSON's `"stages"` (the ten labels) are used when it has all ten, the board's own copy otherwise. Shown as the
+    number and the label ("6 · Decent") and a ten-step meter beside them.
+  - **The log gains** `{"id", "at", "by", "goal", "stage": <1-10>, "note"}` (a goal moved; the note may be empty; a
+    move to the stage it is at is not written) and `{"id", "at", "by", "goal", "note"}`; a card's `set` may carry
+    `goals`. They are laid over the base as the cards' are, and a goal with edits in the log says "Not synced".
+    pull-board gives them to `board.py apply` as written and counts them ("1 goal stage, 1 goal note").
+  - **The Goals view,** a seventh beside Listen ... All (with the goals there; upright on an iPad the seven are named
+    by their short words). A view and not a strip above the board: on an iPad a strip of six charts would each be
+    about 180 px wide on its side and 130 upright, too small for ten levels and for 44 px dots, and would take the
+    board's height in every view; a view gives each goal a tile of 300 px or more (three across on its side, two
+    upright, one on a phone). Each tile: its name, the stage (meter, number, label), the chart, the release line
+    (two lines at most), its open and done cards; a tap opens its sheet.
+  - **The chart** (inline SVG, drawn at the width it has, again on a resize): stages 1 to 10 up the side, the odd ones
+    numbered (in a sheet 520 px wide or more, each with its label), the dates from the first entry to today along the
+    bottom (and one between where there is room), a step line in the goal's colour, a dot for each change (hollow
+    while not synced). A dot is a 44 px button; dots nearer than that share one. A tap shows its date, stage and note
+    under the chart, with the change before and after; the chart's text alternative lists every change.
+  - **A goal's sheet:** what it is, what release-ready and released mean, the chart, "Move to stage…" (the ten, the
+    stage now marked; choosing one asks for a note, then "Move to 7 · Getting pretty good"), its cards by status
+    (Doing, Next, Waiting, Backlog; Done folded), the history (newest first) and the notes (who wrote each, "You" or
+    "Claude", as a badge), "Add the note". A card opens from it; a card's goals open from the card's.
+  - **The cards wear their goals:** a 5 px stripe across the top, a segment for each goal in its order (2 px apart),
+    and a chip naming each (outlined in its colour; a long name cut short with "…"). With goals, the areas' dots are
+    grey: colour is the goals'. The card's sheet lists its goals (each opens the goal, its stage beside it) and
+    "Goals…" chooses them, numbered in the order chosen.
+  - **A goal filter** (multi-select, "No goal" too), kept per device with the others; it shows the cards with any of
+    those chosen.
+  - **The home tile:** `/api/status` adds `"goals": [{"id", "name", "stage", "stage_name"}]`; the tile's words are as
+    before.
+  - **The colours:** each a mark, never text (the goal is named beside it). Measured (WCAG contrast; OKLab ΔE ×100 to
+    the nearest of the other nine, and to the nearest of the app's purple key #7C3AED/#8B5CF6/#A78BFA/#B9A0FF, red
+    #FF8F85, amber #E8B93B and live green #4ADE80):
+
+    | name | hex | on cards #28232F | on sheets #1E1A24 | on the background, and #121016 on it | nearest goal colour | nearest of the app's |
+    |---|---|---|---|---|---|---|
+    | teal | #5CE3E0 | 9.9 | 11.0 | 12.2 | sky 11.5 | live green 12.9 |
+    | orange | #E07A12 | 5.1 | 5.7 | 6.3 | red 12.5 | red 12.0 |
+    | pink | #FF73C3 | 6.2 | 6.9 | 7.6 | violet 13.5 | red 12.2 |
+    | green | #55B46E | 5.9 | 6.6 | 7.3 | teal 17.5 | live green 11.5 |
+    | gold | #FFEB8A | 12.8 | 14.3 | 15.8 | lime 11.6 | amber 13.4 |
+    | blue | #2F8CFF | 4.6 | 5.1 | 5.7 | sky 15.0 | purple 13.2 |
+    | red | #E0505E | 4.0 | 4.5 | 4.9 | orange 12.5 | red 14.7 |
+    | violet | #D04BDB | 4.2 | 4.7 | 5.1 | pink 13.5 | purple 13.2 |
+    | lime | #C6EE2A | 11.4 | 12.8 | 14.1 | gold 11.6 | live green 13.6 |
+    | sky | #4CC2FF | 7.6 | 8.5 | 9.4 | teal 11.5 | purple ink 13.6 |
+
+    Every one clears 3:1 as a mark and 4.5:1 for dark text set on it. Ten hues cannot all be 15 apart (the chart
+    method's floor for telling two apart at a glance); the closest pairs are teal and sky (11.5), gold and lime
+    (11.6), orange and red (12.5). The six goals of 2026-10-20 (gold, teal, orange, red, violet, sky) have teal and sky
+    and orange and red among them; protan and deutan views keep every pair of those six at 8.7 or more.
 - **Tried on the desktop:** the tests (52 new; the suite 204 passed): the merge, the appends (80 notes from eight
   threads through four stores, whole lines), the refusals, the archive, the live cards with the apps up, down and
   slow (the status in under 0.5 s); push-board and pull-board locally and through a stand-in ssh laid out as the
@@ -1039,11 +1100,38 @@ with the hardware".
   lanes kept over a reload, Done's fold, a drag (with a mouse); no console errors, no sideways scroll, no target
   under 44 px. The real 127 cards with the unit's live apps at the three sizes: no console errors, nothing wider
   than its card or the screen. Not deployed.
+  - **The goals' tests** (2026-10-20; the suite 247 passed, 1 skipped): the goals laid over the base (stage moves,
+    notes, a card's goals; a stage of 11, "7", true, a goal not there, left out; one the base has already, not
+    twice), the appends and their refusals (422, 404, 409), a goal's colour when it has none, the JSON's stage labels
+    and the board's, a board with no goals as before; push-board's checks of the goals (14 ways to be wrong; two goals
+    one colour only a warning); pull-board passing the goals' edits to a stand-in board.py (locally and through the
+    stand-in ssh) as written, and a goal apply refuses; a round trip with dobro-transcription's own board.py once its
+    JSON has goals (skipped until then). Headless Chrome (muted, `--mute-audio`) at the three sizes on
+    `tests/fixtures/board-goals.json` (the 46 cards with six goals, 1 to 7 changes each; cards with no goal, one, two
+    and three): the stripes (one segment, two equal ones in order, none), the chips, the Goals view and a chart (the
+    axis, the text alternative, three changes on one day sharing a button), a dot's readout and its steps, a goal's
+    sheet (its release lines, its cards by status, history, notes and who wrote them, the ten stages), a move with a
+    note, a note, from a goal to a card and back, a card's goals chosen in order, the goal filter kept over a
+    reload, "No goal", Add from the Goals view, the stages' labels; and on the cards with no goals, nothing of them
+    anywhere and the areas' colours as before. No console errors, no sideways scroll, no target under 44 px.
 - **To deploy** (everything idle; the board takes nothing from the others): add the tile to `/etc/room-home.toml`
   by hand (`config/home.toml`'s `[[apps]] id = "board"`, a `.pre-board.bak` copy first), then `tools/deploy` (it
   installs `/etc/room-board.toml`, makes `~/board-data`, installs and starts `room-board`, and restarts every app
   here), then from dobro-transcription `python3 board/board.py json | ~/play/piano-recorder/tools/push-board`, then
   the home page's Board tile ("4 to listen · ...") and `http://practice.local:8007/`.
+- **To deploy the goals** (not deployed; only when the player says): no new config, service or dependency.
+  1. dobro-transcription's goals first: `board.py` with the goals and their ops in `apply`, its tests passing, and
+     `python3 board/board.py json` carrying `"goals"` and `"stages"`. Then the skipped round trip here runs
+     (`tests/test_board_tools.py::test_the_real_board_py_takes_the_goals_edits`): run the suite.
+  2. `tools/pull-board`, so no edit is left in the log across the change (the new app reads the old edits too).
+  3. The unit idle: `tools/deploy` restarts every app here (both recorders, the exercise, chord and transcribe apps,
+     the home page and the board), so nothing recording, playing or transcribing, and nobody at the board.
+  4. `tools/deploy`.
+  5. From dobro-transcription, `python3 board/board.py json | ~/play/piano-recorder/tools/push-board` ("... cards in
+     ... areas, 6 goals"). Either order is safe: the app before this push shows the board as before, and an old app
+     ignores a push's goals.
+  6. `http://practice.local:8007/`: the Goals view and a card's stripes; `curl -s
+     http://practice.local:8007/api/status` has `goals`; the home page's Board tile as before.
 
 ## Open questions
 

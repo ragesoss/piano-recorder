@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from board import live as live_mod
 from board.server import counts, create_app
+from board import store as store_mod
 from board.store import Store, load_config, merge
 
 REPO = Path(__file__).resolve().parent.parent
@@ -449,3 +450,178 @@ def test_the_board_answers_no_yield(tmp_path):
     c, d = make(tmp_path)
     with c:
         assert c.post("/api/yield").status_code in (404, 405)
+
+
+# --- the goals (2026-10-20): each at a stage from 1 to 10, its history and notes; a card serves any of them
+
+GOALS = REPO / "tests" / "fixtures" / "board-goals.json"
+STAGE_LABELS = ["Idea", "Idea with a plan", "Testable prototype", "Tested prototype", "Rough but usable", "Decent",
+                "Getting pretty good", "Almost release-ready", "Release-ready", "Released"]
+
+
+def with_goals(tmp_path, base=None):
+    c, d = make(tmp_path)
+    (d / "cards.json").write_text(json.dumps(base) if base is not None else GOALS.read_text())
+    return c, d
+
+
+def goal(c, gid):
+    return next(g for g in c.get("/api/board").json()["goals"] if g["id"] == gid)
+
+
+def test_the_goals_fixture_is_to_the_contract():
+    raw = json.loads(GOALS.read_text())
+    plain = json.loads(FIXTURE.read_text())
+    assert raw["stages"] == STAGE_LABELS and len(raw["goals"]) == 6
+    assert [c["id"] for c in raw["cards"]] == [c["id"] for c in plain["cards"]]
+    ids = {g["id"] for g in raw["goals"]}
+    colors = [g["color"] for g in raw["goals"]]
+    assert len(set(colors)) == len(colors) and set(colors) <= set(store_mod.GOAL_COLORS)
+    for g in raw["goals"]:
+        assert set(g) == {"id", "name", "about", "release", "shipped", "color", "history", "notes"}, g["id"]
+        assert g["history"] and all(set(h) == {"date", "stage", "note"} and type(h["stage"]) is int and 1 <= h["stage"] <= 10
+                                    for h in g["history"])
+        assert [h["date"] for h in g["history"]] == sorted(h["date"] for h in g["history"])
+        assert all(set(n) == {"date", "text", "by"} and n["by"] in ("player", "claude") for n in g["notes"])
+    assert sum(len(g["history"]) > 2 for g in raw["goals"]) >= 4  # several stage changes each, mostly
+    for c in raw["cards"]:
+        assert set(c) - {"goals"} == set(next(x for x in plain["cards"] if x["id"] == c["id"]))
+        assert set(c["goals"]) <= ids and len(set(c["goals"])) == len(c["goals"])
+    assert {len(c["goals"]) for c in raw["cards"]} == {0, 1, 2, 3}
+
+
+def test_the_goals_are_on_the_board_with_their_stage(tmp_path):
+    c, d = with_goals(tmp_path)
+    with c:
+        b = c.get("/api/board").json()
+        assert b["stages"] == STAGE_LABELS and len(b["goals"]) == 6 and b["pending"] == 0
+        band = goal(c, "band-in-a-box")
+        assert band["stage"] == 6 and band["color"] == "gold" and len(band["history"]) == 6 and band["pending"] == 0
+        assert band["shipped"].startswith("The band's tunes") and [n["by"] for n in band["notes"]] == ["claude", "player"]
+        assert goal(c, "ai-detector")["stage"] == 1
+        assert card(c, "bass-line-octaves")["goals"] == ["band-in-a-box", "solo-acoustic"]  # in its order
+        assert card(c, "records-loudness")["goals"] == []
+        s = c.get("/api/status").json()
+        assert s["goals"][0] == {"id": "band-in-a-box", "name": "UD as a high-quality band-in-a-box", "stage": 6,
+                                 "stage_name": "Decent"}
+        assert [g["stage"] for g in s["goals"]] == [6, 5, 4, 2, 7, 1]
+        assert s["state"] == "5 to listen · 2 to play · 2 for the agent"  # the tile's words as before
+
+
+def test_a_board_pushed_before_the_goals_is_as_before(tmp_path):
+    c, d = make(tmp_path)
+    with c:
+        b = c.get("/api/board").json()
+        assert b["goals"] == [] and b["stages"] is None and all(x["goals"] == [] for x in b["cards"])
+        assert c.get("/api/status").json()["goals"] == []
+        assert c.post("/api/goals/solo-dobro/notes", json={"note": "hi"}).status_code == 404
+        assert c.patch("/api/cards/retro-record", json={"goals": ["solo-dobro"]}).status_code == 422
+        assert c.patch("/api/cards/retro-record", json={"goals": []}).json()["change"] is None
+
+
+def test_pending_goal_changes_are_laid_over_the_base(tmp_path):
+    base = json.loads(GOALS.read_text())
+    base["applied"] = ["folded"]
+    c, d = with_goals(tmp_path, base)
+    at = "2026-10-20T09:0{}:00-07:00".format
+    log = [
+        {"id": "folded", "at": at(0), "by": "player", "goal": "solo-dobro", "stage": 9, "note": "in the base"},
+        {"id": "g1", "at": at(1), "by": "player", "goal": "solo-dobro", "stage": 6, "note": "Vibrato keys"},
+        {"id": "g2", "at": at(2), "by": "player", "goal": "solo-dobro", "note": "A note on it"},
+        {"id": "g3", "at": at(3), "by": "player", "goal": "ai-detector", "stage": 3, "note": ""},
+        {"id": "g4", "at": at(4), "by": "player", "goal": "solo-dobro", "stage": 11, "note": "no such stage"},
+        {"id": "g5", "at": at(4), "by": "player", "goal": "solo-dobro", "stage": "7", "note": "a word, not a number"},
+        {"id": "g6", "at": at(4), "by": "player", "goal": "solo-dobro", "stage": True, "note": "not a number"},
+        {"id": "g7", "at": at(4), "by": "player", "goal": "upstream", "stage": 2, "note": "no such goal"},
+        {"id": "g8", "at": at(4), "by": "player", "goal": "solo-dobro"},  # neither a stage nor a note
+        {"id": "c1", "at": at(5), "by": "player", "card": "retro-record", "set": {"goals": ["practice-room", "solo-dobro"]}},
+        {"id": "c2", "at": at(6), "by": "player", "card": "ab-takes", "set": {"goals": ["nowhere"]}},
+        {"id": "c3", "at": at(7), "by": "player", "card": "bass-line-octaves", "set": {"goals": []}},
+        {"id": "g9", "at": "2026-10-12T10:00:00-07:00", "by": "player", "goal": "solo-dobro", "stage": 5,
+         "note": "Coyote Trail's key answered; the pipeline's keys need a few fixes each"},  # the base has it
+    ]
+    (d / "changes.jsonl").write_text("".join(json.dumps(x) + "\n" for x in log))
+    with c:
+        g = goal(c, "solo-dobro")
+        assert g["stage"] == 6 and g["pending"] == 2 and g["pending_changes"] == ["g1", "g2"]
+        assert g["history"][-1] == {"date": "2026-10-20", "stage": 6, "note": "Vibrato keys", "at": at(1), "by": "player",
+                                    "pending": True}
+        assert len(g["history"]) == 6 and g["notes"][-1]["text"] == "A note on it" and g["notes"][-1]["by"] == "player"
+        assert goal(c, "ai-detector")["stage"] == 3 and goal(c, "ai-detector")["history"][-1]["note"] == ""
+        r = card(c, "retro-record")
+        assert r["goals"] == ["practice-room", "solo-dobro"] and r["pending"] == 1 and r["updated"] == "2026-10-20"
+        assert card(c, "ab-takes")["goals"] == [] and card(c, "ab-takes")["pending"] == 0  # no such goal: left out
+        assert card(c, "bass-line-octaves")["goals"] == []
+        b = c.get("/api/board").json()
+        assert b["pending"] == 5 and c.get("/api/status").json()["pending"] == 5
+        assert len(c.get("/api/changes").json()["changes"]) == len(log) - 1  # all kept in the log but the folded one
+
+
+def test_goal_edits_are_appended_to_the_contract(tmp_path):
+    c, d = with_goals(tmp_path)
+    with c:
+        r = c.post("/api/goals/band-in-a-box/stage", json={"stage": 7, "note": "  The voices are in "}).json()
+        ch = r["change"]
+        assert set(ch) == {"id", "at", "by", "goal", "stage", "note"} and ch["by"] == "player"
+        assert (ch["goal"], ch["stage"], ch["note"]) == ("band-in-a-box", 7, "The voices are in")
+        assert r["goal"]["stage"] == 7 and r["goal"]["pending"] == 1 and r["goal"]["history"][-1]["pending"]
+        assert c.post("/api/goals/band-in-a-box/stage", json={"stage": 7}).json()["change"] is None  # there already
+        back = c.post("/api/goals/band-in-a-box/stage", json={"stage": 5}).json()  # a goal can go back
+        assert back["change"]["note"] == "" and back["goal"]["stage"] == 5
+        n = c.post("/api/goals/ai-detector/notes", json={"note": " Ask the review app's players "}).json()
+        assert set(n["change"]) == {"id", "at", "by", "goal", "note"} and n["change"]["note"] == "Ask the review app's players"
+        assert n["goal"]["notes"][-1]["by"] == "player" and n["goal"]["notes"][-1]["pending"]
+        s = c.patch("/api/cards/retro-record", json={"goals": ["solo-dobro", "band-in-a-box"]}).json()
+        assert s["change"]["set"] == {"goals": ["solo-dobro", "band-in-a-box"]} and s["card"]["goals"] == ["solo-dobro", "band-in-a-box"]
+        assert c.patch("/api/cards/retro-record", json={"goals": ["solo-dobro", "band-in-a-box"]}).json()["change"] is None
+        assert c.patch("/api/cards/retro-record", json={"goals": []}).json()["card"]["goals"] == []
+        assert c.get("/api/status").json()["pending"] == 5
+    log = lines(d)
+    assert [("goal" in x, x.get("stage")) for x in log] == [(True, 7), (True, 5), (True, None), (False, None), (False, None)]
+
+
+@pytest.mark.parametrize("path,body,code", [
+    ("/api/goals/solo-dobro/stage", {"stage": 0}, 422),
+    ("/api/goals/solo-dobro/stage", {"stage": 11}, 422),
+    ("/api/goals/solo-dobro/stage", {"stage": "6"}, 422),
+    ("/api/goals/solo-dobro/stage", {"stage": 6.0}, 422),
+    ("/api/goals/solo-dobro/stage", {"stage": True}, 422),
+    ("/api/goals/solo-dobro/stage", {"note": "no stage"}, 422),
+    ("/api/goals/solo-dobro/stage", {"stage": 6, "note": "x" * 4001}, 422),
+    ("/api/goals/upstream/stage", {"stage": 6}, 404),  # not a goal (an area)
+    ("/api/goals/solo-dobro/notes", {"note": "  "}, 422),
+    ("/api/goals/no-such/notes", {"note": "hi"}, 404),
+])
+def test_goal_edits_the_contract_does_not_allow_are_refused(tmp_path, path, body, code):
+    c, d = with_goals(tmp_path)
+    with c:
+        assert c.post(path, json=body).status_code == code
+    assert lines(d) == []
+
+
+@pytest.mark.parametrize("goals", [["nowhere"], ["solo-dobro", "solo-dobro"], "solo-dobro", [1], None])
+def test_a_card_s_goals_the_contract_does_not_allow_are_refused(tmp_path, goals):
+    c, d = with_goals(tmp_path)
+    with c:
+        assert c.patch("/api/cards/retro-record", json={"goals": goals}).status_code == 422
+        assert c.patch("/api/cards/live:exercises", json={"goals": ["solo-dobro"]}).status_code == 409
+    assert lines(d) == []
+
+
+def test_a_goal_s_color_and_the_stages_labels_from_the_base(tmp_path):
+    base = json.loads(GOALS.read_text())
+    base["goals"][1]["color"] = "plum"  # not one of the ten: the first not taken
+    del base["goals"][2]["color"]
+    base["goals"].append({"id": "empty", "name": "", "history": [{"date": "2026-10-19", "stage": "release"}]})
+    base["stages"] = [f"Step {n}" for n in range(1, 11)]
+    out = merge(base, [])
+    assert [g["color"] for g in out["goals"]] == ["gold", "teal", "orange", "red", "violet", "sky", "pink"]
+    empty = out["goals"][-1]
+    assert (empty["name"], empty["history"], empty["stage"], empty["shipped"]) == ("empty", [], 1, "")
+    assert out["stages"][5] == "Step 6"
+    c, d = with_goals(tmp_path, base)
+    with c:
+        assert c.get("/api/status").json()["goals"][0]["stage_name"] == "Step 6"
+    base["stages"] = STAGE_LABELS[:9]  # not all ten: the board's own
+    assert merge(base, [])["stages"] is None
+    assert counts([], [], merge(base, [])["goals"])["goals"][0]["stage_name"] == "Decent"

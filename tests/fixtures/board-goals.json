@@ -1,0 +1,1434 @@
+{
+ "version": 1,
+ "generated": "2026-10-19T21:00:00-07:00",
+ "stages": [
+  "Idea",
+  "Idea with a plan",
+  "Testable prototype",
+  "Tested prototype",
+  "Rough but usable",
+  "Decent",
+  "Getting pretty good",
+  "Almost release-ready",
+  "Release-ready",
+  "Released"
+ ],
+ "areas": [
+  {
+   "id": "dobro",
+   "name": "Dobro transcription",
+   "about": "The pipeline, the answer keys and the reviews"
+  },
+  {
+   "id": "strings",
+   "name": "Other strings",
+   "about": "Guitalele, mandolin, banjo, mountain dulcimer"
+  },
+  {
+   "id": "bass",
+   "name": "Bass",
+   "about": "The upright: exercises, takes, the bass line"
+  },
+  {
+   "id": "piano",
+   "name": "Piano",
+   "about": "The piano's exercises and its transcription"
+  },
+  {
+   "id": "band",
+   "name": "The band",
+   "about": "The Ugly Duckling String Band: a band that follows you"
+  },
+  {
+   "id": "room",
+   "name": "Music room apps",
+   "about": "practice.local: the recorders, the home page, this board"
+  },
+  {
+   "id": "gear",
+   "name": "Gear",
+   "about": "The interface, the mics, the control unit"
+  }
+ ],
+ "goals": [
+  {
+   "id": "band-in-a-box",
+   "name": "UD as a high-quality band-in-a-box",
+   "about": "The Ugly Duckling String Band: a band that follows you",
+   "release": "The band plays along as well as Strum Machine does, and follows a change of tempo",
+   "shipped": "The band's tunes and the app on the unit, set up from the repo by anyone with the gear",
+   "color": "gold",
+   "history": [
+    {
+     "date": "2026-09-25",
+     "stage": 1,
+     "note": "A band that follows you"
+    },
+    {
+     "date": "2026-09-30",
+     "stage": 2,
+     "note": "Strum Machine as the benchmark"
+    },
+    {
+     "date": "2026-10-03",
+     "stage": 3,
+     "note": "It follows a count-in"
+    },
+    {
+     "date": "2026-10-08",
+     "stage": 4,
+     "note": "Tried at the jam; the bass drags"
+    },
+    {
+     "date": "2026-10-10",
+     "stage": 5,
+     "note": "Swing and the bass line"
+    },
+    {
+     "date": "2026-10-17",
+     "stage": 6,
+     "note": "Close to Strum Machine on feel"
+    }
+   ],
+   "notes": [
+    {
+     "date": "2026-10-18",
+     "text": "The voices next: the band's singing.",
+     "by": "claude"
+    },
+    {
+     "date": "2026-10-19",
+     "text": "Strum Machine is still the one to beat.",
+     "by": "player"
+    }
+   ]
+  },
+  {
+   "id": "solo-dobro",
+   "name": "Solo dobro transcription",
+   "about": "A solo dobro take written as tab and staff, checked by ear",
+   "release": "Any solo dobro take recorded in the room comes out as tab and staff that needs no correction by ear",
+   "shipped": "The pipeline open source, with its answer keys and a page to try it",
+   "color": "teal",
+   "history": [
+    {
+     "date": "2026-09-28",
+     "stage": 1,
+     "note": "Can a take be written as tab, its keys checked by ear?"
+    },
+    {
+     "date": "2026-10-01",
+     "stage": 2,
+     "note": ""
+    },
+    {
+     "date": "2026-10-04",
+     "stage": 3,
+     "note": "The first pipeline: notes and frets from one take"
+    },
+    {
+     "date": "2026-10-09",
+     "stage": 4,
+     "note": "Three takes through it"
+    },
+    {
+     "date": "2026-10-12",
+     "stage": 5,
+     "note": "Coyote Trail's key answered; the pipeline's keys need a few fixes each"
+    }
+   ],
+   "notes": [
+    {
+     "date": "2026-10-15",
+     "text": "Vibrato is the next hard part: the keys miss it.",
+     "by": "claude"
+    }
+   ]
+  },
+  {
+   "id": "solo-acoustic",
+   "name": "Solo acoustic instrument transcription",
+   "about": "Guitalele, banjo, mandolin, bass, piano: any instrument alone",
+   "release": "The transcribe app writes any acoustic instrument's take as well as the dobro's",
+   "shipped": "",
+   "color": "orange",
+   "history": [
+    {
+     "date": "2026-10-08",
+     "stage": 1,
+     "note": ""
+    },
+    {
+     "date": "2026-10-10",
+     "stage": 2,
+     "note": "The generic path"
+    },
+    {
+     "date": "2026-10-14",
+     "stage": 3,
+     "note": "Guitalele and banjo through the generic path"
+    },
+    {
+     "date": "2026-10-19",
+     "stage": 4,
+     "note": "The transcribe app takes any stringed instrument"
+    }
+   ],
+   "notes": [
+    {
+     "date": "2026-10-19",
+     "text": "The bass's octaves are the weak spot.",
+     "by": "player"
+    }
+   ]
+  },
+  {
+   "id": "bluegrass-band",
+   "name": "Full bluegrass band transcription",
+   "about": "Every part of a band recording, each on its own staff",
+   "release": "A band recording comes apart into its instruments, each transcribed as well as a solo take",
+   "shipped": "",
+   "color": "red",
+   "history": [
+    {
+     "date": "2026-10-02",
+     "stage": 1,
+     "note": "After the solo dobro: the whole band"
+    },
+    {
+     "date": "2026-10-16",
+     "stage": 2,
+     "note": "The free recordings harvest: a first split into parts"
+    }
+   ],
+   "notes": []
+  },
+  {
+   "id": "practice-room",
+   "name": "The music-room practice system",
+   "about": "practice.local: the recorders, the home page, the apps and this board",
+   "release": "Every app on the unit used daily with no help",
+   "shipped": "Set up from the repo on another unit, by its docs alone",
+   "color": "violet",
+   "history": [
+    {
+     "date": "2026-10-10",
+     "stage": 1,
+     "note": "A recorder on the mixer's USB"
+    },
+    {
+     "date": "2026-10-10",
+     "stage": 2,
+     "note": "The plan: PLAN.md"
+    },
+    {
+     "date": "2026-10-10",
+     "stage": 3,
+     "note": "The first take recorded from the phone"
+    },
+    {
+     "date": "2026-10-11",
+     "stage": 4,
+     "note": "A week of takes"
+    },
+    {
+     "date": "2026-10-13",
+     "stage": 5,
+     "note": "The exercise app and the home page"
+    },
+    {
+     "date": "2026-10-17",
+     "stage": 6,
+     "note": "The chord app and the transcribe app"
+    },
+    {
+     "date": "2026-10-19",
+     "stage": 7,
+     "note": "The board"
+    }
+   ],
+   "notes": []
+  },
+  {
+   "id": "ai-detector",
+   "name": "AI music detector",
+   "about": "Telling a recording made by AI from one played",
+   "release": "",
+   "shipped": "",
+   "color": "sky",
+   "history": [
+    {
+     "date": "2026-10-18",
+     "stage": 1,
+     "note": "From the free recordings review: some were not played"
+    }
+   ],
+   "notes": []
+  }
+ ],
+ "cards": [
+  {
+   "id": "guitalele-key",
+   "title": "Write the key for the guitalele tune",
+   "area": "strings",
+   "status": "doing",
+   "importance": 1,
+   "who": [
+    "player"
+   ],
+   "work": "listen",
+   "effort_player": "30m",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [
+    {
+     "label": "Take check",
+     "href": "http://practice.local:8005/#/r/take-check-2026-10-19-180234",
+     "repo": "dobro-transcription"
+    },
+    {
+     "label": "Draft key",
+     "href": "exercises/generic/guitalele-tune/draft.musicxml",
+     "repo": "dobro-transcription"
+    }
+   ],
+   "details": "The take check asks six questions. Answer them, then say the tune's name.\n\n- the key: **C**, by ear\n- the bars: 16, with a pickup\n\nSee `exercises/generic/` for the layout.",
+   "source": "docs/plan.md, 2026-10-19",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "solo-acoustic"
+   ]
+  },
+  {
+   "id": "bass-line-octaves",
+   "title": "Check the bass line's octaves on Tennessee Waltz",
+   "area": "bass",
+   "status": "doing",
+   "importance": 2,
+   "who": [
+    "player",
+    "claude"
+   ],
+   "work": "listen",
+   "effort_player": "15m",
+   "effort_claude": "S",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [
+    {
+     "label": "Saint Anne's Reel results",
+     "href": "runs/2026-10-19-bassline/README.md",
+     "repo": "dobro-transcription"
+    }
+   ],
+   "details": "The role rule kept its three F2s. Listen to bars 9-12 and say if the octave is right.",
+   "source": "runs/2026-10-19-bassline",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "band-in-a-box",
+    "solo-acoustic"
+   ]
+  },
+  {
+   "id": "melodic-line-deploy",
+   "title": "Deploy the melodic line with the pipeline",
+   "area": "dobro",
+   "status": "doing",
+   "importance": 2,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "M",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "`review/tools/deploy` with every app idle.",
+   "source": "PLAN.md",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "solo-dobro"
+   ]
+  },
+  {
+   "id": "free-bluegrass-review",
+   "title": "Finish the free bluegrass review by ear",
+   "area": "dobro",
+   "status": "doing",
+   "importance": 2,
+   "who": [
+    "player"
+   ],
+   "work": "listen",
+   "effort_player": "1h",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [
+    {
+     "label": "The review",
+     "href": "http://practice.local:8005/#/r/2026-10-19-free-bluegrass",
+     "repo": "dobro-transcription"
+    }
+   ],
+   "details": "24 of 33 left. Keep or drop each recording.",
+   "source": "review 2026-10-19-free-bluegrass",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "bluegrass-band",
+    "ai-detector"
+   ]
+  },
+  {
+   "id": "record-pi-bass-takes",
+   "title": "Record the 11 bass takes again on the LIVA",
+   "area": "bass",
+   "status": "next",
+   "importance": 1,
+   "who": [
+    "player"
+   ],
+   "work": "play",
+   "effort_player": "2h",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "All 11 takes the Pi recorded through the 18i8 have 4-17 gaps each (2026-10-14). They are worth recording again.",
+   "source": "piano-recorder PLAN.md step 1",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "solo-acoustic"
+   ]
+  },
+  {
+   "id": "chart-audio-speakers",
+   "title": "Hear an exercise's chart over the speakers",
+   "area": "room",
+   "status": "next",
+   "importance": 2,
+   "who": [
+    "player"
+   ],
+   "work": "listen",
+   "effort_player": "5m",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [
+    {
+     "label": "The exercise app",
+     "href": "http://practice.local:8002/",
+     "repo": "dobro-transcription"
+    }
+   ],
+   "details": "Hear it on Ready plays the chart at the score's tempo. Not yet heard on the unit.",
+   "source": "piano-recorder PLAN.md step 6",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "practice-room"
+   ]
+  },
+  {
+   "id": "choose-mandolin-sound",
+   "title": "Choose the mandolin's sound for the charts",
+   "area": "strings",
+   "status": "next",
+   "importance": 2,
+   "who": [
+    "player"
+   ],
+   "work": "listen",
+   "effort_player": "15m",
+   "effort_claude": "S",
+   "waiting_on": "",
+   "blocked_by": [
+    "mandolin-soundfont"
+   ],
+   "links": [],
+   "details": "An A/B of two renders of the same notes: say which by ear.",
+   "source": "feedback: sound A/B",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "band-in-a-box"
+   ]
+  },
+  {
+   "id": "liva-t-tests",
+   "title": "Run T1-T4 and T11 on the LIVA",
+   "area": "gear",
+   "status": "next",
+   "importance": 2,
+   "who": [
+    "player",
+    "claude"
+   ],
+   "work": "hardware",
+   "effort_player": "30m",
+   "effort_claude": "S",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "The player in the room; device tests only when the player says.",
+   "source": "piano-recorder PLAN.md step 1",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "practice-room"
+   ]
+  },
+  {
+   "id": "generic-transcriber-deploy",
+   "title": "Deploy the transcriber for any stringed instrument",
+   "area": "room",
+   "status": "next",
+   "importance": 1,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "M",
+   "waiting_on": "",
+   "blocked_by": [
+    "melodic-line-deploy"
+   ],
+   "links": [],
+   "details": "The order: review/tools/deploy, then tools/deploy, then `[instruments.strings]` by hand.",
+   "source": "piano-recorder PLAN.md step 8",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "solo-acoustic",
+    "practice-room"
+   ]
+  },
+  {
+   "id": "piano-mic-placement",
+   "title": "Decide where the room mic goes for the piano",
+   "area": "piano",
+   "status": "next",
+   "importance": 2,
+   "who": [
+    "player"
+   ],
+   "work": "hardware",
+   "effort_player": "30m",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "The speakers are across the room with the piano between.",
+   "source": "piano-recorder PLAN.md, open questions",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "solo-acoustic"
+   ]
+  },
+  {
+   "id": "band-count-in",
+   "title": "Try the band's count-in with the voice",
+   "area": "band",
+   "status": "next",
+   "importance": 3,
+   "who": [
+    "player"
+   ],
+   "work": "play",
+   "effort_player": "15m",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [
+    {
+     "label": "The band",
+     "href": "http://practice.local:8004/",
+     "repo": "dobro-transcription"
+    }
+   ],
+   "details": "",
+   "source": "ud-sessions",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "band-in-a-box"
+   ]
+  },
+  {
+   "id": "scarlett-routing",
+   "title": "Route the 18i8's playback to a capture channel",
+   "area": "gear",
+   "status": "waiting",
+   "importance": 2,
+   "who": [
+    "claude",
+    "others"
+   ],
+   "work": "hardware",
+   "effort_player": "",
+   "effort_claude": "L",
+   "waiting_on": "alsa-scarlett-gui on the unit",
+   "blocked_by": [],
+   "links": [],
+   "details": "The backing could come back electrically on a channel of its own.",
+   "source": "PLAN.md step 5",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "practice-room"
+   ]
+  },
+  {
+   "id": "mandolin-soundfont",
+   "title": "A mandolin SoundFont with a free licence",
+   "area": "strings",
+   "status": "waiting",
+   "importance": 3,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "S",
+   "waiting_on": "a font to try (none found yet under a free licence)",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "2026-10-19",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "band-in-a-box",
+    "solo-acoustic"
+   ]
+  },
+  {
+   "id": "dulcimer-tuning",
+   "title": "Say how the mountain dulcimer is tuned",
+   "area": "strings",
+   "status": "waiting",
+   "importance": 2,
+   "who": [
+    "player"
+   ],
+   "work": "play",
+   "effort_player": "5m",
+   "effort_claude": "",
+   "waiting_on": "the dulcimer back from the shop",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "2026-10-19",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "solo-acoustic"
+   ]
+  },
+  {
+   "id": "records-loudness",
+   "title": "Calibrate the loudness target against a record",
+   "area": "room",
+   "status": "waiting",
+   "importance": 3,
+   "who": [
+    "player",
+    "claude"
+   ],
+   "work": "hardware",
+   "effort_player": "15m",
+   "effort_claude": "S",
+   "waiting_on": "a record at the shared knob setting",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "docs/components.md, Shared mixer",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": []
+  },
+  {
+   "id": "ethernet-room",
+   "title": "Is there Ethernet in the mixer's room?",
+   "area": "gear",
+   "status": "waiting",
+   "importance": 3,
+   "who": [
+    "others"
+   ],
+   "work": "people",
+   "effort_player": "",
+   "effort_claude": "",
+   "waiting_on": "the landlord",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "PLAN.md, open questions",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "practice-room"
+   ]
+  },
+  {
+   "id": "retro-record",
+   "title": "Retroactive record: keep the last N minutes",
+   "area": "room",
+   "status": "backlog",
+   "importance": 2,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "L",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "Always capture into a ring buffer, and a keep button.",
+   "source": "PLAN.md step 4",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": []
+  },
+  {
+   "id": "loop-section",
+   "title": "Loop a section, and slow it down",
+   "area": "room",
+   "status": "backlog",
+   "importance": 3,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "M",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "`sox tempo` or rubberband; measure on the unit.",
+   "source": "PLAN.md step 4",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "practice-room"
+   ]
+  },
+  {
+   "id": "ab-takes",
+   "title": "Compare two takes A/B",
+   "area": "room",
+   "status": "backlog",
+   "importance": 3,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "M",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "PLAN.md step 4",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": []
+  },
+  {
+   "id": "lineup-separate-process",
+   "title": "Line up a take in a low-priority process",
+   "area": "room",
+   "status": "backlog",
+   "importance": 2,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "M",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "Never during a recording.",
+   "source": "PLAN.md step 5",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "practice-room"
+   ]
+  },
+  {
+   "id": "backing-out-desktop",
+   "title": "Take a play-along's backing out on the desktop",
+   "area": "room",
+   "status": "backlog",
+   "importance": 2,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "L",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "PLAN.md step 6",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "practice-room",
+    "band-in-a-box"
+   ]
+  },
+  {
+   "id": "banjo-exercises-record",
+   "title": "Record the eight banjo exercises",
+   "area": "strings",
+   "status": "backlog",
+   "importance": 2,
+   "who": [
+    "player"
+   ],
+   "work": "play",
+   "effort_player": "1h",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [
+    {
+     "label": "Banjo list",
+     "href": "http://practice.local:8002/#banjo",
+     "repo": "dobro-transcription"
+    }
+   ],
+   "details": "",
+   "source": "exercises/status.py",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "solo-acoustic"
+   ]
+  },
+  {
+   "id": "mandolin-scales",
+   "title": "Play the scales on the mandolin",
+   "area": "strings",
+   "status": "backlog",
+   "importance": 2,
+   "who": [
+    "player"
+   ],
+   "work": "play",
+   "effort_player": "30m",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "exercises/generic",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": []
+  },
+  {
+   "id": "piano-pedal-key",
+   "title": "The pedal in the piano's answer keys",
+   "area": "piano",
+   "status": "backlog",
+   "importance": 3,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "M",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "The pipeline writes no pedal or dynamics yet.",
+   "source": "PLAN.md step 8",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "solo-acoustic"
+   ]
+  },
+  {
+   "id": "piano-exercises-record",
+   "title": "Record piano exercises 016-024",
+   "area": "piano",
+   "status": "backlog",
+   "importance": 2,
+   "who": [
+    "player"
+   ],
+   "work": "play",
+   "effort_player": "half-day",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "exercises/status.py",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "solo-acoustic"
+   ]
+  },
+  {
+   "id": "bass-arco",
+   "title": "Record arco takes for the bass",
+   "area": "bass",
+   "status": "backlog",
+   "importance": 3,
+   "who": [
+    "player"
+   ],
+   "work": "play",
+   "effort_player": "2h",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "2026-10-16",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": []
+  },
+  {
+   "id": "bass-new-strings",
+   "title": "Decide on new strings for the bass",
+   "area": "bass",
+   "status": "backlog",
+   "importance": 3,
+   "who": [
+    "player"
+   ],
+   "work": "hardware",
+   "effort_player": "15m",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "2026-10-18",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": []
+  },
+  {
+   "id": "band-swing",
+   "title": "The band plays swing feel",
+   "area": "band",
+   "status": "backlog",
+   "importance": 2,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "XL",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "ud-sessions",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "band-in-a-box"
+   ]
+  },
+  {
+   "id": "band-chart-voice",
+   "title": "Sing the chart's changes for the band",
+   "area": "band",
+   "status": "backlog",
+   "importance": 3,
+   "who": [
+    "player"
+   ],
+   "work": "play",
+   "effort_player": "30m",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "2026-10-18",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "band-in-a-box"
+   ]
+  },
+  {
+   "id": "scarlett-2i2",
+   "title": "A used Scarlett 2i2 for the Pi",
+   "area": "gear",
+   "status": "backlog",
+   "importance": 3,
+   "who": [
+    "player"
+   ],
+   "work": "hardware",
+   "effort_player": "1h",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "Requirements: `docs/replacing-the-mixer.md`.\n\nA test of escaping: <script>alert(1)</script> <img src=x onerror=alert(2)> [a link](javascript:alert(3)) and [a real one](https://example.org/scarlett).",
+   "source": "PLAN.md step 4",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": []
+  },
+  {
+   "id": "dropbox-copy",
+   "title": "Copy takes to the desktop automatically",
+   "area": "room",
+   "status": "backlog",
+   "importance": 3,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "M",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "PLAN.md step 4",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": []
+  },
+  {
+   "id": "dobro-vibrato-key",
+   "title": "Mark the vibrato in Red Wing's key",
+   "area": "dobro",
+   "status": "backlog",
+   "importance": 2,
+   "who": [
+    "player"
+   ],
+   "work": "listen",
+   "effort_player": "30m",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [
+    {
+     "label": "Red Wing",
+     "href": "tunes/dobro/red-wing/",
+     "repo": "dobro-transcription"
+    }
+   ],
+   "details": "",
+   "source": "review answers",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "solo-dobro"
+   ]
+  },
+  {
+   "id": "dobro-slides-study",
+   "title": "Study the slides the pipeline misses",
+   "area": "dobro",
+   "status": "backlog",
+   "importance": 2,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "L",
+   "waiting_on": "",
+   "blocked_by": [
+    "dobro-vibrato-key"
+   ],
+   "links": [],
+   "details": "",
+   "source": "runs/",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "solo-dobro",
+    "bluegrass-band"
+   ]
+  },
+  {
+   "id": "tax-receipt",
+   "title": "Ask the shop about the 18i8's warranty",
+   "area": "gear",
+   "status": "backlog",
+   "importance": 3,
+   "who": [
+    "player"
+   ],
+   "work": "people",
+   "effort_player": "15m",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "The receipt is in the drawer with the manual.",
+   "source": "2026-10-14",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": []
+  },
+  {
+   "id": "alphatab-voice-issue",
+   "title": "Write to alphaTab's maintainers about the empty voice",
+   "area": "room",
+   "status": "backlog",
+   "importance": 3,
+   "who": [
+    "player",
+    "claude"
+   ],
+   "work": "people",
+   "effort_player": "15m",
+   "effort_claude": "S",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [
+    {
+     "label": "alphaTab issues",
+     "href": "https://github.com/CoderLine/alphaTab/issues",
+     "repo": "dobro-transcription"
+    }
+   ],
+   "details": "alphaTab draws an empty voice 1 as a rest in every bar. Claude drafts it; you send it.",
+   "source": "piano-recorder PLAN.md step 8",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "practice-room",
+    "solo-acoustic"
+   ]
+  },
+  {
+   "id": "saturday-jam",
+   "title": "Sign up for the Saturday jam",
+   "area": "band",
+   "status": "next",
+   "importance": 2,
+   "who": [
+    "player"
+   ],
+   "work": "people",
+   "effort_player": "5m",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "2026-10-18",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "band-in-a-box"
+   ]
+  },
+  {
+   "id": "dobro-player-takes",
+   "title": "Ask a dobro player for takes of Red Wing",
+   "area": "dobro",
+   "status": "waiting",
+   "importance": 2,
+   "who": [
+    "player",
+    "others"
+   ],
+   "work": "people",
+   "effort_player": "15m",
+   "effort_claude": "",
+   "waiting_on": "a reply",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "2026-10-17",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": null,
+   "goals": [
+    "solo-dobro"
+   ]
+  },
+  {
+   "id": "exercise-board",
+   "title": "The exercise app opens on a board",
+   "area": "room",
+   "status": "done",
+   "importance": 2,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "M",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "PLAN.md step 6",
+   "created": "2026-10-18",
+   "updated": "2026-10-19",
+   "done": "2026-10-19",
+   "goals": [
+    "practice-room"
+   ]
+  },
+  {
+   "id": "transcribe-app",
+   "title": "The transcribe app on port 8006",
+   "area": "room",
+   "status": "done",
+   "importance": 1,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "L",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "PLAN.md step 8",
+   "created": "2026-10-17",
+   "updated": "2026-10-19",
+   "done": "2026-10-19",
+   "goals": [
+    "solo-acoustic",
+    "practice-room",
+    "solo-dobro"
+   ]
+  },
+  {
+   "id": "coyote-trail-answers",
+   "title": "Answer Coyote Trail's last two questions",
+   "area": "dobro",
+   "status": "done",
+   "importance": 2,
+   "who": [
+    "player"
+   ],
+   "work": "listen",
+   "effort_player": "5m",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "review 2026-10-19-coyote-trail",
+   "created": "2026-10-19",
+   "updated": "2026-10-19",
+   "done": "2026-10-19",
+   "goals": [
+    "solo-dobro"
+   ]
+  },
+  {
+   "id": "liva-swap",
+   "title": "The LIVA takes the Pi's place",
+   "area": "gear",
+   "status": "done",
+   "importance": 1,
+   "who": [
+    "player",
+    "claude"
+   ],
+   "work": "hardware",
+   "effort_player": "half-day",
+   "effort_claude": "M",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "PLAN.md step 1",
+   "created": "2026-10-14",
+   "updated": "2026-10-19",
+   "done": "2026-10-15",
+   "goals": [
+    "practice-room"
+   ]
+  },
+  {
+   "id": "chord-app",
+   "title": "The chord app (port 8003)",
+   "area": "room",
+   "status": "done",
+   "importance": 2,
+   "who": [
+    "claude"
+   ],
+   "work": "agent",
+   "effort_player": "",
+   "effort_claude": "L",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "PLAN.md step 7",
+   "created": "2026-10-16",
+   "updated": "2026-10-19",
+   "done": "2026-10-16",
+   "goals": [
+    "practice-room"
+   ]
+  },
+  {
+   "id": "first-bass-takes",
+   "title": "The first bass exercise takes",
+   "area": "bass",
+   "status": "done",
+   "importance": 2,
+   "who": [
+    "player"
+   ],
+   "work": "play",
+   "effort_player": "1h",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "PLAN.md step 6",
+   "created": "2026-10-12",
+   "updated": "2026-10-19",
+   "done": "2026-10-13",
+   "goals": [
+    "solo-acoustic"
+   ]
+  },
+  {
+   "id": "pi-setup",
+   "title": "The Pi on the network",
+   "area": "gear",
+   "status": "done",
+   "importance": 2,
+   "who": [
+    "player",
+    "claude"
+   ],
+   "work": "hardware",
+   "effort_player": "2h",
+   "effort_claude": "S",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "PLAN.md step 1",
+   "created": "2026-09-28",
+   "updated": "2026-10-01",
+   "done": "2026-10-01",
+   "goals": [
+    "practice-room"
+   ]
+  },
+  {
+   "id": "mixer-measured",
+   "title": "Measure the BMG-04F on the laptop",
+   "area": "gear",
+   "status": "done",
+   "importance": 3,
+   "who": [
+    "claude"
+   ],
+   "work": "hardware",
+   "effort_player": "",
+   "effort_claude": "M",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "dobro-soundfont",
+   "created": "2026-09-18",
+   "updated": "2026-09-20",
+   "done": "2026-09-20",
+   "goals": [
+    "practice-room"
+   ]
+  },
+  {
+   "id": "first-dobro-keys",
+   "title": "The first dobro answer keys",
+   "area": "dobro",
+   "status": "done",
+   "importance": 2,
+   "who": [
+    "player"
+   ],
+   "work": "listen",
+   "effort_player": "day+",
+   "effort_claude": "",
+   "waiting_on": "",
+   "blocked_by": [],
+   "links": [],
+   "details": "",
+   "source": "docs/",
+   "created": "2026-09-10",
+   "updated": "2026-09-25",
+   "done": "2026-09-25",
+   "goals": [
+    "solo-dobro"
+   ]
+  }
+ ],
+ "applied": []
+}

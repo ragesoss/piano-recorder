@@ -7,7 +7,9 @@ the new cards back on the control unit.
 1. The unit's changes.jsonl (the edits not yet brought in) is copied to the desktop, read under the app's
    lock: whole lines only.
 2. In the repo: `python3 board/board.py apply FILE`, then `python3 board/board.py fmt`. apply takes each edit
-   once (board/applied.txt) and refuses one it cannot apply (a card gone, say), saying why; the rest go in.
+   once (board/applied.txt) and refuses one it cannot apply (a card gone, say), saying why; the rest go in. The
+   goals' edits go with the cards' as the app wrote them: a goal moved to a stage (`{"goal", "stage", "note"}`),
+   a note on a goal (`{"goal", "note"}`), a card's goals (a "set" with `goals`).
 3. `python3 board/board.py json | tools/push-board`: the new base on the unit. Its "applied" lists every edit
    folded into the cards, and the app lays over only the others.
 4. Only once that push has succeeded, the edits in "applied" move on the unit from changes.jsonl to
@@ -29,7 +31,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
-from board.store import Store  # noqa: E402
+from board.store import Store, goal_change  # noqa: E402
 
 REMOTE = "cd practice-recorder && .venv/bin/python -m board.store"
 
@@ -120,7 +122,8 @@ def main() -> None:
         said = r.stdout.strip()
     took = [ch for ch in changes if ch["id"] in folded]
     refused = [ch for ch in changes if ch["id"] not in folded]
-    kinds = Counter("new" if "new" in ch else "note" if "note" in ch else "set" for ch in took)
+    kinds = Counter(f"goal {goal_change(ch) or 'edit'}" if "goal" in ch else "new" if "new" in ch
+                    else "note" if "note" in ch else "set" for ch in took)
     print(f"brought in {len(took)} edit{'s' if len(took) != 1 else ''} from {where}"
           + (f" ({', '.join(f'{n} {k}' for k, n in sorted(kinds.items()))})" if took else "") + f"; {said}")
     if took:
