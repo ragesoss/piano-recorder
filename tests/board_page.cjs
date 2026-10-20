@@ -3,8 +3,11 @@
 //     note, "Claude: do this next", a card added, filters and lanes kept over a reload, the older Done folded, a drag
 //     (with a mouse only), and nothing of the goals anywhere.
 //   goals: cards with their goals: the cards' stripes and chips (one goal, two, none), the Goals view and its charts, a
-//     dot's date, stage and note, a goal's sheet, a goal moved a stage, a note on it, a card's goals chosen, the goal
-//     filter kept over a reload, the stages' labels from the JSON.
+//     dot's date, stage and note; a goal's page (from its tile, a card's chip, a card's sheet, a link, a reload, the
+//     back button): the goal at the top, short enough on an iPad, the board under it with that goal's cards only in
+//     every column, the kinds of work counted within it, a card moved there, "Move to stage…", "Add a note",
+//     "History and notes", Add for the goal, "‹ All goals"; a card's goals chosen, the goal filter kept over a reload,
+//     the stages' labels from the JSON.
 // Both: no console errors, no sideways scroll, 44 px targets.
 //   node tests/board_page.cjs URL WIDTHxHEIGHT SHOTS_DIR [plain|goals]      (tests/test_board_page.py runs it)
 const { chromium } = require("playwright");
@@ -50,8 +53,8 @@ const LANE = W <= 640 ? ".cell h3" : ".lane";  // lanes across the columns; on a
     check(!unnamed, `${where}: ${unnamed} buttons without a name`);
   };
   const view = async (id) => { await page.click(`#views [data-view="${id}"]`); await page.waitForSelector(`#views [data-view="${id}"][aria-pressed="true"]`); };
-  const openCard = async (id) => {
-    await page.click(`.card[data-id="${id}"]`);
+  const openCard = async (id) => {  // by its title (a goal's chip on it opens the goal's page)
+    await page.click(`.card[data-id="${id}"] .title`);
     await page.waitForSelector("#sheet[open] .sh-body");
   };
   const closeSheet = async () => { await page.click("#sheet[open] [data-act=close]"); await page.waitForSelector("#sheet:not([open])", { state: "attached" }); };
@@ -298,43 +301,107 @@ const LANE = W <= 640 ? ".cell h3" : ".lane";  // lanes across the columns; on a
     await shot("dot");
     await targets("a dot's readout");
 
-    // a goal's sheet
+    // a goal's page, from its tile: the goal at the top, the board under it with its cards only
+    const board = async () => (await (await page.request.get(url + "api/board")).json()).cards;
+    const shownCards = () => page.$$eval("#board .card", (cs) => cs.map((c) => ({ id: c.dataset.id, status: c.dataset.status, work: c.dataset.work,
+      goals: c.dataset.goals.split(" ").filter(Boolean), col: c.closest(".cell").dataset.status })));
+    const onlyGoal = async (gid, where) => {
+      const mine = (await board()).filter((c) => c.goals.includes(gid));
+      const cards = await shownCards();
+      check(cards.length && cards.every((c) => c.goals.includes(gid) && c.col === c.status), `${where}: only ${gid}'s cards, each in its column (${cards.map((c) => c.id)})`);
+      const recent = mine.filter((c) => c.status !== "done" || (new Date("2026-10-19") - new Date(c.done || c.updated)) / 864e5 <= 14);
+      check(JSON.stringify(cards.map((c) => c.id).sort()) === JSON.stringify(recent.map((c) => c.id).sort()), `${where}: all of ${gid}'s cards (${cards.length} of ${recent.length})`);
+      for (const [st] of [["backlog"], ["next"], ["doing"], ["waiting"], ["done"]]) {
+        const n = +(await page.textContent(`#col-${st} .n`));
+        check(n === recent.filter((c) => c.status === st).length, `${where}: the ${st} column's count, ${n}`);
+      }
+      for (const w of ["listen", "play", "agent", "people", "hardware"]) {
+        const n = +(await page.textContent(`#views [data-view="${w}"] .n`));
+        check(n === mine.filter((c) => c.work === w && c.status !== "done").length, `${where}: ${w}'s count within the goal, ${n}`);
+      }
+      return mine;
+    };
+    const head = async () => page.evaluate(() => ({ head: document.querySelector("#goalHead").getBoundingClientRect().height,
+      board: document.querySelector("#board").getBoundingClientRect().height }));
     await page.click('.gtile[data-goal="band-in-a-box"] .gopen');
-    await page.waitForSelector("#goal[open] .gchart svg");
-    const sheet = await page.textContent("#goal");
-    check((await page.textContent("#goalTitle")) === "UD as a high-quality band-in-a-box", "the goal's title");
-    check(sheet.includes("Release-ready (9) means") && sheet.includes("as well as Strum Machine does") && sheet.includes("Released (10) means")
-      && sheet.includes("set up from the repo by anyone"), "the release lines");
-    const cards = await page.$$eval("#goal .gcards .ggroup h3", (hs) => hs.map((h) => h.textContent.replace(/\s+/g, " ").trim()));
-    check(JSON.stringify(cards) === JSON.stringify(["Doing 1", "Next 3", "Waiting 1", "Backlog 3"]), `its cards by status: ${cards}`);
-    check(await page.$$eval("#goal .ghist li", (l) => l.length) === 6, "its history");
-    const notes = await page.$$eval("#goal .notes li", (l) => l.map((x) => x.textContent));
-    check(notes.length === 2 && notes[0].includes("You") && notes[1].includes("Claude") && notes[1].includes("The voices next"), `its notes, newest first, who wrote each: ${notes}`);
-    const named = await page.$$eval("#goal svg text", (ts) => ts.map((t) => t.textContent));
-    check(W >= 700 ? named.includes("6 Decent") && named.includes("10 Released") : named.includes("9") && !named.includes("6 Decent"), `the sheet's axis: ${named.slice(0, 10)}`);
+    await page.waitForSelector("#goalHead:not([hidden])");
+    check(page.url().endsWith("#goal=band-in-a-box"), `the goal's page has its link: ${page.url()}`);
+    check((await page.textContent("#goalPageTitle")) === "UD as a high-quality band-in-a-box" && (await page.textContent("#goalHead .gstage")).includes("6 · Decent"), "the goal at the top");
+    check(!(await page.$('#views [data-view="goals"]')) && await page.$('#views [data-view="all"][aria-pressed="true"]'), "within the goal: the kinds of work and All");
+    check(!(await page.$eval("#filtersBtn", (b) => b.hidden)), "the filters there");
+    const fold = async (open) => {  // on a phone the goal folds: open for its chart and actions, shut for its board
+      if (W > 640 || (await page.$eval("#goalHead .gh-fold", (d) => d.open)) === open) return;
+      await page.click("#goalHead .gh-fold > summary");
+      if (open) await page.waitForSelector("#goalHead .gchart svg");
+    };
+    if (W <= 640) {
+      check(!(await page.$eval("#goalHead .gh-fold", (d) => d.open)), "on a phone the goal folds");
+      const h = await head();
+      check(h.head <= 170, `the folded goal is short: ${Math.round(h.head)} px`);
+      await fold(true);
+    } else {
+      const h = await head();
+      check(h.head <= 215 && h.board >= 0.5 * H, `the goal leaves the board most of the screen: ${Math.round(h.head)} px above ${Math.round(h.board)}`);
+    }
+    const ghead = await page.textContent("#goalHead");
+    check(ghead.includes("Release-ready (9):") && ghead.includes("Released (10):") && await page.$("#goalHead .gchart svg path.line"), "its release lines and chart");
+    const bandCards = await onlyGoal("band-in-a-box", "the band's board");
+    await shot("goal-page");
+    await sideways("a goal's page"); await targets("a goal's page");
+    // its chart's dots, there too
+    await page.click('#goalHead .gdot[data-entry="0"]');
+    check((await page.textContent("#goalHead .gread .txt")).includes("1 · Idea"), "a dot on the goal's page");
+    await fold(false);
+    // the kind of work within the goal
+    await view("play");
+    const play = await shownCards();
+    check(play.length === bandCards.filter((c) => c.work === "play" && c.status !== "done").length && play.every((c) => c.work === "play" && c.goals.includes("band-in-a-box")), `Play within the goal: ${play.map((c) => c.id)}`);
+    await view("all");
+
+    // a card's sheet and a move, on the goal's board
+    await jumpTo("next");
+    await openCard("band-count-in");
+    await page.click('#sheet [data-status="doing"]');
+    await page.waitForSelector('#sheet [data-status="doing"][aria-pressed="true"]');
+    let ch = await changes();
+    check(ch[ch.length - 1].card === "band-count-in" && ch[ch.length - 1].set.status === "doing", "a card moved on the goal's board");
+    await closeSheet();
+    check(await page.$('.cell[data-status="doing"] .card[data-id="band-count-in"]') && (await page.textContent("#goalPageTitle")).includes("band-in-a-box"), "moved to Doing, still on the goal's page");
+
+    // a chip of this goal, on its page, opens the card
+    await page.click('.card[data-id="band-count-in"] .gchip');
+    await page.waitForSelector("#sheet[open]");
+    await closeSheet();
+
+    // "Move to stage…": the ten, a note, and the page shows it
+    await fold(true);
+    await page.click('#goalHead [data-gsheet="move"]');
+    await page.waitForSelector("#goal[open] .stages");
     const ladder = await page.$$eval("#goal .stages button", (bs) => bs.map((b) => b.textContent.replace(/\s+/g, " ").trim()));
     check(ladder.length === 10 && ladder[0] === "1 · Idea" && ladder[5] === "6 · Decent (now)" && ladder[9] === "10 · Released", `move to stage, the ten: ${ladder}`);
-    await shot("goal");
-    await sideways("the goal's sheet"); await targets("the goal's sheet");
-
-    // moved a stage, with a note
     await page.click('#goal [data-stage="7"]');
     await page.waitForSelector("#gmoveNote");
     await page.fill("#gmoveNote", "The voices are in");
     await shot("move");
-    await targets("moving a goal");
+    await sideways("moving a goal"); await targets("moving a goal");
     await page.click("#goal [data-act=gmove]");
-    await page.waitForFunction(() => document.querySelector("#goal .sh-head .gstage").textContent.includes("7 · Getting pretty good"));
-    let ch = await changes();
+    await page.waitForSelector("#goal:not([open])", { state: "attached" });
+    await page.waitForFunction(() => document.querySelector("#goalHead .gstage").textContent.includes("7 · Getting pretty good"));
+    ch = await changes();
     const mv = ch[ch.length - 1];
     check(JSON.stringify(Object.keys(mv).sort()) === '["at","by","goal","id","note","stage"]' && mv.goal === "band-in-a-box" && mv.stage === 7
       && mv.note === "The voices are in" && mv.by === "player", `the move in the log: ${JSON.stringify(mv)}`);
-    check((await page.textContent("#goal .ghist li")).includes("not synced yet") && (await page.textContent("#goal .sh-head")).includes("Not synced yet"), "the move shown, not synced");
-    check((await page.textContent("#goal .gread .txt")).includes("7 · Getting pretty good: The voices are in"), "the new dot's readout");
-    check(!(await page.$("#gmoveNote")), "the note's field gone with the move");
+    check((await page.textContent("#goalHead")).includes("Not synced") && (await page.textContent("#goalHead .said")).includes("Moved to 7 · Getting pretty good"), "the move shown on the page, not synced");
+    check(await page.evaluate(() => document.activeElement && document.activeElement.dataset.gsheet === "move"), "the focus back on Move to stage…");
+    check(await page.$$eval("#goalHead svg circle.dot", (ds) => ds.length === 7 && ds[6].classList.contains("pending")), "the new dot, hollow until synced");
+    await page.click('#goalHead .gdot[data-entry="6"]');
+    check((await page.textContent("#goalHead .gread .txt")).includes("7 · Getting pretty good: The voices are in"), "the new dot's readout");
     await shot("moved");
 
-    // a note
+    // "Add a note", then "History and notes"
+    await page.click('#goalHead [data-gsheet="note"]');
+    await page.waitForSelector("#goal[open] #gnoteText");
+    check(await page.evaluate(() => document.activeElement && document.activeElement.id === "gnoteText"), "Add a note: the field ready");
     await page.fill("#gnoteText", "Ask the band about the harmony line.");
     await page.click("#goal [data-act=gnote]");
     await page.waitForFunction(() => document.querySelector("#goal .notes li").textContent.includes("harmony line"));
@@ -345,20 +412,82 @@ const LANE = W <= 640 ? ".cell h3" : ".lane";  // lanes across the columns; on a
     const nt = ch[ch.length - 1];
     check(JSON.stringify(Object.keys(nt).sort()) === '["at","by","goal","id","note"]' && nt.note === "Ask the band about the harmony line.", `the note in the log: ${JSON.stringify(nt)}`);
     await shot("note");
-
-    // from the goal to a card, and from the card back to the goal
-    await page.click('#goal [data-open="bass-line-octaves"]');
-    await page.waitForSelector("#sheet[open] #cardGoals");
-    check(!(await page.$("#goal[open]")), "one sheet at a time");
-    const listed = await page.$$eval("#sheet #cardGoals .rel button", (bs) => bs.map((b) => b.textContent.replace(/\s+/g, " ").trim()));
-    check(listed.length === 2 && listed[0].startsWith("UD as a high-quality band-in-a-box") && listed[0].includes("7 · Getting pretty good"), `the card's goals: ${listed}`);
-    await page.click('#sheet #cardGoals [data-goal-open="solo-acoustic"]');
-    await page.waitForSelector("#goal[open]");
-    check((await page.textContent("#goalTitle")) === "Solo acoustic instrument transcription", "the card's goal opened");
+    await sideways("a goal's note"); await targets("a goal's note");
     await page.click("#goal [data-act=close]");
     await page.waitForSelector("#goal:not([open])", { state: "attached" });
-    check((await page.textContent('.gtile[data-goal="band-in-a-box"] .gstage')).includes("7 · Getting pretty good")
-      && (await page.textContent('.gtile[data-goal="band-in-a-box"] .gcounts')).includes("Not synced"), "the tile moved too, not synced");
+    await page.click('#goalHead [data-gsheet="history"]');
+    await page.waitForSelector("#goal[open] .ghist");
+    const sheet = await page.textContent("#goal");
+    check(sheet.includes("Release-ready (9) means") && sheet.includes("as well as Strum Machine does") && sheet.includes("Released (10) means"), "the release lines in full");
+    check(await page.$$eval("#goal .ghist li", (l) => l.length) === 7 && (await page.textContent("#goal .ghist li")).includes("not synced yet"), "its history, the move first");
+    const notes = await page.$$eval("#goal .notes li", (l) => l.map((x) => x.textContent));
+    check(notes.length === 3 && notes[2].includes("Claude") && notes[2].includes("The voices next"), `its notes, newest first, who wrote each: ${notes}`);
+    await shot("history");
+    await sideways("its history"); await targets("its history");
+    await page.click("#goal [data-act=close]");
+    await page.waitForSelector("#goal:not([open])", { state: "attached" });
+
+    await fold(false);
+    // Add on the goal's page: the card is for the goal
+    await page.click("#addBtn");
+    await page.waitForSelector("#add[open] #addTitleIn");
+    check((await page.textContent("#add .hint")).includes("for UD as a high-quality band-in-a-box"), "Add says the card is for the goal");
+    await page.fill("#addTitleIn", "Ask the band for a harmony part");
+    await page.click("#add [type=submit]");
+    await page.waitForSelector("#add:not([open])", { state: "attached" });
+    ch = await changes();
+    const [nw, gs] = ch.slice(-2);
+    check(nw.new && nw.new.title === "Ask the band for a harmony part" && gs.card === nw.new.id && JSON.stringify(gs.set) === '{"goals":["band-in-a-box"]}', `a new card, then its goal: ${JSON.stringify(ch.slice(-2))}`);
+    check(await page.$(`.cell[data-status="backlog"] .card[data-id="${nw.new.id}"]`), "the new card on the goal's board");
+
+    // "‹ All goals": the Goals view
+    await page.click("#goalHead [data-act=all-goals]");
+    await page.waitForSelector(".gtile");
+    check(!page.url().includes("#goal") && await page.$('#views [data-view="goals"][aria-pressed="true"]') && await page.$("#goalHead[hidden]"), `back to all the goals: ${page.url()}`);
+    check((await page.textContent('.gtile[data-goal="band-in-a-box"] .gstage')).includes("7 · Getting pretty good"), "the tile moved too");
+
+    // from a card's chip to its goal's page, and the browser's back
+    await view("all");
+    await page.click('.card[data-id="bass-line-octaves"] .gchip[data-goal="solo-acoustic"]');
+    await page.waitForSelector("#goalHead:not([hidden])");
+    check(page.url().endsWith("#goal=solo-acoustic") && !(await page.$("#sheet[open]")), "a chip opens its goal's page, not the card");
+    await onlyGoal("solo-acoustic", "from a chip");
+    await shot("from-chip");
+    await page.goBack();
+    await page.waitForSelector("#goalHead[hidden]", { state: "attached" });
+    check(!page.url().includes("#goal") && await page.$('#views [data-view="all"][aria-pressed="true"]') && (await page.$$(".card")).length > 20, "the back button: the board as it was");
+    await page.goForward();
+    await page.waitForSelector("#goalHead:not([hidden])");
+    check((await page.textContent("#goalPageTitle")) === "Solo acoustic instrument transcription", "and forward again");
+
+    // a card's goal in its sheet opens that goal's page
+    await jumpTo("waiting");
+    await openCard("mandolin-soundfont");
+    await page.click('#sheet #cardGoals [data-goal-open="band-in-a-box"]');
+    await page.waitForSelector("#sheet:not([open])", { state: "attached" });
+    await page.waitForFunction(() => document.querySelector("#goalPageTitle") && document.querySelector("#goalPageTitle").textContent.includes("band-in-a-box"));
+    check(page.url().endsWith("#goal=band-in-a-box"), "a card's goal opens its page");
+
+    // a link, and a reload, keep the place
+    await page.goto(url + "#goal=solo-dobro");
+    await page.waitForSelector("#goalHead:not([hidden])");
+    await page.waitForSelector("#board .card");
+    check((await page.textContent("#goalPageTitle")) === "Solo dobro transcription", "a link to a goal's page");
+    await onlyGoal("solo-dobro", "a link to a goal");
+    await page.reload();
+    await page.waitForSelector("#board .card");
+    check((await page.textContent("#goalPageTitle")) === "Solo dobro transcription", "a reload keeps the goal's page");
+    check(!(await page.$('#filters [data-f="goal"]')), "no goal filter on a goal's page");
+    await page.click("#filtersBtn"); await page.waitForSelector("#filters[open]");
+    check(!(await page.$('#filters [data-f="goal"]')), "a goal's page is its own goal filter");
+    await page.click("#filters .sh-foot [data-act=close]");
+    await page.click("#goalHead [data-act=all-goals]");
+    await page.waitForSelector(".gtile");
+    check(!page.url().includes("#goal"), "All goals from a link: the Goals view");
+    await page.goto(url + "#goal=nowhere");
+    await page.waitForSelector("#error:not([hidden])");
+    check((await page.textContent("#errorText")).includes('no goal "nowhere"') && !page.url().includes("#goal"), "a link to a goal not there: the board, and why");
+    await page.click("#errorOk");
 
     // a card's goals chosen: Goals…, two in order
     await view("all");

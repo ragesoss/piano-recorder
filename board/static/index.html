@@ -12,7 +12,8 @@
 /* The project's cards as a kanban: Backlog, Next, Doing, Waiting, Done, for each kind of work it is for the
    player (Listen & evaluate, Play & sing, Manage the agent, People, Hardware, or All), area as a chip or as
    lanes, filters, and a sheet per card with its actions; and the project's large-scale goals (when the cards come
-   with them): a view of each one's progress over time, a colour for each worn by its cards, a filter. The room's
+   with them): a view of each one's progress over time, a page for each with its board under it, a colour for each
+   worn by its cards, a filter. The room's
    look (exercises/static/index.html): dark, purple for what to tap. --faint is for lines only (3.5:1 on cards). */
 @font-face { font-family: "Bricolage Grotesque"; src: url(/fonts/bricolage-grotesque.woff2) format("woff2");
   font-weight: 200 800; font-display: swap; }
@@ -178,6 +179,9 @@ h1, h2, h3, p { margin: 0; }
 .gchip { display: inline-flex; align-items: center; height: 22px; max-width: 100%; min-width: 0; padding: 0 7px; border-radius: 6px;
   border: 1.5px solid var(--g); color: var(--ink2); font-size: 13px; font-weight: 600; white-space: nowrap; }
 .gchip span { overflow: hidden; text-overflow: ellipsis; }
+.gchip { position: relative; cursor: pointer; }
+.gchip::after { content: ""; position: absolute; inset: -5px -2px; }  /* a little more than the chip, the rest of the card the card's */
+.gchip:hover { background: var(--surf2); }
 .gsw { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 3px; background: var(--g, var(--ink3)); }
 .meter { display: inline-flex; gap: 2px; flex: none; }
 .meter i { width: 6px; height: 10px; border-radius: 2px; background: var(--line); }
@@ -234,6 +238,40 @@ h1, h2, h3, p { margin: 0; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
 .gpick button .gord { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: #fff; color: var(--purple-fill); font-size: 13px; font-weight: 800;
   display: inline-flex; align-items: center; justify-content: center; }
+/* a goal's page: the goal above its board, short enough that the board keeps most of the screen */
+.goalhead { flex: none; display: flex; flex-direction: column; gap: 4px; margin: 0 var(--pad) 8px; padding: 4px 14px 10px; background: var(--surf);
+  border: 1.5px solid var(--line); border-top: 5px solid var(--g); border-radius: 16px; min-width: 0; }
+.gh-top { display: flex; align-items: center; flex-wrap: wrap; gap: 0 14px; min-width: 0; }
+.gh-top .back { flex: none; min-height: 44px; display: inline-flex; align-items: center; gap: 2px; padding: 0 10px 0 0; border: 0; background: transparent;
+  color: var(--purple-ink); font-size: 16px; font-weight: 700; }
+.gh-top h2 { font-family: var(--display); font-size: 24px; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; min-width: 0; overflow-wrap: anywhere; }
+.gh-top h2:focus { outline: none; }
+.gh-top h2:focus-visible { outline: 3px solid var(--purple-line); outline-offset: 2px; }
+.gh-top .gstage { flex-wrap: wrap; }
+.goalhead .gh-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 4px 22px; align-items: start; padding-top: 0; }
+.gh-chart { width: 100%; min-width: 0; }
+.gh-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.gline { font-size: 14px; color: var(--ink2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.gline b { color: var(--ink); font-weight: 600; }
+.gline.none { color: var(--ink3); }
+.gacts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.gacts .btn { min-height: 44px; padding: 0 14px; font-size: 15px; }
+.gh-text .said { font-size: 14px; }
+.gh-fold > summary { font-size: 15px; }
+.goalhead .gh-fold[open] > .gh-body { padding-top: 4px; }
+@media (min-width: 1100px) { .gline { -webkit-line-clamp: 1; } }  /* on its side the height is short: a line each, the whole in the sheet */
+@media (min-width: 641px) and (max-width: 1099px) {  /* upright: a smaller chart, so the three actions keep to one row */
+  .goalhead .gh-body { grid-template-columns: minmax(0, 1fr) 280px; }
+  .gacts { gap: 6px; }
+  .gacts .btn { padding: 0 12px; }
+}
+@media (max-width: 640px) {
+  .goalhead { margin: 0 var(--pad) 6px; padding: 2px 12px 4px; }
+  .gh-top .gstage { margin-left: auto; font-size: 14px; }
+  .gh-top h2 { order: 3; flex-basis: 100%; font-size: 21px; padding-bottom: 2px; }
+  .goalhead .gh-body { grid-template-columns: minmax(0, 1fr); }
+  .gacts .btn { padding: 0 12px; }
+}
 .views.has-goals { grid-template-columns: repeat(6, minmax(0, 1fr)) minmax(0, .82fr); grid-auto-flow: row; }
 .views .short { display: none; }
 @media (min-width: 641px) and (max-width: 1099px) {
@@ -362,6 +400,7 @@ details.more > div { display: flex; flex-direction: column; gap: 14px; padding-t
     </div>
   </header>
   <div class="banner" id="error" role="alert" hidden><span id="errorText"></span><button type="button" id="errorOk">OK</button></div>
+  <section class="goalhead" id="goalHead" aria-labelledby="goalPageTitle" hidden></section>
   <div class="sub" id="sub"></div>
   <nav class="colnav" id="colnav" aria-label="Columns"></nav>
   <main class="board" id="board" aria-label="The cards"></main>
@@ -439,7 +478,8 @@ delete P.filters.kind;
 if (!VIEW[P.view]) P.view = "all";
 function savePrefs() { try { localStorage.setItem(KEY, JSON.stringify(P)); } catch (e) {} }
 
-const S = { data: null, open: null, said: "", busy: false, loadedOnce: false, goal: null, gsel: {}, gmove: null, goalEdit: null };
+const S = { data: null, open: null, said: "", busy: false, loadedOnce: false, goal: null, gsel: {}, gmove: null, goalEdit: null,
+  goalPage: null, gsection: null, gsaid: "", mode: null };
 
 // --- the server
 async function api(method, path, body) {
@@ -483,11 +523,15 @@ function goalColor(g) { return GOAL_COLORS.includes(g.color) ? `var(--g-${g.colo
 function goalShort(g) { return g.short || g.name; }
 function cardGoals(c) { return (c.goals || []).map(goalOf).filter(Boolean); }
 function goalCards(g) { return S.data.cards.filter((c) => (c.goals || []).includes(g.id)); }
-function goalFilter() {  // the goals chosen in Filters that are on the board ("none": the cards with no goal)
-  if (!hasGoals()) return [];
+function goalFilter() {  // the goals chosen in Filters that are on the board ("none": the cards with no goal); not on a goal's page
+  if (!hasGoals() || pageGoal()) return [];
   const ids = new Set(goals().map((g) => g.id).concat(["none"]));
   return (P.filters.goal || []).filter((v) => ids.has(v));
 }
+// a goal's page (#goal=<id>): the goal at the top, the board under it with only its cards
+function pageGoal() { return (S.goalPage && goalOf(S.goalPage)) || null; }
+function boardView() { return pageGoal() && !WORK_NAME[P.view] ? "all" : P.view; }  // Goals, or All: All within the goal
+function inPage(c) { const g = pageGoal(); return !g || (c.goals || []).includes(g.id); }
 function recount() { S.data.pending = S.data.cards.reduce((n, x) => n + (x.pending || 0), 0) + goals().reduce((n, g) => n + (g.pending || 0), 0); }
 function areaRank(id) { const i = ((S.data && S.data.areas) || []).findIndex((a) => a.id === id); return i < 0 ? 99 : i; }
 function today() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
@@ -522,10 +566,10 @@ function whoWords(who) {
   const n = who.map((w) => WHO_NAME[w] || w);
   return n.length ? (n.length === 1 ? n[0] : n.slice(0, -1).join(", ") + " and " + n[n.length - 1]) : "nobody yet";
 }
-function filtered(view = P.view) {
+function filtered(view = boardView()) {
   const f = P.filters, v = VIEW[view];
   const gf = goalFilter();
-  return all().filter((c) => v.test(c)
+  return all().filter((c) => v.test(c) && inPage(c)
     && (!gf.length || (c.goals || []).some((g) => gf.includes(g)) || (gf.includes("none") && !cardGoals(c).length))
     && (!f.area.length || f.area.includes(c.area))
     && (!f.importance.length || f.importance.includes(c.importance))
@@ -578,7 +622,7 @@ function areaHtml(id) { const a = areaOf(id); return `<span class="area" style="
 function whoHtml(who) { return `<span class="who">${who.map((w) => `<span class="badge ${esc(w)}">${esc(WHO_NAME[w] || w)}</span>`).join("")}</span>`; }
 
 function cardHtml(c, lanes) {
-  const work = P.view === "all" ? workHtml(c.work) : "";
+  const work = boardView() === "all" ? workHtml(c.work) : "";
   const ob = openBlockers(c), nl = (c.links || []).length;
   const flags = [];
   if (ob.length) flags.push(`<span class="flag blocked">${ICON.block}Blocked by ${ob.length}</span>`);
@@ -592,7 +636,7 @@ function cardHtml(c, lanes) {
   const gs = cardGoals(c);
   const stripe = gs.length ? `<span class="gstripe" aria-hidden="true">${gs.map((g) => `<i style="--g:${goalColor(g)}"></i>`).join("")}</span>` : "";
   const chips = gs.length ? `<span class="goals"><span class="sr-only">Goals:</span>${gs.map((g) => `<span class="gchip" style="--g:${goalColor(g)}" data-goal="${esc(g.id)}"><span>${esc(goalShort(g))}</span></span>`).join("")}</span>` : "";
-  return `<button type="button" class="card imp${c.importance}${c.live ? " live" : ""}${gs.length ? " has-goals" : ""}" data-id="${esc(c.id)}" data-work="${esc(c.work)}" data-status="${esc(c.status)}"${drag}>
+  return `<button type="button" class="card imp${c.importance}${c.live ? " live" : ""}${gs.length ? " has-goals" : ""}" data-id="${esc(c.id)}" data-work="${esc(c.work)}" data-status="${esc(c.status)}" data-goals="${esc(gs.map((g) => g.id).join(" "))}"${drag}>
     ${stripe}<span class="title">${esc(c.title)}</span>
     <span class="meta">${meta}</span>${chips}
     ${c.summary ? `<span class="summary">${esc(c.summary)}</span>` : ""}
@@ -608,26 +652,41 @@ phone.addEventListener("change", () => { if (S.data) render(); });
 function render() {
   const d = S.data;
   if (P.view === "goals" && !hasGoals()) { P.view = "all"; savePrefs(); }  // cards pushed with no goals
-  const keep = focusKey();
+  if (S.goalPage && !pageGoal()) {  // a link to a goal not on the board (or none pushed yet): the board
+    const id = S.goalPage;
+    S.goalPage = null;
+    history.replaceState(null, "", location.pathname + location.search);
+    if (d.has_base) showError(`There is no goal "${id}" on the board.`, true);
+  }
+  const keep = focusKey(), pg = pageGoal();
   renderViews();
-  const goalsMode = P.view === "goals";
+  const goalsMode = !pg && P.view === "goals", mode = pg ? `goal:${pg.id}` : goalsMode ? "goals" : "board";
   $(".app").classList.toggle("goals-mode", goalsMode);
+  $(".app").classList.toggle("goal-page", !!pg);
   $("#board").classList.toggle("goals-mode", goalsMode);
   $("#filtersBtn").hidden = goalsMode;
+  renderGoalHead(pg);
+  const was = S.mode;
+  S.mode = mode;
   if (goalsMode) { renderGoalsView(); refocus(keep); return; }
-  try { renderBoard(d); } finally { refocus(keep); }
+  try {
+    renderBoard(d);
+    // into a goal's board, or back to the board, on a narrow screen: at the column left last
+    if (was && was !== mode && getComputedStyle($("#colnav")).display !== "none") jump(P.col || "next", false);
+  } finally { refocus(keep); }
 }
 // a re-render (an edit, the 30 s refresh) keeps the focus on what had it
+const FOCUS_ROOTS = () => [$("#goalHead"), $("#board")];
 function focusKey() {
   const a = document.activeElement;
-  if (!a || !$("#board").contains(a)) return null;
-  for (const k of ["id", "goalOpen", "gdot", "gstep", "act", "col"]) if (a.dataset[k] !== undefined) return [k, a.dataset[k], a.dataset.goal || a.dataset.entry || ""];
+  if (!a || !FOCUS_ROOTS().some((r) => r.contains(a))) return null;
+  for (const k of ["id", "goalOpen", "gdot", "gstep", "gsheet", "act", "col"]) if (a.dataset[k] !== undefined) return [k, a.dataset[k], a.dataset.goal || a.dataset.entry || ""];
   return null;
 }
 function refocus(key) {
   if (!key) return;
   const [k, v, more] = key, attr = k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
-  let el = [...$("#board").querySelectorAll(`[data-${attr}="${CSS.escape(v)}"]`)];
+  let el = FOCUS_ROOTS().flatMap((r) => [...r.querySelectorAll(`[data-${attr}="${CSS.escape(v)}"]`)]);
   if (el.length > 1 && more) el = el.filter((e) => (e.dataset.goal || e.dataset.entry || "") === more).concat(el);
   if (el[0]) el[0].focus({ preventScroll: true });
 }
@@ -638,7 +697,9 @@ function renderBoard(d) {
   fb.setAttribute("aria-label", nf ? `Filters, ${nf} on` : "Filters");
   // the line under the top: how many, how fresh, what is not synced
   const bits = [];
-  bits.push(`<span><b>${shown.length}</b> of ${all().length} cards<span class="wide-only"> · ${esc(VIEW[P.view].about)}</span></span>`);
+  const pg = pageGoal();
+  bits.push(pg ? `<span><b>${shown.length}</b> of ${goalCards(pg).length} cards for this goal<span class="wide-only"> · ${esc(VIEW[boardView()].about)}</span></span>`
+    : `<span><b>${shown.length}</b> of ${all().length} cards<span class="wide-only"> · ${esc(VIEW[P.view].about)}</span></span>`);
   if (nf) bits.push(`<button type="button" class="linkish" data-act="clear">Clear filters</button>`);
   if (d.pending) bits.push(`<span class="sync">${ICON.unsynced}${d.pending} edit${d.pending === 1 ? "" : "s"} not synced to the desktop yet</span>`);
   if (d.generated) bits.push(`<span class="wide-only">Cards of ${esc(niceTime(d.generated))}</span>`);
@@ -674,7 +735,7 @@ function renderBoard(d) {
       html += `<div class="lane"><h3><span style="--hue:${esc(a.hue)}"><i aria-hidden="true"></i>${esc(a.name)} <small>${mine.length} card${mine.length === 1 ? "" : "s"}</small></span></h3></div>`;
       html += COLS.map(([k]) => cell(byCol(mine, k), k)).join("");
     }
-    if (!visible.length) html += `<p class="board-empty" style="grid-column:1/-1">No cards here${nf ? " with these filters" : ""}.</p>`;
+    if (!visible.length) html += `<p class="board-empty" style="grid-column:1/-1">No cards here${nf ? " with these filters" : pg ? " for this goal" : ""}.</p>`;
   } else {
     html += COLS.map(([k]) => cell(byCol(visible, k), k)).join("");
   }
@@ -688,16 +749,19 @@ function renderBoard(d) {
   }
 }
 function renderViews() {
-  $("#views").classList.toggle("has-goals", hasGoals());
-  $("#views").innerHTML = (hasGoals() ? VIEWS.concat([GOALS_VIEW]) : VIEWS).map((v) => {
+  // on a goal's page, the kinds of work within the goal (its cards counted); "‹ All goals" is the way to the goals
+  const pg = pageGoal(), withGoals = hasGoals() && !pg, cur = boardView();
+  $("#views").classList.toggle("has-goals", withGoals);
+  $("#views").setAttribute("aria-label", pg ? `Which of ${pg.name}'s cards` : "Which cards");
+  $("#views").innerHTML = (withGoals ? VIEWS.concat([GOALS_VIEW]) : VIEWS).map((v) => {
     if (v.id === "goals") {
       const n = goals().length;
       return `<button type="button" data-view="goals" aria-pressed="${P.view === "goals"}" title="${esc(v.about)}" aria-label="Goals, ${n} goal${n === 1 ? "" : "s"}">${glyph("goals", 18)}<span class="lbl">Goals<span class="n">${n}</span></span></button>`;
     }
-    const n = all().filter((c) => v.test(c) && c.status !== "done").length;
+    const n = all().filter((c) => v.test(c) && inPage(c) && c.status !== "done").length;
     // with the goals' seventh, an iPad upright names each by its short word (the full name its label)
-    const name = hasGoals() && WORK_WORD[v.id] ? `<span class="full">${esc(v.name)}</span><span class="short">${esc(WORK_WORD[v.id])}</span>` : esc(v.name);
-    return `<button type="button" data-view="${v.id}" aria-pressed="${P.view === v.id}" title="${esc(v.about)}" aria-label="${esc(v.name)}, ${n} open">${glyph(v.id, 18)}<span class="lbl">${name}<span class="n">${n}</span></span></button>`;
+    const name = withGoals && WORK_WORD[v.id] ? `<span class="full">${esc(v.name)}</span><span class="short">${esc(WORK_WORD[v.id])}</span>` : esc(v.name);
+    return `<button type="button" data-view="${v.id}" aria-pressed="${cur === v.id}" title="${esc(v.about)}" aria-label="${esc(v.name)}, ${n} open">${glyph(v.id, 18)}<span class="lbl">${name}<span class="n">${n}</span></span></button>`;
   }).join("");
 }
 function colIndexInView() {
@@ -758,13 +822,13 @@ function goalTile(g) {
     <p class="gcounts"><span><b>${open.length}</b> open${doing ? ` (${doing} doing)` : ""}</span><span><b>${k.length - open.length}</b> done</span>${g.pending ? `<span class="flag unsynced">${ICON.unsynced}Not synced</span>` : ""}</p>
   </article>`;
 }
-// a goal's chart: the stages 1 to 10 up the side (the odd ones numbered; in a wide sheet each with its name), the dates
-// from its first entry to today along the bottom, a step line in its colour, a dot for each change. Drawn at the width
-// it has (1 unit a pixel), again when that changes. A dot is a 44 px button; dots closer than that share one, and the
-// readout under the chart (date, stage, note) steps through the changes.
+// a goal's chart: the stages 1 to 10 up the side (the odd ones numbered; each one's name in "Move to stage…"), the
+// dates from its first entry to today along the bottom, a step line in its colour, a dot for each change. Drawn at the
+// width it has (1 unit a pixel), again when that changes. A dot is a 44 px button; dots closer than that share one, and
+// the readout under the chart (date, stage, note) steps through the changes.
 function chartGeom(g, W, where) {
-  const named = where === "sheet" && W >= 520, H = where === "sheet" ? (named ? 270 : 230) : 176;
-  const L = named ? 156 : 30, R = 10, T = 10, B = 30;
+  // on a goal's page: short on an iPad, beside the text, so the board keeps its height; taller in a phone's fold
+  const H = where === "head" ? (phone.matches ? 160 : 128) : 176, L = 30, R = 10, T = 10, B = 30;
   const hist = g.history || [];
   const t0 = dateOf(hist[0].date) || today();
   let t1 = today();
@@ -772,7 +836,7 @@ function chartGeom(g, W, where) {
   if (t1 - t0 < DAY) t1 = new Date(t0.getTime() + DAY);
   const x = (d) => L + ((d || t0) - t0) / (t1 - t0) * (W - L - R);
   const y = (st) => T + (TOP - st) * (H - T - B) / (TOP - 1);
-  return { W, H, L, R, T, B, named, t0, t1, x, y, pts: hist.map((h, i) => ({ i, h, x: x(dateOf(h.date)), y: y(h.stage) })) };
+  return { W, H, L, R, T, B, t0, t1, x, y, pts: hist.map((h, i) => ({ i, h, x: x(dateOf(h.date)), y: y(h.stage) })) };
 }
 function chartText(g) {
   return `${g.name}, its progress on a scale of 1 to ${TOP}: ` + (g.history || []).map((h) => `${stageText(h.stage)} on ${niceDay(h.date)}`).join("; ") + `. Now ${stageText(g.stage)}.`;
@@ -781,11 +845,11 @@ function entryWords(h) { return `${niceDay(h.date)}: ${stageText(h.stage)}${h.no
 function chartInner(g, W, where) {
   const hist = g.history || [];
   if (!hist.length) return '<p class="none">No stage recorded yet.</p>';
-  const G = chartGeom(g, W, where), bg = where === "sheet" ? "var(--surf2)" : "var(--surf)", sel = S.gsel[g.id];
+  const G = chartGeom(g, W, where), bg = "var(--surf)", sel = S.gsel[g.id];
   const f = (n) => n.toFixed(1);
   let svg = stages().map(([st, name]) => {
-    const yy = f(G.y(st)), odd = st % 2 === 1, label = G.named ? `${st} ${name}` : odd ? String(st) : "";
-    return `<line class="grid${odd || G.named ? "" : " soft"}" x1="${G.L}" x2="${W - G.R}" y1="${yy}" y2="${yy}"></line>${label ? `<text x="${G.L - 8}" y="${f(G.y(st) + 4)}" text-anchor="end">${esc(label)}</text>` : ""}`;
+    const yy = f(G.y(st)), odd = st % 2 === 1, label = odd ? String(st) : "";
+    return `<line class="grid${odd ? "" : " soft"}" x1="${G.L}" x2="${W - G.R}" y1="${yy}" y2="${yy}"></line>${label ? `<text x="${G.L - 8}" y="${f(G.y(st) + 4)}" text-anchor="end">${esc(label)}</text>` : ""}`;
   }).join("");
   const by = G.H - 8, end = G.t1 > today() ? niceDay(hist[hist.length - 1].date) : "Today";
   svg += `<text x="${G.L}" y="${by}">${esc(niceDay(hist[0].date))}</text><text x="${W - G.R}" y="${by}" text-anchor="end">${esc(end)}</text>`;
@@ -840,7 +904,7 @@ function chartClick(b) {  // a dot, or a step in the readout: true when it was o
   } else return false;
   const g = goalOf(id); if (!g) return true;
   S.gsel[id] = i;
-  const scope = b.closest(".gtile, dialog") || document, step = b.dataset.gstep;
+  const scope = b.closest(".gtile, .goalhead, dialog") || document, step = b.dataset.gstep;
   drawCharts(scope);
   const el = step ? scope.querySelector(`[data-gstep="${step}"]:not(:disabled)`) || scope.querySelector("[data-gstep]:not(:disabled)")
     : scope.querySelector('.gdot[aria-pressed="true"]');
@@ -916,8 +980,7 @@ function markdown(text) {
 
 // --- a card's sheet
 function openCard(id, from) {
-  if ($("#goal").open) { S.swap = true; S.from = S.gfrom; $("#goal").close(); }  // from a goal's sheet: back to what opened it
-  else if (!$("#sheet").open) S.from = from || document.activeElement;
+  if (!$("#sheet").open) S.from = from || document.activeElement;
   if (S.open !== id) S.goalEdit = null;
   S.open = id; S.said = "";
   renderSheet(false);
@@ -1056,7 +1119,7 @@ $("#sheet").addEventListener("click", (ev) => {
   const c = byId(S.open);
   if (b.dataset.act === "close") dlg.close();
   else if (b.dataset.open) openCard(b.dataset.open);
-  else if (b.dataset.goalOpen) openGoal(b.dataset.goalOpen);
+  else if (b.dataset.goalOpen) openGoalPage(b.dataset.goalOpen);
   else if (!c || c.live) return;
   else if (b.dataset.act === "goals-edit") { S.goalEdit = (c.goals || []).slice(); renderSheet(true); const el = dlg.querySelector("[data-goalpick]"); if (el) el.focus(); }
   else if (b.dataset.act === "goals-cancel") { S.goalEdit = null; renderSheet(true); dlg.querySelector('[data-act="goals-edit"]').focus(); }
@@ -1093,23 +1156,79 @@ $("#sheet").addEventListener("change", (ev) => {
 $("#sheet").addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.target.id === "waitText") { ev.preventDefault(); patch({ waiting_on: ev.target.value }, "Waiting on saved."); } });
 $("#sheet").addEventListener("close", () => {
   S.open = null; S.goalEdit = null;
-  if (S.swap) { S.swap = false; return; }  // to a goal's sheet
+  if (S.swap) { S.swap = false; return; }  // to a goal's page
   const back = S.from && document.body.contains(S.from) ? S.from : document.querySelector(`.card[data-id="${CSS.escape(S.lastOpen || "")}"]`);
   if (back) back.focus();
 });
 
-// --- a goal's sheet: its stage, release lines, chart, the stage to move it to, its cards by status, history, notes
-function openGoal(id, from) {
-  if ($("#sheet").open) { S.swap = true; S.gfrom = S.from; $("#sheet").close(); }  // from a card's sheet: back to that card
-  else if (!$("#goal").open) S.gfrom = from || document.activeElement;
-  if (S.goal !== id) S.gmove = null;
-  S.goal = id; S.lastGoal = id; S.said = "";
+// --- a goal's page (#goal=<id>, so a reload or the back button keeps it): the goal at the top (its stage, chart,
+// what release-ready and released mean, a move, a note, its history and notes), and the board under it, its cards only
+function goalHash() { const m = /^#goal=(.+)$/.exec(location.hash); return m ? decodeURIComponent(m[1]) : null; }
+function closeSheets() {  // before a goal's page opens: no sheet left over it, and no focus sent back behind it
+  for (const id of ["#sheet", "#goal"]) if ($(id).open) { S.swap = true; $(id).close(); }
+}
+function openGoalPage(id) {
+  closeSheets();
+  if (S.goalPage !== id) {
+    const depth = ((history.state && history.state.goalDepth) || 0) + 1;  // goals' pages opened in a row here
+    history.pushState({ goalDepth: depth }, "", `#goal=${encodeURIComponent(id)}`);
+    S.gsaid = "";
+    delete S.gsel[id];  // it opens short: a dot's readout only once a dot is tapped
+    route();
+    $("#board").scrollTop = 0;
+  }
+  const t = $("#goalPageTitle");
+  if (t) t.focus({ preventScroll: true });
+  const g = goalOf(id);
+  if (g) say(`${g.name}: ${stageText(g.stage)}. ${filtered().length} of its cards.`);
+}
+function leaveGoalPage() {  // "‹ All goals": the Goals view, by the back button's way when the pages were opened here
+  P.view = "goals"; savePrefs();
+  const depth = (history.state && history.state.goalDepth) || 0;
+  if (depth > 0) history.go(-depth);
+  else { history.replaceState(null, "", location.pathname + location.search); route(); }
+}
+function route() {
+  S.goalPage = goalHash();
+  if (S.data) render();
+}
+addEventListener("popstate", () => { closeSheets(); route(); const g = pageGoal(); if (!g) { const t = document.querySelector('#views [aria-pressed="true"]'); if (t) t.focus({ preventScroll: true }); } });
+function renderGoalHead(g) {
+  const el = $("#goalHead");
+  if (!g) { el.hidden = true; el.innerHTML = ""; return; }
+  el.hidden = false;
+  el.style.setProperty("--g", goalColor(g));
+  const n = (g.history || []).length + (g.notes || []).length;
+  const lines = (g.release ? `<p class="gline" title="${esc(g.release)}"><b>Release-ready (9):</b> ${esc(g.release)}</p>` : '<p class="gline none">Release-ready (9): not written yet</p>')
+    + (g.shipped ? `<p class="gline" title="${esc(g.shipped)}"><b>Released (10):</b> ${esc(g.shipped)}</p>` : "");
+  const acts = `<div class="gacts"><button type="button" class="btn outline-p" data-gsheet="move" aria-haspopup="dialog">Move to stage…</button>
+    <button type="button" class="btn" data-gsheet="note" aria-haspopup="dialog">Add a note</button>
+    <button type="button" class="btn" data-gsheet="history" aria-haspopup="dialog">History and notes <span class="count">${n}</span></button></div>`;
+  const body = `<div class="gh-body"><div class="gh-text">${lines}${acts}${S.gsaid ? `<p class="said" role="status">${esc(S.gsaid)}</p>` : ""}</div>
+    <div class="gh-chart"><div class="gchart" data-chart="${esc(g.id)}" data-where="head" style="--g:${goalColor(g)}"></div><div data-read="${esc(g.id)}" aria-live="polite"></div></div></div>`;
+  el.innerHTML = `<div class="gh-top"><button type="button" class="back" data-act="all-goals">${glyph("left", 20)}All goals</button>
+      <h2 id="goalPageTitle" tabindex="-1">${esc(g.name)}</h2>
+      <span class="gstage">${meterHtml(g.stage)}${esc(stageText(g.stage))}${g.pending ? `<span class="flag unsynced">${ICON.unsynced}Not synced</span>` : ""}</span></div>
+    ${phone.matches ? `<details class="more gh-fold"${P.headOpen ? " open" : ""}><summary>Its chart, a move, a note</summary>${body}</details>` : body}`;
+  drawCharts(el);
+}
+$("#goalHead").addEventListener("toggle", (ev) => {  // the phone's fold, kept per device
+  if (!ev.target.classList.contains("gh-fold")) return;
+  P.headOpen = ev.target.open; savePrefs();
+  if (ev.target.open) drawCharts($("#goalHead"));
+}, true);
+
+// --- a goal's sheet, from its page: "Move to stage…" (the ten, then a note), or its notes and history
+function openGoalSheet(id, section, from) {
+  S.gfrom = from || document.activeElement;
+  S.goal = id; S.lastGoal = id; S.gsection = section === "move" ? "move" : "notes"; S.lastGsection = section; S.said = "";
+  S.gmove = null;
   renderGoal(false);
   const dlg = $("#goal");
   if (!dlg.open) dlg.showModal();
   drawCharts(dlg);
   dlg.querySelector(".sh-body").scrollTop = 0;
-  dlg.querySelector(".close").focus();
+  (section === "note" ? dlg.querySelector("#gnoteText") : dlg.querySelector(".close")).focus();
 }
 function renderGoal(keep) {
   const g = goalOf(S.goal), dlg = $("#goal");
@@ -1118,41 +1237,34 @@ function renderGoal(keep) {
   const body = dlg.querySelector(".sh-body"), scroll = body ? body.scrollTop : 0;
   const val = (sel) => (dlg.querySelector(sel) ? dlg.querySelector(sel).value : "");
   const noteDraft = val("#gnoteText"), moveDraft = val("#gmoveNote");
-  const doneOpen = dlg.querySelector("details.gdone") ? dlg.querySelector("details.gdone").open : false;
-  const col = goalColor(g), k = goalCards(g);
-  const row = (c) => `<li><button type="button" data-open="${esc(c.id)}">${esc(c.title)}<span class="st">${esc(WORK_WORD[c.work] || "")}${c.importance === 1 ? " · High" : ""}</span></button></li>`;
-  const groups = BY_STATUS.map(([st, name]) => {
-    const list = k.filter((c) => c.status === st).sort(order);
-    if (!list.length) return "";
-    if (st === "done") return `<details class="more gdone"${doneOpen ? " open" : ""}><summary>Done: ${list.length}</summary><div><ul class="rel">${list.map(row).join("")}</ul></div></details>`;
-    return `<div class="ggroup"><h3>${name} <span class="n">${list.length}</span></h3><ul class="rel">${list.map(row).join("")}</ul></div>`;
-  }).join("");
-  const hist = (g.history || []).map((h, i) => [h, i]).reverse().map(([h, i]) => `<li data-entry="${i}">${meterHtml(h.stage)}<div><small>${esc(niceDay(h.date))}${h.pending ? " · not synced yet" : ""}</small><b>${esc(stageText(h.stage))}</b>${h.note ? ` ${esc(h.note)}` : ""}</div></li>`).join("");
-  const notes = (g.notes || []).slice().reverse().map((n) => `<li><small>${NOTE_BY[n.by] ? `<span class="badge ${NOTE_BY[n.by][0]}">${NOTE_BY[n.by][1]}</span> ` : ""}${esc(niceDay(n.date))}${n.pending ? " · not synced yet" : ""}</small>${esc(n.text)}</li>`).join("");
-  const ladder = stages().map(([n, name]) => n === g.stage
-    ? `<button type="button" class="now" disabled aria-label="${n}, ${esc(name)}: the stage now"><span class="sn">${n} ·</span> ${esc(name)} (now)</button>`
-    : `<button type="button" data-stage="${n}" aria-pressed="${S.gmove === n}"><span class="sn">${n} ·</span> ${esc(name)}</button>`).join("");
-  const move = S.gmove ? `<div class="gmove"><label class="k" for="gmoveNote">What changed (a note, if you like)</label>
-      <textarea id="gmoveNote" maxlength="4000" placeholder="Why it is ${esc(stageText(S.gmove))} now"></textarea>
-      <div class="row"><button type="button" class="btn go" data-act="gmove">Move to ${esc(stageText(S.gmove))}</button><button type="button" class="btn" data-act="gmove-cancel">Cancel</button></div></div>` : "";
-  dlg.innerHTML = `<div class="sh-head" style="--g:${col}"><div class="t"><div class="meta"><span class="gtag"><i class="gsw" aria-hidden="true"></i>Goal</span><span class="gstage">${meterHtml(g.stage)}${esc(stageText(g.stage))}</span>${g.pending ? `<span class="flag unsynced">${ICON.unsynced}Not synced yet</span>` : ""}</div>
-      <h2 id="goalTitle">${esc(g.name)}</h2></div><button type="button" class="btn close" data-act="close">Done</button></div>
-    <div class="sh-body">
-      ${g.about ? `<p class="md">${esc(g.about)}</p>` : ""}
+  const col = goalColor(g);
+  const head = `<div class="sh-head" style="--g:${col}"><div class="t"><div class="meta"><span class="gtag"><i class="gsw" aria-hidden="true"></i>Goal</span><span class="gstage">${meterHtml(g.stage)}${esc(stageText(g.stage))}</span>${g.pending ? `<span class="flag unsynced">${ICON.unsynced}Not synced yet</span>` : ""}</div>
+      <h2 id="goalTitle">${esc(g.name)}</h2></div><button type="button" class="btn close" data-act="close">Done</button></div>`;
+  let inner;
+  if (S.gsection === "move") {
+    const ladder = stages().map(([n, name]) => n === g.stage
+      ? `<button type="button" class="now" disabled aria-label="${n}, ${esc(name)}: the stage now"><span class="sn">${n} ·</span> ${esc(name)} (now)</button>`
+      : `<button type="button" data-stage="${n}" aria-pressed="${S.gmove === n}"><span class="sn">${n} ·</span> ${esc(name)}</button>`).join("");
+    const move = S.gmove ? `<div class="gmove"><label class="k" for="gmoveNote">What changed (a note, if you like)</label>
+        <textarea id="gmoveNote" maxlength="4000" placeholder="Why it is ${esc(stageText(S.gmove))} now"></textarea>
+        <div class="row"><button type="button" class="btn go" data-act="gmove">Move to ${esc(stageText(S.gmove))}</button><button type="button" class="btn" data-act="gmove-cancel">Cancel</button></div></div>` : "";
+    inner = `<div class="group"><span class="k" id="gmoveK">Move to stage…</span><div class="toggles stages" role="group" aria-labelledby="gmoveK">${ladder}</div>${move}</div>
+      <p class="hint">Release-ready (9): ${esc(g.release || "not written yet")}${g.shipped ? `. Released (10): ${esc(g.shipped)}` : ""}.</p>`;
+  } else {
+    const hist = (g.history || []).map((h, i) => [h, i]).reverse().map(([h, i]) => `<li data-entry="${i}">${meterHtml(h.stage)}<div><small>${esc(niceDay(h.date))}${h.pending ? " · not synced yet" : ""}</small><b>${esc(stageText(h.stage))}</b>${h.note ? ` ${esc(h.note)}` : ""}</div></li>`).join("");
+    const notes = (g.notes || []).slice().reverse().map((n) => `<li><small>${NOTE_BY[n.by] ? `<span class="badge ${NOTE_BY[n.by][0]}">${NOTE_BY[n.by][1]}</span> ` : ""}${esc(niceDay(n.date))}${n.pending ? " · not synced yet" : ""}</small>${esc(n.text)}</li>`).join("");
+    inner = `${g.about ? `<p class="md">${esc(g.about)}</p>` : ""}
       <div class="group"><span class="k">Release-ready (9) means</span><p class="md${g.release ? "" : " none"}">${g.release ? esc(g.release) : "Not written yet."}</p></div>
       ${g.shipped ? `<div class="group"><span class="k">Released (10) means</span><p class="md">${esc(g.shipped)}</p></div>` : ""}
-      <div class="group"><span class="k">Progress</span><div class="gchart" data-chart="${esc(g.id)}" data-where="sheet" style="--g:${col}"></div><div data-read="${esc(g.id)}" aria-live="polite"></div></div>
-      <div class="group"><span class="k">Move to stage…</span><div class="toggles stages" role="group" aria-label="Move to stage">${ladder}</div>${move}</div>
-      <div class="group"><span class="k">Its cards: ${k.length}</span>${k.length ? `<div class="gcards">${groups}</div>` : '<p class="hint">No cards yet. A card\'s sheet has "Goals…".</p>'}</div>
-      <div class="group"><span class="k">History</span>${hist ? `<ol class="ghist" reversed>${hist}</ol>` : '<p class="hint">No stages recorded yet.</p>'}</div>
       <div class="group"><span class="k">Notes</span>
         <label class="sr-only" for="gnoteText">A note on this goal</label><textarea id="gnoteText" maxlength="4000" placeholder="A note on this goal"></textarea>
         <div><button type="button" class="btn outline-p" data-act="gnote">Add the note</button></div>
         ${notes ? `<ul class="notes">${notes}</ul>` : ""}</div>
-      <div class="about"><span>${esc(g.id)} · ${esc(g.color || "")}</span></div>
-    </div>
-    <div class="sh-foot said-only"><span class="grow said">${esc(S.said)}</span></div>`;
-  dlg.querySelector("#gnoteText").value = noteDraft;
+      <div class="group"><span class="k">History</span>${hist ? `<ol class="ghist" reversed>${hist}</ol>` : '<p class="hint">No stages recorded yet.</p>'}</div>
+      <div class="about"><span>${esc(g.id)} · ${esc(g.color || "")}</span></div>`;
+  }
+  dlg.innerHTML = `${head}<div class="sh-body">${inner}</div><div class="sh-foot said-only"><span class="grow said">${esc(S.said)}</span></div>`;
+  if (dlg.querySelector("#gnoteText")) dlg.querySelector("#gnoteText").value = noteDraft;
   if (dlg.querySelector("#gmoveNote")) dlg.querySelector("#gmoveNote").value = moveDraft;
   if (dlg.open) drawCharts(dlg);
   if (keep) dlg.querySelector(".sh-body").scrollTop = scroll;
@@ -1165,8 +1277,7 @@ $("#goal").addEventListener("click", (ev) => {
   const g = goalOf(S.goal);
   if (b.dataset.act === "close" || !g) { dlg.close(); return; }
   const url = `/api/goals/${encodeURIComponent(g.id)}`;
-  if (b.dataset.open) openCard(b.dataset.open);
-  else if (b.dataset.stage) {
+  if (b.dataset.stage) {
     const n = +b.dataset.stage;
     S.gmove = S.gmove === n ? null : n; renderGoal(true);
     const el = S.gmove ? dlg.querySelector("#gmoveNote") : dlg.querySelector(`[data-stage="${n}"]`);
@@ -1179,10 +1290,8 @@ $("#goal").addEventListener("click", (ev) => {
     edit(() => api("POST", `${url}/stage`, { stage, note }), `Moved to ${stageText(stage)}.`).then((r) => {
       if (!r) return;
       S.gmove = null;
-      const now = goalOf(g.id);
-      if (now && r.change) S.gsel[g.id] = now.history.length - 1;  // the new dot, and its readout
-      renderGoal(true); render();
-      const el = dlg.querySelector('.gdot[aria-pressed="true"]') || dlg.querySelector(".close"); if (el) el.focus();
+      S.gsaid = S.said;  // said on the page, under its actions; the new dot hollow until synced
+      dlg.close(); render();
     });
   } else if (b.dataset.act === "gnote") {
     const t = dlg.querySelector("#gnoteText"), text = t.value.trim();
@@ -1192,8 +1301,9 @@ $("#goal").addEventListener("click", (ev) => {
 });
 $("#goal").addEventListener("close", () => {
   S.goal = null; S.gmove = null;
-  if (S.swap) { S.swap = false; return; }  // to a card's sheet
-  const back = S.gfrom && document.body.contains(S.gfrom) ? S.gfrom : document.querySelector(`.gopen[data-goal-open="${CSS.escape(S.lastGoal || "")}"]`);
+  if (S.swap) { S.swap = false; return; }  // to a goal's page
+  const back = S.gfrom && document.body.contains(S.gfrom) ? S.gfrom
+    : document.querySelector(`#goalHead [data-gsheet="${CSS.escape(S.lastGsection || "")}"]`) || $("#goalPageTitle");
   if (back) back.focus();
 });
 
@@ -1209,7 +1319,7 @@ function renderFilters() {
       <fieldset class="group"><legend>Group by</legend><div class="seg wide" role="group" aria-label="Group by">
         <button type="button" data-group="columns" aria-pressed="${P.group === "columns"}">Columns, an area on each card</button>
         <button type="button" data-group="lanes" aria-pressed="${P.group === "lanes"}">Area lanes</button></div></fieldset>
-      ${hasGoals() ? `<fieldset class="group"><legend>Goal</legend><div class="toggles">${goals().map((g) => [g.id, g.name, goalColor(g)]).concat([["none", "No goal", ""]]).map(([v, label, col]) =>
+      ${hasGoals() && !pageGoal() ? `<fieldset class="group"><legend>Goal</legend><div class="toggles">${goals().map((g) => [g.id, g.name, goalColor(g)]).concat([["none", "No goal", ""]]).map(([v, label, col]) =>
         `<button type="button" data-f="goal" data-v="${esc(v)}" aria-pressed="${f.goal.includes(v)}"${col ? ` style="--g:${col}"` : ""}>${col ? '<i class="gsw" aria-hidden="true"></i>' : ""}${esc(label)}</button>`).join("")}</div></fieldset>` : ""}
       ${group("area", "Area", (S.data.areas || []).map((a) => [a.id, a.name]))}
       ${group("importance", "Importance", IMP)}
@@ -1251,7 +1361,7 @@ function renderAdd() {
       <div class="group"><label class="k" for="addArea">Area</label><select id="addArea">${areas.map((a) => `<option value="${esc(a.id)}"${a.id === area ? " selected" : ""}>${esc(a.name)}</option>`).join("")}</select></div>
       <div class="group"><span class="k">Who</span><div class="toggles" role="group" aria-label="Who" id="addWho"></div></div>
       <div class="group"><span class="k">Work</span><div id="addWork"></div></div>
-      <p class="hint">It goes into Backlog, medium importance. Open it to move it or change the rest.</p>
+      <p class="hint">It goes into Backlog, medium importance${pageGoal() ? `, for ${esc(pageGoal().name)}` : ""}. Open it to move it or change the rest.</p>
     </form>
     <div class="sh-foot"><span class="grow said" id="addSaid" aria-live="polite"></span><button type="submit" form="addForm" class="btn go">Add the card</button></div>`;
   renderAddChoices();
@@ -1284,6 +1394,8 @@ $("#add").addEventListener("submit", async (ev) => {
   P.addArea = area; if (!WORK_NAME[P.view]) P.addWork = S.addWork; savePrefs();
   try {
     const r = await api("POST", "/api/cards", { title, area, who: S.addWho, work: S.addWork });
+    const pg = pageGoal();
+    if (pg) r.card = (await api("PATCH", `/api/cards/${encodeURIComponent(r.card.id)}`, { goals: [pg.id] })).card;  // its goal: a second edit
     S.data.cards.push(r.card);
     recount();
     $("#add").close();
@@ -1305,10 +1417,15 @@ document.addEventListener("click", (ev) => {
   if (ev.target.closest("dialog")) return;
   const b = ev.target.closest("button");
   if (b && chartClick(b)) return;
-  if (b && b.dataset.goalOpen) { openGoal(b.dataset.goalOpen, b); return; }
-  const tile = !b && ev.target.closest(".gtile");  // a tap anywhere on a goal's tile opens it
-  if (tile) { openGoal(tile.dataset.goal, tile.querySelector(".gopen")); return; }
+  if (b && b.dataset.goalOpen) { openGoalPage(b.dataset.goalOpen); return; }
+  const tile = !b && ev.target.closest(".gtile");  // a tap anywhere on a goal's tile opens its page
+  if (tile) { openGoalPage(tile.dataset.goal); return; }
   if (!b) return;
+  if (b.dataset.act === "all-goals") { leaveGoalPage(); return; }
+  if (b.dataset.gsheet) { const g = pageGoal(); if (g) openGoalSheet(g.id, b.dataset.gsheet, b); return; }
+  // a goal's chip on a card: that goal's page (on its own page, the card, like the rest of it)
+  const chip = b.classList.contains("card") && ev.target.closest(".gchip");
+  if (chip && goalOf(chip.dataset.goal) && chip.dataset.goal !== S.goalPage) { openGoalPage(chip.dataset.goal); return; }
   if (b.dataset.view) {
     const was = P.view;
     P.view = b.dataset.view; savePrefs(); render();
@@ -1351,6 +1468,7 @@ $("#board").addEventListener("drop", (ev) => {
 // --- kept fresh: every 30 s while in view (the live cards, edits from another device)
 setInterval(() => { if (!document.hidden) load(); }, 30000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+S.goalPage = goalHash();  // a link, or a reload, to a goal's page
 load();
 </script>
 </body>

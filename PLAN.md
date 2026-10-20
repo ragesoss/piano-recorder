@@ -1050,20 +1050,35 @@ with the hardware".
     about 180 px wide on its side and 130 upright, too small for ten levels and for 44 px dots, and would take the
     board's height in every view; a view gives each goal a tile of 300 px or more (three across on its side, two
     upright, one on a phone). Each tile: its name, the stage (meter, number, label), the chart, the release line
-    (two lines at most), its open and done cards; a tap opens its sheet.
+    (two lines at most), its open and done cards; a tap opens its page.
   - **The chart** (inline SVG, drawn at the width it has, again on a resize): stages 1 to 10 up the side, the odd ones
     numbered (in a sheet 520 px wide or more, each with its label), the dates from the first entry to today along the
     bottom (and one between where there is room), a step line in the goal's colour, a dot for each change (hollow
     while not synced). A dot is a 44 px button; dots nearer than that share one. A tap shows its date, stage and note
     under the chart, with the change before and after; the chart's text alternative lists every change.
-  - **A goal's sheet:** what it is, what release-ready and released mean, the chart, "Move to stage…" (the ten, the
-    stage now marked; choosing one asks for a note, then "Move to 7 · Getting pretty good"), its cards by status
-    (Doing, Next, Waiting, Backlog; Done folded), the history (newest first) and the notes (who wrote each, "You" or
-    "Claude", as a badge), "Add the note". A card opens from it; a card's goals open from the card's.
+  - **A goal's page** (2026-10-20, the player: "when i click on a goal, i'd like the board to be shown below it, but
+    filtered to the cards that are part of that goal"), from its tile, a goal's chip on a card, or a goal in a card's
+    sheet. Its link is `#goal=<id>`, so a reload or the back button keeps the place; a link to a goal not on the board
+    shows the board and says so.
+    - **At the top, the goal:** "‹ All goals" (the Goals view, by the back button's way when the pages were opened
+      here), its name, the stage, what release-ready (9) and released (10) mean (a line each on an iPad on its side,
+      two upright; whole in its notes), "Move to stage…", "Add a note", "History and notes", and the chart beside them
+      (128 px tall on an iPad). It opens with no dot chosen. Measured on the fixture: 196 px of goal over 463 of board
+      at 1180x820, 202 over 761 at 820x1180. On a phone the chart and actions fold ("Its chart, a move, a note"; the
+      fold kept per device), the goal then 155 px.
+    - **Under it, the board:** the five columns with that goal's cards only, the same cards, sheets, moves and drags.
+      The kinds of work choose within the goal, their counts its cards'; Goals is not among them there (All goals is the
+      way). The other filters and the grouping as on the board; the goal filter not (the page is its own). Add there
+      makes a card for the goal (the new card, then its goals: two edits in the log).
+    - **Its sheets:** "Move to stage…": the ten, the stage now marked; choosing one asks for a note, then "Move to 7 ·
+      Getting pretty good", and the sheet closes, the page saying the move ("not synced", the new dot hollow). "Add a
+      note" and "History and notes": what it is, what release-ready and released mean, the note field (ready, for Add a
+      note), the notes (who wrote each, "You" or "Claude", as a badge) and the history, newest first.
   - **The cards wear their goals:** a 5 px stripe across the top, a segment for each goal in its order (2 px apart),
     and a chip naming each (outlined in its colour; a long name cut short with "…"). With goals, the areas' dots are
-    grey: colour is the goals'. The card's sheet lists its goals (each opens the goal, its stage beside it) and
-    "Goals…" chooses them, numbered in the order chosen.
+    grey: colour is the goals'. A tap on a chip opens that goal's page (on that goal's own page, the card). The card's
+    sheet lists its goals (each opens its page, its stage beside it) and "Goals…" chooses them, numbered in the order
+    chosen.
   - **A goal filter** (multi-select, "No goal" too), kept per device with the others; it shows the cards with any of
     those chosen.
   - **The home tile:** `/api/status` adds `"goals": [{"id", "name", "stage", "stage_name"}]`; the tile's words are as
@@ -1114,6 +1129,14 @@ with the hardware".
     note, a note, from a goal to a card and back, a card's goals chosen in order, the goal filter kept over a
     reload, "No goal", Add from the Goals view, the stages' labels; and on the cards with no goals, nothing of them
     anywhere and the areas' colours as before. No console errors, no sideways scroll, no target under 44 px.
+  - **The goal's page's tests** (2026-10-20; the suite 248 passed, dobro-transcription's board.py with its goals now
+    there for the round trip): at the three sizes, a goal's page from its tile (its link, the goal at the top no taller
+    than 215 px with the board at least half the screen on an iPad, 170 folded on a phone), its board with only that
+    goal's cards in every column and every column's count, the kinds of work counted within it and Play chosen, a dot,
+    a card's sheet and a move there, a chip of the goal itself opening the card, "Move to stage…" (the ten, a note, the
+    sheet closed, the page saying it), "Add a note", "History and notes", Add for the goal, "‹ All goals"; from a
+    card's chip to another goal's page, the back and forward buttons, a card's goal in its sheet, a link and a reload on
+    `#goal=…`, no goal filter there, All goals after a link, and a link to a goal not there.
 - **To deploy** (everything idle; the board takes nothing from the others): add the tile to `/etc/room-home.toml`
   by hand (`config/home.toml`'s `[[apps]] id = "board"`, a `.pre-board.bak` copy first), then `tools/deploy` (it
   installs `/etc/room-board.toml`, makes `~/board-data`, installs and starts `room-board`, and restarts every app
