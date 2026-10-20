@@ -1,8 +1,8 @@
 """Bring a recording in as a take of the transcribe app, and have the app transcribe it: a take made
 elsewhere (a phone, the exercise app, the corpus), or one to try the app with.
 
-    tools/import-take FILE --instrument dobro|bass|piano --bpm 100 [--beats-per-bar 4] [--click]
-                      [--downbeat S] [--channel N] [--title T]
+    tools/import-take FILE --instrument dobro|bass|piano|strings [--kind mandolin] --bpm 100 [--beats-per-bar 4]
+                      [--click] [--downbeat S] [--channel N] [--title T]
 
 Runs where the app runs, with its config ($TAKE_TRANSCRIBER_CONFIG, else /etc/take-transcriber.toml):
 the take's folder is made in its takes_dir as a recorded take's is (store.py), `take-01.flac` from
@@ -10,7 +10,8 @@ FILE's channel N (default: all channels mixed to one) at FILE's own rate, 24-bit
 asked to transcribe it (POST /api/takes/ID/transcribe). `--click`: it was played to a click at
 --bpm; `--downbeat`: bar 1's first beat in FILE (s), as a click's line-up would give it. A piano exercise take
 (dobro-transcription `exercises/piano/*/take-01.flac`, the room mic alone; its click's beat 0, bar 1's downbeat, is
-takes.csv's beat0_s): `--instrument piano --bpm 60 --click --downbeat 4.366`.
+takes.csv's beat0_s): `--instrument piano --bpm 60 --click --downbeat 4.366`. Any stringed instrument:
+`--instrument strings`, with `--kind` its kind if known (`settings.KINDS`; none: not sure).
 """
 
 import argparse
@@ -29,7 +30,7 @@ from recorder.takes import ID_FORMAT
 from . import VERSION
 from .jobs import FLAC24, JobError, _ffmpeg
 from .server import METERS, SYSTEM_CONFIG
-from .settings import load_settings
+from .settings import KINDS, load_settings
 from .store import TAKE, Folders
 
 
@@ -56,6 +57,7 @@ def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("file", type=Path)
     ap.add_argument("--instrument", required=True)
+    ap.add_argument("--kind", help="--instrument strings: its kind (mandolin, banjo, guitar, ...; default: not sure)")
     ap.add_argument("--bpm", type=float, required=True)
     ap.add_argument("--beats-per-bar", type=int, default=4, choices=METERS)
     ap.add_argument("--click", action="store_true", help="played to a click at --bpm")
@@ -69,6 +71,8 @@ def main(argv=None) -> None:
     inst = settings.instrument(a.instrument)
     if inst is None:
         sys.exit(f"--instrument: one of {', '.join(i.kind for i in settings.instruments)}")
+    if a.kind and (inst.kind != "strings" or a.kind not in KINDS):
+        sys.exit(f"--kind: with --instrument strings, one of {', '.join(KINDS)}")
     seconds, rate, channels = probe(a.file)
     if a.channel is not None and not 0 <= a.channel < channels:
         sys.exit(f"--channel: the file has channels 0-{channels - 1}")
@@ -88,6 +92,8 @@ def main(argv=None) -> None:
             "seconds": round(seconds, 2), "rate": rate, "peak_dbfs": None, "downbeat_s": a.downbeat,
             "click_found": None, "imported_from": a.file.name, "app": "piano-recorder transcribe app",
             "app_version": VERSION, "transcription": {"state": "queued" if not a.no_transcribe else "none"}}
+    if inst.kind == "strings":
+        meta.update(kind=a.kind or None, kind_name=KINDS.get(a.kind, "") if a.kind else "")
     folders.write_meta(take_id, meta)
     folders.write_takes_csv(take_id, beat0_s=a.downbeat or 0.0, bpm=a.bpm, metronome=a.click, pickup_beats=0.0,
                             beats_per_bar=a.beats_per_bar)

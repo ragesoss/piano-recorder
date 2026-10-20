@@ -2,8 +2,8 @@
 `transcribe.transcribe`), and say what it found for the transcribe app's page.
 
     PYTHONPATH=<pipeline/src> <its venv>/python transcriber/job/run_pipeline.py FOLDER \
-        --instrument dobro|bass|piano --bpm 72 [--beats-per-bar 4] [--metronome] [--downbeat S] \
-        [--track-beats] [--title T]
+        --instrument dobro|bass|piano|strings [--kind mandolin] --bpm 72 [--beats-per-bar 4] [--metronome] \
+        [--downbeat S] [--track-beats] [--title T]
 
 Run by the app (transcriber/jobs.py) in the pipeline's venv, which has numpy, scipy, librosa and
 soundfile; this file imports nothing of the app's, and sits alone in its folder (the folder of the
@@ -12,10 +12,12 @@ script run is first on the path: nothing here may stand in for a module of the p
 Writes into FOLDER, each by a rename once it is whole:
 - `transcription.musicxml`: the pipeline's output as its CLI writes it (`write_transcription`):
   standard notation and tab; for the piano a grand staff (the right hand on the treble staff, the left on
-  the bass staff), no tab;
+  the bass staff), no tab; for any stringed instrument (`--instrument strings`, the pipeline's generic path,
+  `transcribe.strings`; `--kind` its kind if chosen, a pitch range only) one staff, no tab;
 - `transcription.json`: the notes (time, beat, bar, pitch, string, fret, technique, length; the piano's
-  pitch, time, beat, bar, length and staff, its hand, with no string or fret) and the score's beats in the
-  take's time, for the page's cursor and the review side.
+  pitch, time, beat, bar, length and staff, its hand, with no string or fret; any stringed instrument's with
+  no string or fret, but how each was made) and the score's beats in the take's time, for the page's cursor
+  and the review side.
 
 Prints a JSON line at each stage on stdout (`{"stage": "notes"}` ...), the last `{"stage": "done", ...}`.
 
@@ -111,7 +113,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("folder", type=Path)
     ap.add_argument("--take", default="take-01.flac")
-    ap.add_argument("--instrument", choices=("dobro", "bass", "piano"), default="dobro")
+    ap.add_argument("--instrument", choices=("dobro", "bass", "piano", "strings"), default="dobro")
+    ap.add_argument("--kind", help="--instrument strings: its kind, if known (mandolin, banjo, guitar, ...)")
     ap.add_argument("--bpm", type=float, required=True, help="the tempo given (the click's, if there was one)")
     ap.add_argument("--beats-per-bar", type=int, default=4)
     ap.add_argument("--metronome", action="store_true", help="played to a click at --bpm")
@@ -145,8 +148,9 @@ def main() -> None:
                 bpm = round(found, 1)
 
     say("notes")
+    strings = a.instrument == "strings"
     t = transcribe(y, bpm, a.beats_per_bar, metronome=a.metronome, instrument=a.instrument,
-                   downbeat_s=a.downbeat, sr=sr)
+                   downbeat_s=a.downbeat, sr=sr, **({"kind": a.kind} if strings else {}))
 
     say("writing")
     bpb, pickup = t.beats_per_bar, float(t.pickup_beats)
@@ -195,6 +199,8 @@ def main() -> None:
              "midi": e.midi, "pitch": pitch_name(e.midi)}
         if piano:  # the staff is the hand (the pipeline's `string`): 1 the treble staff, 2 the bass staff
             n.update(staff=int(e.string), hand="right" if int(e.string) == 1 else "left")
+        elif strings:  # no strings or frets: its place in its chord from the top, and how it was made
+            n.update(voice=int(e.string), attack=bool(e.attack), technique=e.technique)
         else:
             n.update(string=e.string, fret=e.fret, attack=bool(e.attack), technique=e.technique)
         notes.append(n)
@@ -212,7 +218,10 @@ def main() -> None:
         "bar1_s": round(bar1, 4),  # bar 1's first beat in the take: the downbeat told, else the transcription's
         "bars": n_bars,
         "beats_total": total,
-        "tuning": None if piano else {str(s): int(m) for s, m in sorted(t.tuning.items())},  # the piano has no strings
+        # the piano has no strings, nor the generic path's staff
+        "tuning": None if piano or strings else {str(s): int(m) for s, m in sorted(t.tuning.items())},
+        **({"kind": getattr(t, "kind", None), "pitch_range": list(getattr(t, "pitch_range", None) or [])}
+           if strings else {}),  # the kind told (None: not sure) and the range the notes were looked for in (MIDI)
         "grid": grid,  # where the beats' times come from: the click, the notes, or the tempo alone
         "beats": [{"beat": b, "bar": bar, "in_bar": k, "t": round(float(x), 4)}
                   for (b, bar, k), x in zip(grid_beats, times)],
@@ -230,7 +239,13 @@ def main() -> None:
 
 
 def write_empty(path: Path, title: str, t, instrument: str) -> None:
-    """No notes found: a bar's rest, so the page still draws a staff and tab (the piano: a grand staff)."""
+    """No notes found: a bar's rest, so the page still draws a staff and tab (the piano: a grand staff; any
+    stringed instrument: one staff)."""
+    if instrument == "strings":
+        from transcribe.strings.staff import write_staff
+
+        write_staff(path, title, [], t.bpm, t.beats_per_bar, kind=getattr(t, "kind", None), fifths=0)
+        return
     if instrument == "piano":
         from transcribe.notation import Rest, write_piano_score
 

@@ -28,7 +28,8 @@ from transcriber.settings import Pipeline, Review, load_settings
 from transcriber.store import COLUMNS, Folders
 
 DEV = REPO / "config" / "transcribe-dev.toml"
-DOBRO_TRANSCRIPTION = Path.home() / "play" / "dobro-transcription"
+# the transcription project's checkout (a worktree of it: $DOBRO_TRANSCRIPTION)
+DOBRO_TRANSCRIPTION = Path(os.environ.get("DOBRO_TRANSCRIPTION", Path.home() / "play" / "dobro-transcription"))
 
 # A stand-in for dobro-transcription's package: the functions job/run_pipeline.py calls, a note a beat. The
 # piano's: read at the take's own rate (48 kHz), a chord and a note a beat on its two staves, its events by strike
@@ -60,6 +61,12 @@ def transcribe(y, bpm, beats_per_bar=4, metronome=False, instrument="dobro", dow
             written.append(NS(onset_s=d - 0.25 * spb, midi=72, offset_s=None))
         return NS(events=events, written=written, bpm=bpm, beats_per_bar=beats_per_bar, pickup_beats=0.0, tuning={},
                   instrument="piano")
+    if instrument == "strings":  # one staff: each note's place in its chord as `string`, no fret; the kind told
+        events = [NS(onset_beats=float(k), duration_beats=1.0, midi=67 + k, string=1, fret=0, bar=1 + k // beats_per_bar,
+                     attack=k != 1, technique=None if k != 1 else "hammer") for k in range(4)]
+        written = [NS(onset_s=d + k * spb, offset_s=None) for k in range(4)]
+        return NS(events=events, written=written, bpm=bpm, beats_per_bar=beats_per_bar, pickup_beats=0.0, tuning={},
+                  instrument="strings", kind=kw.get("kind"), pitch_range=(55, 98) if kw.get("kind") else (43, 81))
     events = [NS(onset_beats=float(k), duration_beats=1.0, midi=55 + k, string=3, fret=k, bar=1 + k // beats_per_bar,
                  attack=k != 2, technique=None if k != 2 else "slide") for k in range(6)]
     written = [NS(onset_s=d + k * spb, offset_s=None) for k in range(6)]
@@ -253,7 +260,8 @@ def test_another_input_can_carry_the_instrument(client, setup):
 def test_a_piano_take_is_a_folder_of_the_corpus_and_a_grand_staff(client, setup):
     cfg, _ = setup
     piano = next(i for i in client.get("/api/setup").json()["instruments"] if i["kind"] == "piano")
-    assert piano == {"kind": "piano", "name": "Piano", "input": 4, "tab": False}  # the room mic, as the exercise app's
+    # the room mic, as the exercise app's
+    assert piano == {"kind": "piano", "name": "Piano", "input": 4, "tab": False, "staves": "grand"}
     take = record(client, 2.0, instrument="piano", bpm=120)
     t = wait_for(client, take)
     d = cfg.takes_dir / take
@@ -284,6 +292,37 @@ def test_a_piano_take_is_a_folder_of_the_corpus_and_a_grand_staff(client, setup)
         assert n["end_s"] == pytest.approx(n["t"] - n["beat"] * 0.5 + n["midi"] / 100.0, abs=1e-3)  # its own end
         assert n["t"] == pytest.approx(meta["downbeat_s"] + n["beat"] * 0.5, abs=1e-3)
         assert n["length_beats"] == 1.0 and n["length_s"] == pytest.approx(0.5, abs=1e-3)
+
+
+def test_any_stringed_instrument_is_one_staff_its_kind_told(client, setup):
+    cfg, _ = setup
+    s = next(i for i in client.get("/api/setup").json()["instruments"] if i["kind"] == "strings")
+    assert s["name"] == "Any stringed instrument" and s["input"] == 4 and s["tab"] is False and s["staves"] == "one"
+    assert [k["kind"] for k in s["kinds"]][:3] == ["mandolin", "banjo", "guitar"]
+    take = record(client, 2.0, instrument="strings", kind="mandolin", bpm=120)
+    t = wait_for(client, take)
+    d = cfg.takes_dir / take
+    assert t["transcription"]["state"] == "done", t["transcription"]
+    assert t["staves"] == "one" and t["tab"] is False and t["kind"] == "mandolin" and t["kind_name"] == "Mandolin"
+    meta = json.loads((d / "meta.json").read_text())
+    assert meta["instrument"] == "strings" and meta["kind"] == "mandolin" and meta["input"] == 4
+    log = (d / "transcribe.log").read_text()
+    assert "--instrument strings" in log and "--kind mandolin" in log and "--metronome" in log
+    tr = json.loads((d / "transcription.json").read_text())
+    assert tr["instrument"] == "strings" and tr["tuning"] is None and tr["kind"] == "mandolin" and tr["pitch_range"] == [55, 98]
+    assert [(n["pitch"], n["voice"], n["attack"], n["technique"]) for n in tr["notes"]] == [
+        ("G4", 1, True, None), ("Ab4", 1, False, "hammer"), ("A4", 1, True, None), ("Bb4", 1, True, None)]
+    assert all(not {"string", "fret", "staff"} & set(n) for n in tr["notes"])
+
+
+def test_any_stringed_instrument_not_sure_of_its_kind(client, setup):
+    cfg, _ = setup
+    take = record(client, 1.0, instrument="strings", bpm=120)
+    t = wait_for(client, take)
+    assert t["transcription"]["state"] == "done" and t["kind"] is None and t["kind_name"] == ""
+    assert "--kind" not in (cfg.takes_dir / take / "transcribe.log").read_text()
+    tr = json.loads((cfg.takes_dir / take / "transcription.json").read_text())
+    assert tr["kind"] is None and tr["pitch_range"] == [43, 81]  # the range the pipeline read from the take
 
 
 def test_a_piano_note_before_the_downbeat_puts_bar_1_a_bar_before_it(client, setup, monkeypatch):
@@ -317,7 +356,9 @@ def test_the_first_estimate_is_the_instruments(setup):
 
 @pytest.mark.parametrize("body, code", [({"instrument": "banjo"}, 400), ({"instrument": "dobro", "input": 5}, 400),
                                         ({"instrument": "dobro", "bpm": 900}, 400),
-                                        ({"instrument": "dobro", "beats_per_bar": 5}, 400)])
+                                        ({"instrument": "dobro", "beats_per_bar": 5}, 400),
+                                        ({"instrument": "strings", "kind": "harp"}, 400),
+                                        ({"instrument": "dobro", "kind": "mandolin"}, 400)])
 def test_what_cannot_be_recorded_is_refused(client, body, code):
     assert client.post("/api/record/start", json=body).status_code == code
     assert client.get("/api/status").json()["recording"] is None
@@ -615,3 +656,34 @@ def test_the_real_pipeline_transcribes_a_real_piano_take(setup):
     assert "<staves>2</staves>" in xml and '<clef number="2"><sign>F</sign>' in xml and "staff-details" not in xml
     row = next(csv.DictReader((d / "takes.csv").open()))
     assert row["beat0_s"] == "4.370" and row["metronome"] == "yes"
+
+
+@pytest.mark.skipif(pipeline_python() is None or not (DOBRO_TRANSCRIPTION / "pipeline/src/transcribe/strings").is_dir(),
+                    reason="needs dobro-transcription's pipeline with its generic path (transcribe.strings)")
+def test_the_real_pipeline_transcribes_any_stringed_instrument(setup):
+    """The guitar's G scale (dobro-transcription exercises/guitar/002-g-major-scale: the room condenser, over the
+    exercise app's click at 80 bpm, bar 1's downbeat 3.513 s), as any stringed instrument, its kind not said: G2 up
+    to G4 and back, one staff."""
+    cfg, _ = setup
+    src = DOBRO_TRANSCRIPTION / "exercises/guitar/002-g-major-scale/take-01.flac"
+    if not src.is_file():
+        pytest.skip("no guitar take")
+    settings = load_settings(cfg)
+    settings = replace(settings, pipeline=Pipeline(python=pipeline_python(), src=DOBRO_TRANSCRIPTION / "pipeline" / "src"))
+    folders = Folders(cfg.takes_dir)
+    d = folders.create("2026-10-16_224533")
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(src), "-c:a", "flac", "-sample_fmt", "s32",
+                    "-bits_per_raw_sample", "24", str(d / "take-01.flac")], check=True)
+    folders.write_meta(d.name, {"instrument": "strings", "kind": None, "bpm": 80, "beats_per_bar": 4, "click": True,
+                                "downbeat_s": 3.513, "seconds": 28.0})
+    jobs = Jobs(cfg, settings, folders, None)
+    jobs.current = {"take": d.name, "stage": "", "started": time.monotonic(), "paused_s": 0.0}
+    tr = jobs.transcribe(d.name)
+    assert tr["state"] == "done" and tr["grid"] == "click" and tr["notes"] >= 30, tr
+    data = json.loads((d / "transcription.json").read_text())
+    pitches = [n["pitch"] for n in data["notes"]]
+    assert pitches[:8] == ["G2", "A2", "B2", "C3", "D3", "E3", "F#3", "G3"] and "G4" in pitches
+    assert data["kind"] is None and data["tuning"] is None and data["pitch_range"][0] <= 43
+    assert all("string" not in n and "voice" in n for n in data["notes"])
+    xml = (d / "transcription.musicxml").read_text()
+    assert "staff-details" not in xml and "<staves>" not in xml

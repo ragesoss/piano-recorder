@@ -98,6 +98,11 @@ h1, h2, h3, p { margin: 0; }
 .card .sub { font-size: 14px; color: var(--ink3); }
 .card.sel { border: 2.5px solid var(--purple); background: var(--purple-tint); }
 .card.sel .sub { color: var(--purple-ink); font-weight: 600; }
+.card .t.long { font-size: 21px; line-height: 1.15; }
+/* any stringed instrument: its kind, if known */
+.kindset { display: flex; flex-wrap: wrap; gap: 8px; }
+.kindset button { min-height: 48px; padding: 8px 16px; border: 1.5px solid var(--line); border-radius: 24px; background: transparent; font-size: 16px; }
+.kindset button[aria-pressed="true"] { border: 2.5px solid var(--purple); background: var(--purple-tint); color: var(--purple-ink); font-weight: 600; }
 .panel { margin-top: 18px; background: var(--surf); border: 1.5px solid var(--line); border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .panel h2 { font-family: var(--display); font-size: 22px; font-weight: 700; }
 .opts { display: flex; flex-direction: column; gap: 8px; }
@@ -312,10 +317,12 @@ const ICON = {
 const HOME = `http://${location.hostname}/`;
 // "Play the transcription": alphaTab's synthesizer with this SoundFont (alphaTab's own, sonivox.sf2, Apache-2.0) and a
 // General MIDI program (0-based) for each instrument: 25 Acoustic Guitar (steel), the nearest to the dobro; 32 Acoustic
-// Bass; 0 Acoustic Grand Piano. To try another font by ear: put its .sf2 in static/alphatab/soundfont/ and change these.
-const SOUND = { font: "/alphatab/soundfont/sonivox.sf2", program: { dobro: 25, bass: 32, guitar: 25, piano: 0 } };
+// Bass; 0 Acoustic Grand Piano; any stringed instrument the steel guitar too. To try another font by ear: put its .sf2 in
+// static/alphatab/soundfont/ and change these.
+const SOUND = { font: "/alphatab/soundfont/sonivox.sf2", program: { dobro: 25, bass: 32, guitar: 25, piano: 0, strings: 25 } };
 const STEPS = ["on", "details"];
-const DEFAULTS = { instrument: null, inputs: {}, bpm: 90, bpb: 4, countIn: true, click: true, title: "" };
+// `kind`: any stringed instrument's kind, as chosen (null: not sure)
+const DEFAULTS = { instrument: null, kind: null, inputs: {}, bpm: 90, bpb: 4, countIn: true, click: true, title: "" };
 
 // --- what the server has, and what is chosen
 const S = {
@@ -344,10 +351,21 @@ function plural(n, one, many) { return `${n} ${n === 1 ? one : many || one + "s"
 function inst(kind) { return (S.setup ? S.setup.instruments : []).find((i) => i.kind === kind) || null; }
 function inputOf(n) { return (S.setup ? S.setup.inputs : []).find((i) => i.input === Number(n)) || null; }
 function chosenInst() { return inst(C().instrument); }
+function kindName(k) { const i = inst("strings"), x = i && (i.kinds || []).find((y) => y.kind === k); return x ? x.name : ""; }
+function playingName() {  // what is played, as chosen: any stringed instrument's kind when one is
+  const i = chosenInst();
+  if (!i) return "";
+  return i.kind === "strings" && C().kind ? kindName(C().kind) : i.name;
+}
+function takeInst(t) { return t.kind_name || t.instrument_name || cap(t.instrument) || ""; }
+const WRITES = { tab: "notation and tab", grand: "a grand staff (the right hand over the left)", one: "one staff (the notes as they sound, no tab)" };
 function writesText() {  // what the pipeline writes for the instrument chosen (or for each)
   const i = chosenInst(), all = S.setup ? S.setup.instruments : [];
-  if (i) return i.tab === false ? "The pipeline writes a grand staff for it: the right hand over the left." : "The pipeline writes notation and tab for it.";
-  return all.some((x) => x.tab === false) ? "The pipeline writes notation and tab for a dobro or a bass, a grand staff for the piano." : "The pipeline writes notation and tab for it.";
+  if (i) return `The pipeline writes ${WRITES[i.staves || (i.tab === false ? "grand" : "tab")]} for it.`
+    + (i.kind === "strings" ? " No tuning needed; the kind, if you say it, only narrows the notes' range." : "");
+  const of = (k) => all.filter((x) => (x.staves || (x.tab === false ? "grand" : "tab")) === k).map((x) => x.name.toLowerCase());
+  const parts = ["tab", "grand", "one"].filter((k) => of(k).length).map((k) => `${WRITES[k]} for ${of(k).join(" or ")}`);
+  return parts.length > 1 ? `The pipeline writes ${parts.join("; ")}.` : "The pipeline writes notation and tab for it.";
 }
 function chosenInput() {  // the input the chosen instrument is on: the page's choice, else the config's
   const i = chosenInst();
@@ -369,7 +387,8 @@ function timingText(c, long) {
 function sentenceHtml() {
   const c = C(), i = chosenInst(), inp = chosenInput();
   const over = c.click ? `over the click${c.countIn ? " after a bar's count-in" : ""}` : c.countIn ? "after a bar's count-in, then no click" : "with no click";
-  return `<b>${esc(i ? i.name : "")}</b> at <b>${Math.round(c.bpm)} bpm</b>, ${c.bpb}/4, ${esc(over)}${inp ? `, on the ${esc(inp.name)}` : ""}${c.title ? `: “${esc(c.title)}”` : ""}.`;
+  const what = i && i.kind === "strings" && !c.kind ? `${i.name} (kind not sure)` : playingName();
+  return `<b>${esc(what)}</b> at <b>${Math.round(c.bpm)} bpm</b>, ${c.bpb}/4, ${esc(over)}${inp ? `, on the ${esc(inp.name)}` : ""}${c.title ? `: “${esc(c.title)}”` : ""}.`;
 }
 
 // --- talking to the control unit
@@ -395,7 +414,7 @@ async function loadAll() {
   S.choices = { ...DEFAULTS, ...choices, inputs: { ...((choices || {}).inputs || {}) } };
   if (!S.choices.instrument && takes[0]) {  // nothing saved yet: start from the newest take
     const t = takes[0];
-    Object.assign(S.choices, { instrument: t.instrument, bpm: t.bpm || 90, bpb: t.beats_per_bar || 4, click: t.click !== false });
+    Object.assign(S.choices, { instrument: t.instrument, kind: t.kind || null, bpm: t.bpm || 90, bpb: t.beats_per_bar || 4, click: t.click !== false });
   }
 }
 async function refresh() { try { S.takes = await api("GET", "/api/takes"); } catch (e) {} }
@@ -448,7 +467,7 @@ function crumbsNav() {
   const names = { on: "What", details: "The take" };
   STEPS.forEach((s, i) => {
     out.push(ICON.chev);
-    const n = i + 1, ok = stepOk(s), val = s === "on" ? (chosenInst() ? chosenInst().name : "") : timingText(C());
+    const n = i + 1, ok = stepOk(s), val = s === "on" ? playingName() : timingText(C());
     if (s === scr) out.push(`<span class="chip now" aria-current="step">${n} ${esc(names[s])}</span>`);
     else if (ok && val) out.push(crumb(`${ICON.check}${esc(val)}`, `data-act="step" data-step="${s}"`));
     else out.push(`<span class="chip todo">${n} ${esc(names[s])}</span>`);
@@ -480,9 +499,14 @@ function renderOn() {
   const c = C(), i = chosenInst(), inp = chosenInput();
   const cards = S.setup.instruments.map((x) => {
     const sel = x.kind === c.instrument, on = sel && inp ? inp : inputOf(((c.inputs || {})[x.kind]) || x.input);
+    const sub = (x.kind === "strings" && sel && c.kind ? `${kindName(c.kind)} · ` : "") + (on ? `In ${on.input} · ${on.name}` : "no input");
     return `<button type="button" class="card${sel ? " sel" : ""}" role="radio" aria-checked="${sel}" data-act="inst" data-kind="${esc(x.kind)}">
-      <span class="t">${esc(x.name)}</span><span class="sub">${on ? `In ${on.input} · ${esc(on.name)}` : "no input"}</span></button>`;
+      <span class="t${x.name.length > 12 ? " long" : ""}">${esc(x.name)}</span><span class="sub">${esc(sub)}</span></button>`;
   }).join("");
+  // any stringed instrument: which kind, if known (a hint for the notes' range; "not sure": read from the take)
+  const kinds = i && i.kind === "strings" ? `<section class="panel" aria-label="Kind"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><h2>Which kind?</h2><span class="muted" style="font-size:14px">if you know it</span></div>
+      <div class="kindset" role="radiogroup" aria-label="Kind">${(i.kinds || []).map((k) => `<button type="button" role="radio" aria-pressed="${c.kind === k.kind}" data-act="kind" data-kind="${esc(k.kind)}">${esc(k.name)}</button>`).join("")}<button type="button" role="radio" aria-pressed="${!c.kind}" data-act="kind" data-kind="">Not sure</button></div>
+      <p class="muted" style="font-size:13px">It only says where the notes may lie (a mandolin's are high, a bass's low). Not sure: the range is read from the take.</p></section>` : "";
   const opts = i ? S.setup.inputs.slice().sort((a, b) => a.input - b.input).map((x) => {
     const sel = inp && x.input === inp.input;
     return `<button type="button" class="opt${sel ? " sel" : ""}" role="radio" aria-checked="${!!sel}" data-act="input" data-n="${x.input}">
@@ -490,7 +514,7 @@ function renderOn() {
       <span class="meter" data-meter="${x.channel}" style="max-width:90px"><i></i><b></b></span></button>`;
   }).join("") : "";
   return `<div class="body"><div class="q"><h1>What are you playing?</h1><p>${esc(writesText())}</p></div>
-    <div class="kinds" role="radiogroup" aria-label="Instrument">${cards}</div>
+    <div class="kinds" role="radiogroup" aria-label="Instrument">${cards}</div>${kinds}
     ${i ? `<section class="panel" aria-label="Input"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><h2>Heard on</h2><span class="muted" style="font-size:14px">the take is this input alone</span></div>
       <div class="opts" role="radiogroup" aria-label="Input">${opts}</div><p class="muted" id="monNote" style="font-size:13px"></p></section>` : ""}</div>
     <div class="foot">${leftButton()}${nextButton("on")}</div>`;
@@ -499,7 +523,7 @@ function renderOn() {
 // 2: the take's details: tempo, meter, count-in, click, a name
 function renderDetails() {
   const c = C(), meters = S.setup.meters;
-  return `<div class="body"><div class="q"><h1>How will you play it?</h1><p>${esc(chosenInst() ? chosenInst().name : "")}: the tempo and the meter the transcription goes by.</p></div>
+  return `<div class="body"><div class="q"><h1>How will you play it?</h1><p>${esc(playingName())}: the tempo and the meter the transcription goes by.</p></div>
     <div class="fields">
       <div class="field"><span class="k">Tempo</span>
         <div class="bpm"><button type="button" data-act="bpm" data-d="-2" aria-label="Slower">−</button>
@@ -527,7 +551,7 @@ function renderReady() {
     <span class="label">Next take${c.saved ? ` · as you left it, ${esc(when(c.saved))}` : ""}</span>
     <p class="sentence" style="margin-top:-6px">${sentenceHtml()}</p>
     <div class="rows">
-      <div><span class="k">What</span><span class="v"><span class="big">${esc(i.name)}</span><span class="sm">In ${inp.input} · ${esc(inp.name)}</span>
+      <div><span class="k">What</span><span class="v"><span class="big">${esc(playingName())}</span><span class="sm">${i.kind === "strings" && !C().kind ? "Kind not sure · " : ""}In ${inp.input} · ${esc(inp.name)}</span>
         <span class="meter" data-meter="${inp.channel}" style="max-width:220px;margin-top:6px"><i></i><b></b></span></span><button type="button" class="change" data-act="step" data-step="on">Change</button></div>
       <div><span class="k">Timing</span><span class="v"><span class="big">${esc(timingText(c))}</span><span class="sm">${esc(timingText(c, true).split(" · ").slice(2).join(""))}</span></span><button type="button" class="change" data-act="step" data-step="details">Change</button></div>
       <div><span class="k">Name</span><span class="v"><span class="big">${c.title ? esc(c.title) : '<span class="muted" style="font-weight:400">none</span>'}</span></span><button type="button" class="change" data-act="step" data-step="details">Change</button></div>
@@ -586,10 +610,10 @@ function renderRecording() {
 }
 
 // --- the take: transcribing, then its notation and tab with its sound
-function takeName(t) { return t.title || `${t.instrument_name || cap(t.instrument) || "A"} take`; }
+function takeName(t) { return t.title || `${t.kind_name || (t.instrument === "strings" ? "Strings" : takeInst(t)) || "A"} take`; }
 function takeLine(t) {
   const bits = [cap(when(t.recorded_at || dateOf(t.id))), t.seconds != null ? fmt(t.seconds) : ""];
-  if (t.title) bits.push(t.instrument_name || cap(t.instrument));
+  if (t.title) bits.push(takeInst(t));
   if (t.bpm) bits.push(`${Math.round(t.bpm)} bpm${t.click ? ", click" : ""}`);
   return bits.filter(Boolean).join(" · ");
 }
@@ -618,8 +642,9 @@ function renderTake() {
   if (job || queued || tr.state === "running" || tr.state === "queued" || tr.state === "building") main = workingHtml(job, t);
   else if (tr.state === "failed") main = `<div class="working"><span class="doing red-ink">Not transcribed</span><p style="font-size:15px;color:var(--ink2)">${esc(tr.error || "The pipeline stopped.")}</p>
       <div class="acts"><button type="button" class="btn tint" data-act="transcribe" data-id="${esc(t.id)}">Transcribe again</button></div></div>`;
-  else if (tr.state === "done") main = `${statsHtml(t)}<div class="score-card"><div class="score-tools">${t.tab === false
-      ? '<span class="what">Grand staff: the right hand over the left</span>'
+  else if (tr.state === "done") main = `${statsHtml(t)}<div class="score-card"><div class="score-tools">${t.staves === "one"
+      ? `<span class="what">One staff, the notes as they sound${t.kind_name ? "" : " (the range read from the take)"}</span>`
+      : t.tab === false ? '<span class="what">Grand staff: the right hand over the left</span>'
       : `<div class="seg" role="radiogroup" aria-label="Show">
       <button type="button" aria-pressed="${S.view === "both"}" data-act="view" data-v="both">Notation and tab</button><button type="button" aria-pressed="${S.view === "tab"}" data-act="view" data-v="tab">Tab</button></div>`}
       <span class="hint">Tap a bar to play from there</span></div><div id="scoreSlot"></div></div>`;
@@ -654,7 +679,7 @@ function reviewHtml(t) {
   if (!rv.available) return `<div class="review-box"><span class="label">Review</span>${open}<p>The review app doesn't check takes yet${rv.why ? ` (${esc(rv.why.replace(/^the review app doesn't check takes yet\s*/, "").replace(/^\(|\)$/g, ""))})` : ""}. When it does, “Review it” sends this take there, and your answers turn this draft into the take's answer key.</p>
     <button type="button" class="btn" disabled>Review it</button></div>`;
   const reads = rv.instruments || ["dobro", "bass"];
-  if (t.instrument && !reads.includes(t.instrument)) return `<div class="review-box"><span class="label">Review</span>${open}<p>Review isn't there yet for the ${esc((t.instrument_name || t.instrument).toLowerCase())}: the review app checks ${esc(reads.join(" and "))} takes so far. When it checks this one, “Review it” sends the take there, and your answers turn this draft into the take's answer key.</p>
+  if (t.instrument && !reads.includes(t.instrument)) return `<div class="review-box"><span class="label">Review</span>${open}<p>Review isn't there yet for ${t.instrument === "strings" ? "any stringed instrument" : `the ${esc((t.instrument_name || t.instrument).toLowerCase())}`}: the review app checks ${esc(reads.join(" and "))} takes so far. When it checks this one, “Review it” sends the take there, and your answers turn this draft into the take's answer key.</p>
     <button type="button" class="btn" disabled>Review it</button></div>`;
   return `<div class="review-box"><span class="label">Review</span>${r.id ? `<p>In the review app since ${esc(when(r.made))}. Your answers there turn this draft into the take's answer key.</p>` : `<p>The review app checks the draft with you, and your answers turn it into the take's answer key.</p>`}${err}
     <div class="acts">${open}<button type="button" class="btn ${r.id ? "" : "fill"}" data-act="review" data-id="${esc(t.id)}"${s.review ? " disabled" : ""}>${r.id ? "Make the review again" : "Review it"}</button></div></div>`;
@@ -707,7 +732,8 @@ function placeScore() {
   host.hidden = false; slot.append(host);
   if (SC.take !== t.id || SC.view !== viewOf(t) || SC.finished !== (t.transcription || {}).finished) loadScore(t);
 }
-function viewOf(t) { return t.tab === false ? "grand" : S.view; }  // a grand staff has no tab to show alone
+// a grand staff has no tab to show alone, nor one staff (any stringed instrument)
+function viewOf(t) { return t.staves === "one" ? "one" : t.tab === false ? "grand" : S.view; }
 async function loadScore(t) {
   if (SC.api) { try { SC.api.destroy(); } catch (e) {} }
   const view = viewOf(t), grand = view === "grand";
@@ -740,7 +766,7 @@ async function loadScore(t) {
   SC.api = api; SC.scale = scaleFor();
   api.scoreLoaded.on((score) => {
     const tr = score.tracks[0];
-    if (grand) score.tracks.forEach((x) => x.staves.forEach((st) => { st.showStandardNotation = true; st.showTablature = false; st.showSlash = false; st.showNumbered = false; }));
+    if (grand || view === "one") score.tracks.forEach((x) => x.staves.forEach((st) => { st.showStandardNotation = true; st.showTablature = false; st.showSlash = false; st.showNumbered = false; }));
     else if (view === "tab" && tr && tr.staves.length > 1) tr.staves[0].showStandardNotation = false;
   });
   api.error.on((e) => { if (Q.api === api && Q.on) { Q.failed = (e && e.message) || String(e); Q.want = null; playBtns(); return; }
@@ -1010,8 +1036,8 @@ function live() {
 // --- recording
 async function record() {
   const c = C(), i = chosenInst(), inp = chosenInput();
-  const r = await api("POST", "/api/record/start", { instrument: i.kind, input: inp.input, bpm: c.bpm, beats_per_bar: c.bpb,
-    count_in: !!c.countIn, click: !!c.click, title: c.title || "" });
+  const r = await api("POST", "/api/record/start", { instrument: i.kind, kind: i.kind === "strings" ? c.kind || null : null,
+    input: inp.input, bpm: c.bpm, beats_per_bar: c.bpb, count_in: !!c.countIn, click: !!c.click, title: c.title || "" });
   recordingId = r.take; S.take = r.take; S.from = "ready"; S.screen = "recording"; render(); wakeLock(true);
 }
 let recordingId = null, lock = null;
@@ -1075,7 +1101,9 @@ document.addEventListener("click", (ev) => {
   else if (a === "restore") restore();
   else if (a === "answered") { if (d.step === "details") readDetails(); answered(d.step); }
   else if (a === "inst") {  // another instrument: straight back to Ready (from Ready); the same one: its inputs
-    const other = d.kind !== c.instrument; set({ instrument: d.kind }); if (other && !S.walk) answered("on"); }
+    // (any stringed instrument stays, for its kind)
+    const other = d.kind !== c.instrument; set({ instrument: d.kind }); if (other && !S.walk && d.kind !== "strings") answered("on"); }
+  else if (a === "kind") set({ kind: d.kind || null });
   else if (a === "input") { const i = chosenInst(); if (i) { set({ inputs: { ...(c.inputs || {}), [i.kind]: Number(d.n) } }); if (!S.walk) answered("on"); } }
   else if (a === "bpm") { readDetails(); set({ bpm: Math.max(20, Math.min(300, Math.round(c.bpm) + Number(d.d))) }); }
   else if (a === "bpb") { readDetails(); set({ bpb: Number(d.v) }); }

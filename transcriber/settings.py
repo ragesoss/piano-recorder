@@ -4,6 +4,9 @@ devices, the kept inputs, takes_dir, peers, web and loudness there):
     [instruments.dobro]   name = "Dobro", input = 4    the pipeline's instrument, and the input that carries it
     [instruments.bass]    name = "Bass", input = 3     (the page can choose another of the kept inputs)
     [instruments.piano]   name = "Piano", input = 4    (the piano: a grand staff, no tab)
+    [instruments.strings] name = "Any stringed instrument", input = 4
+                                                       (the generic path: one staff, no tab; its kind chosen on
+                                                       the page, `KINDS`, or "not sure")
     [pipeline]            python, src, threads, nice    the transcription project's package, and how to run it
     [review]              root, python, data, port      the review app's generator (dobro-transcription)
 """
@@ -15,13 +18,24 @@ from pathlib import Path
 
 from recorder.config import REPO, Config, ConfigError
 
-PIPELINE_INSTRUMENTS = ("dobro", "bass", "piano")  # what `transcribe --instrument` takes that this app records
-GRAND_STAFF = ("piano",)  # written as a grand staff (two staves, the hands), no tab: the others as notation and tab
+PIPELINE_INSTRUMENTS = ("dobro", "bass", "piano", "strings")  # what `transcribe --instrument` takes that this app records
+GRAND_STAFF = ("piano",)  # written as a grand staff (two staves, the hands), no tab
+ONE_STAFF = ("strings",)  # written on one staff, no tab (any stringed instrument: no tuning, so no strings or frets)
+# "strings": the kinds the page offers, in its order (dobro-transcription `transcribe.strings.kinds`: to the pipeline
+# each is only a pitch range, a hint); none chosen is "not sure", and the range is read from the take
+KINDS = {"mandolin": "Mandolin", "banjo": "Banjo", "guitar": "Guitar", "guitalele": "Guitalele",
+         "ukulele": "Ukulele", "dulcimer": "Mountain dulcimer", "dobro": "Dobro", "bass": "Bass"}
+
+
+def staves(kind: str) -> str:
+    """How an instrument's transcription is written: "tab" (notation and tab), "grand" (a grand staff), "one" (one
+    staff, no tab)."""
+    return "grand" if kind in GRAND_STAFF else "one" if kind in ONE_STAFF else "tab"
 
 
 @dataclass(frozen=True)
 class Instrument:
-    kind: str  # the pipeline's --instrument: "dobro", "bass", "piano"
+    kind: str  # the pipeline's --instrument: "dobro", "bass", "piano", "strings"
     name: str  # "Dobro"
     input: int  # the interface's input number that carries it unless the page says otherwise
 

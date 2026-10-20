@@ -85,3 +85,4 @@ for f in /etc/practice-recorder.toml /etc/exercise-recorder.toml; do
 done
 grep -q 'port = 8006' /etc/room-home.toml || echo "note: /etc/room-home.toml does not list the transcribe app (port 8006)"
 grep -q '^\[instruments.piano\]' /etc/take-transcriber.toml || echo "note: /etc/take-transcriber.toml has no [instruments.piano] (config/transcribe.toml: the piano on input 4)"
+grep -q '^\[instruments.strings\]' /etc/take-transcriber.toml || echo "note: /etc/take-transcriber.toml has no [instruments.strings] (config/transcribe.toml: any stringed instrument on input 4)"

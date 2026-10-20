@@ -34,7 +34,9 @@ details = "MXL 990 (cardioid large-diaphragm condenser, phantom power), gain abo
 # unless the page says another: the dobro on the room mic; the bass on the Nadine, as the corpus's bass takes
 # (dobro-transcription tunes/bass/*: "the Nadine's channel alone"); the piano on the room mic, as the exercise
 # app records it (every piano exercise take's sidecar: input 4, "Room mic", carries the piano; the Nadine and the
-# piezo nothing). The piano is written as a grand staff, no tab.
+# piezo nothing). The piano is written as a grand staff, no tab. Any stringed instrument (the pipeline's generic
+# path: a mandolin, a banjo, a guitar...; its kind chosen on the page, or not) on the room mic, written as one
+# staff, no tab.
 [instruments.dobro]
 name = "Dobro"
 input = 4
@@ -45,6 +47,10 @@ input = 3
 
 [instruments.piano]
 name = "Piano"
+input = 4
+
+[instruments.strings]
+name = "Any stringed instrument"
 input = 4
 
 # The transcription project's package as synced to the unit, and the venv that has its dependencies (numpy,

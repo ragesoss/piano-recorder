@@ -267,6 +267,8 @@ class Jobs:
             args += ["--downbeat", f"{float(meta['downbeat_s']):.4f}"]
         if meta.get("title"):
             args += ["--title", str(meta["title"])]
+        if meta.get("instrument") == "strings" and meta.get("kind"):
+            args += ["--kind", str(meta["kind"])]  # any stringed instrument, its kind as chosen (none: not sure)
         return _niced(p.nice) + args
 
     def environment(self) -> dict:

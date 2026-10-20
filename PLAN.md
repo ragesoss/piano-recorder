@@ -896,6 +896,44 @@ it right there, with playback; "Review it" sends the take to the review app (dob
     `[instruments.piano]` (`name = "Piano"`, `input = 4`) added to `/etc/take-transcriber.toml` by hand and
     `sudo systemctl restart take-transcriber`. Not the other way round: the app deployed now refuses a config with
     an instrument it does not know.
+- **Any stringed instrument** (2026-10-19, branch `generic-transcriber`; the player: "a generic stringed-instrument
+  transcriber... i have guitalele, and a mandolin, and a banjo, and a mountain dulcimer"). A fourth instrument,
+  `[instruments.strings]` ("Any stringed instrument"), on input 4, the room mic: dobro-transcription's generic path
+  (`transcribe --instrument strings`, its `transcribe/strings/`), which needs no tuning and writes one staff, no tab.
+  - **Choosing:** its card, and under it "Which kind?": Mandolin, Banjo, Guitar, Guitalele, Ukulele, Mountain
+    dulcimer, Dobro, Bass (`settings.KINDS`), or "Not sure" (the default). To the pipeline a kind is only a pitch
+    range (`--kind`); not sure, it reads the range from the take. Tapping the card from Ready stays on the step, for
+    the kind. The kind is in the sentences ("Mandolin at 90 bpm"), the step's crumb and the take's name;
+    `POST /api/record/start` takes `kind` (refused unless it is one of `KINDS` on "strings"), and meta.json keeps
+    `kind` and `kind_name`.
+  - **The run:** `--instrument strings [--kind K]`, over the click told the downbeat as the others.
+    `transcription.json`: each note's pitch, time, beat, bar, length, end, `voice` (its place in its chord from the
+    top), `attack` and `technique` (picked, hammer, pull, slide); no string or fret, `tuning` null; `kind` and
+    `pitch_range` (the range its notes were looked for in).
+  - **The page:** `/api/setup` gives each instrument `staves` ("tab", "grand", "one"; `tab` stays, true for the
+    first) and "strings" its `kinds`; a take its `staves`, `kind` and `kind_name`. One staff is drawn notation only,
+    with no Notation/Tab switch ("One staff, the notes as they sound"); "Play the transcription" with the steel
+    guitar's program (25).
+  - **"Review it":** once dobro-transcription's `review/take_check.py` names "strings" in `INSTRUMENTS` (its
+    branch for this, beside the pipeline's), as the piano's.
+  - **Tried on the desktop** (fake device, the pipeline from dobro-transcription's branch, nice 19, two threads):
+    the guitar's G scale take (dobro-transcription `exercises/guitar/002-g-major-scale`, 28 s) brought in by
+    `tools/import-take --instrument strings --bpm 80 --click --downbeat 3.513`, transcribed in 1.4 s (30 notes, 8
+    bars, G2 to G4 and back as played; the dobro's path on the same take reads bars 4-5's G4s as G5); Red Wing's 80 s
+    take by the generic path 2.2 s (the dobro's 2.9 s), so the first estimate stays the dobro's. "Review it" made
+    `take-check-2026-10-19-172725` (two questions), drawn by the review page on one staff. Headless Chrome at 390 wide
+    (the instrument step with the kinds, the take drawn on one staff) and 1180x820 (Ready: "Mandolin at 90 bpm"). The
+    first system's third bar runs past the card's edge at 390 wide, for the dobro's take as for this one: alphaTab's
+    page layout, as before. `tests/test_transcriber.py`: a take told its kind and one not sure, the refusals, and the
+    real pipeline on the guitar take (with `DOBRO_TRANSCRIPTION` set to a checkout that has the generic path); the
+    suite 147 passed. The pipeline's generic path checked under the unit's librosa 1.0.0 too (the same notes).
+  - **Not deployed.** The order as the piano's: dobro-transcription's `review/tools/deploy` (copies `review/` and
+    `pipeline/src/`, with `transcribe/strings/`; restarts the review app only; its idle check looks at 8000-8004,
+    not this app's 8006, so this app idle by hand first); then `tools/deploy` here (every app here restarted, the
+    unit's `/etc/take-transcriber.toml` kept: the installer notes it has no `[instruments.strings]`); then
+    `[instruments.strings]` (`name = "Any stringed instrument"`, `input = 4`) added to `/etc/take-transcriber.toml`
+    by hand and `sudo systemctl restart take-transcriber`. No new dependency: the generic path uses what the review
+    venv has (numpy, scipy, librosa).
 
 ## Open questions
 

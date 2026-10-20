@@ -5,7 +5,8 @@ project's corpus (dobro-transcription `tunes/<instrument>/<name>/`), so its revi
         take-01.flac             the instrument's input alone: mono, the device's rate, 24-bit FLAC
         takes.csv                the corpus's columns (`transcribe.evaluate.read_takes`)
         meta.json                what the app knows: instrument, tempo, meter, count-in, click, title, ...
-        transcription.musicxml   the pipeline's notation and tab, the piano's grand staff (once transcribed)
+        transcription.musicxml   the pipeline's notation and tab, the piano's grand staff, any stringed
+                                 instrument's one staff (once transcribed)
         transcription.json       its notes and the score's beats in the take's time (job/run_pipeline.py)
         raw/<id>.flac, .json     every kept input as recorded (24-bit FLAC) and the engine's sidecar
         play/full.mp3, half.mp3  for the page: the take, and at half speed with its pitch kept
@@ -25,7 +26,7 @@ from pathlib import Path
 
 from recorder.takes import ID_RE, TakeNotFound
 
-from .settings import GRAND_STAFF
+from .settings import staves
 
 TAKE = "take-01.flac"
 COLUMNS = ("take", "beat0_s", "bpm", "metronome", "session", "pickup_beats", "beats_per_bar")
@@ -120,7 +121,10 @@ class Folders:
             "title": m.get("title", ""),
             "instrument": m.get("instrument", ""),
             "instrument_name": m.get("instrument_name", ""),
-            "tab": m.get("instrument") not in GRAND_STAFF,  # drawn as notation and tab (the piano: a grand staff)
+            "tab": staves(m.get("instrument", "")) == "tab",  # drawn as notation and tab
+            "staves": staves(m.get("instrument", "")),  # "tab", "grand" (the piano) or "one" (any stringed instrument)
+            "kind": m.get("kind"),  # any stringed instrument's kind as chosen (None: not sure)
+            "kind_name": m.get("kind_name", ""),
             "input": m.get("input"),
             "input_name": m.get("input_name", ""),
             "recorded_at": m.get("recorded_at", ""),

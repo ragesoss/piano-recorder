@@ -1,5 +1,6 @@
 """The transcribe app: the player records a take on the phone and sees the transcription pipeline's
-notation and tab for it there (the piano's as a grand staff), with the take's own sound and a cursor;
+notation and tab for it there (the piano's as a grand staff, any stringed instrument's as one staff), with the
+take's own sound and a cursor;
 "Review it" sends the take to the review app to be checked and corrected (review.py).
 
 A separate app on its own port (8006), with its own takes (store.py: one folder each, laid out as
@@ -33,7 +34,7 @@ from recorder.takes import TakeNotFound, Takes
 from . import VERSION
 from .jobs import Jobs
 from .review import Reviews
-from .settings import GRAND_STAFF, load_settings
+from .settings import KINDS, load_settings, staves
 from .store import TAKE, Folders
 
 STATIC = Path(__file__).parent / "static"
@@ -47,7 +48,8 @@ SAFE_PATH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*
 
 
 class StartIn(BaseModel):
-    instrument: str  # "dobro", "bass", "piano" (GET /api/setup)
+    instrument: str  # "dobro", "bass", "piano", "strings" (GET /api/setup)
+    kind: str | None = None  # "strings": the kind chosen (`settings.KINDS`); None: not sure
     input: int | None = None  # the input that carries it (default: the config's for it)
     bpm: float = 90.0
     beats_per_bar: int = 4
@@ -155,11 +157,14 @@ def create_app(cfg: Config) -> FastAPI:
 
     @app.get("/api/setup")
     def setup():
-        """What can be recorded, on which inputs (`tab`: written as notation and tab, else as a grand staff),
-        and whether the review app can check a take, and of which instruments."""
+        """What can be recorded, on which inputs (`staves`: "tab" written as notation and tab, "grand" as a grand
+        staff, "one" as one staff with no tab; `tab` true for the first; `kinds`, any stringed instrument's kinds to
+        choose from), and whether the review app can check a take, and of which instruments."""
         ok, why = reviews.available()
         return {
-            "instruments": [{"kind": i.kind, "name": i.name, "input": i.input, "tab": i.kind not in GRAND_STAFF}
+            "instruments": [{"kind": i.kind, "name": i.name, "input": i.input, "tab": staves(i.kind) == "tab",
+                             "staves": staves(i.kind),
+                             **({"kinds": [{"kind": k, "name": n} for k, n in KINDS.items()]} if i.kind == "strings" else {})}
                             for i in settings.instruments],
             "inputs": [{"input": i.number, "channel": c, "name": i.name, "details": i.details, "for": i.for_kind}
                        for c, i in enumerate(cfg.inputs)],
@@ -206,11 +211,16 @@ def create_app(cfg: Config) -> FastAPI:
             raise HTTPException(400, "tempo out of range (20-300)")
         if body.beats_per_bar not in METERS:
             raise HTTPException(400, f"beats in a bar: one of {list(METERS)}")
+        kind = body.kind or None
+        if kind is not None and (inst.kind != "strings" or kind not in KINDS):
+            raise HTTPException(400, f"a kind is for any stringed instrument: one of {list(KINDS)}, or none")
         channel, inp = inputs[number]
         info = {"instrument": inst.kind, "instrument_name": inst.name, "input": number, "input_name": inp.name,
                 "channel": channel, "bpm": round(float(body.bpm), 2), "beats_per_bar": body.beats_per_bar,
                 "count_in_bars": 1 if body.count_in else 0, "click": bool(body.click),
                 "title": " ".join(body.title.split())[:120], "recorded_at": datetime.now().isoformat(timespec="seconds")}
+        if inst.kind == "strings":  # its kind as chosen (None: not sure, the range read from the take)
+            info.update(kind=kind, kind_name=KINDS.get(kind, "") if kind else "")
         tempo = {"bpm": float(body.bpm), "pickup_beats": 0.0, "beats_per_bar": body.beats_per_bar}
         jobs.pause(True)  # the pipeline holds still while the take records
         try:
