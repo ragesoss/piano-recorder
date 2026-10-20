@@ -61,7 +61,7 @@ a.app.down .dot { background: transparent; border: 2px solid var(--faint); }
 .note { color: var(--ink3); font-size: 15px; line-height: 1.4; padding: 0 2px; }
 .note b { color: var(--ink2); }
 
-/* an iPad: every tile on one screen. Upright, two to a row (seven apps: four rows); on its side, three (three rows) */
+/* an iPad: every tile on one screen. Upright, two to a row (eight apps: four rows); on its side, three (three rows) */
 @media (min-width: 700px) {
   main { max-width: 1000px; padding-left: max(28px, env(safe-area-inset-left)); padding-right: max(28px, env(safe-area-inset-right)); padding-top: max(20px, env(safe-area-inset-top)); }
   h1 { font-size: 38px; margin-bottom: 16px; }
@@ -145,6 +145,7 @@ function describe(a) {
     if (s.state === "waiting") return ["Letting a recorder have the inputs", false];
     return ["Ready", false];
   }
+  if (a.id === "board") return [s.state || "Ready", false];  // what is in Next or Doing, by kind of work: "3 to listen · 2 to play"
   const st = s && s.state ? String(s.state) : "running";
   return [st[0].toUpperCase() + st.slice(1), false];
 }

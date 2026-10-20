@@ -52,3 +52,11 @@ name = "Transcription review"
 about = "Questions about your takes: listen, then say what you played"
 port = 8005
 stop = []
+
+[[apps]]
+id = "board"
+name = "Board"
+about = "What to do next: listen, play, the agent, people, hardware"
+port = 8007
+# it plays nothing
+stop = []

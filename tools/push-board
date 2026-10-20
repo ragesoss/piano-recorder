@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""Put the board's cards on the control unit, for the board app (port 8007): the JSON that
+dobro-transcription's board/board.py makes of its board/cards.toml.
+
+    cd ~/play/dobro-transcription && python3 board/board.py json | ~/play/piano-recorder/tools/push-board
+    tools/push-board CARDS.json [--host practice | --to board-dev]
+
+The file goes to the board's data_dir (/etc/room-board.toml: ~/board-data) as cards.json, written as
+cards.json.new and then renamed over it, so the app never reads half of one. The app reads it on the next
+request: nothing restarts. The player's edits not yet brought in (changes.jsonl) stay, shown on top of it.
+"""
+
+import argparse
+import json
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from board.store import EFFORT_CLAUDE, EFFORT_PLAYER, IMPORTANCE, STATUSES, WHO, WORK  # noqa: E402
+
+REMOTE = "cd practice-recorder && .venv/bin/python -m board.store"
+
+
+def check(raw) -> tuple[int, int]:
+    """The contract's essentials (version 1, areas, each card's id and fields); exits with what is wrong."""
+    problems = []
+    if not isinstance(raw, dict) or raw.get("version") != 1:
+        sys.exit('not a board: no "version": 1')
+    areas, cards = raw.get("areas"), raw.get("cards")
+    if not isinstance(areas, list) or not isinstance(cards, list):
+        sys.exit('not a board: "areas" and "cards" must be lists')
+    area_ids = {a.get("id") for a in areas if isinstance(a, dict)}
+    if None in area_ids or len(area_ids) != len(areas):
+        problems.append("every area needs its own id")
+    seen = set()
+    for n, c in enumerate(cards):
+        cid = c.get("id") if isinstance(c, dict) else None
+        name = cid or f"card {n + 1}"
+        if not cid or not isinstance(cid, str):
+            problems.append(f"{name}: no id")
+            continue
+        if cid in seen:
+            problems.append(f"{cid}: the id is used twice")
+        seen.add(cid)
+        if not c.get("title"):
+            problems.append(f"{cid}: no title")
+        if c.get("status") not in STATUSES:
+            problems.append(f"{cid}: status {c.get('status')!r} (one of {', '.join(STATUSES)})")
+        if c.get("work") not in WORK:
+            problems.append(f"{cid}: work {c.get('work')!r} (one of {', '.join(WORK)})")
+        if c.get("importance") not in IMPORTANCE or isinstance(c.get("importance"), bool):
+            problems.append(f"{cid}: importance {c.get('importance')!r} (1, 2 or 3)")
+        if not isinstance(c.get("who"), list) or not c["who"] or any(w not in WHO for w in c["who"]):
+            problems.append(f"{cid}: who {c.get('who')!r} (one or more of {', '.join(WHO)})")
+        if c.get("area") not in area_ids:
+            problems.append(f"{cid}: area {c.get('area')!r} is not among the areas")
+        if c.get("effort_player", "") not in EFFORT_PLAYER or c.get("effort_claude", "") not in EFFORT_CLAUDE:
+            problems.append(f"{cid}: an effort the contract does not have")
+    if problems:
+        more = f"\n  ... and {len(problems) - 12} more" if len(problems) > 12 else ""
+        sys.exit("the cards are not as the board reads them:\n  " + "\n  ".join(problems[:12]) + more)
+    return len(cards), len(areas)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("file", nargs="?", type=Path, help="default: read standard input")
+    ap.add_argument("--host", default="practice", help="the control unit's ssh host")
+    ap.add_argument("--to", type=Path, help="put it in this local data folder instead (development, tests)")
+    a = ap.parse_args()
+    text = a.file.read_text() if a.file else sys.stdin.read()
+    try:
+        raw = json.loads(text)
+    except ValueError as e:
+        sys.exit(f"not JSON: {e}")
+    n, n_areas = check(raw)
+    body = json.dumps(raw, indent=1, ensure_ascii=False) + "\n"
+    if a.to:
+        a.to.mkdir(parents=True, exist_ok=True)
+        tmp = a.to / "cards.json.new"
+        tmp.write_text(body)
+        tmp.replace(a.to / "cards.json")
+        print(f"{n} cards in {n_areas} areas: in {a.to}")
+        return
+    where = subprocess.run(["ssh", a.host, f"{REMOTE} datadir"], capture_output=True, text=True)
+    if where.returncode or not where.stdout.strip():
+        sys.exit(f"the board is not set up on {a.host} (/etc/room-board.toml): {where.stderr.strip()[-300:]}")
+    d = shlex.quote(where.stdout.strip())
+    put = subprocess.run(["ssh", a.host, f"mkdir -p {d} && cat > {d}/cards.json.new && mv {d}/cards.json.new {d}/cards.json"],
+                         input=body, text=True, capture_output=True)
+    if put.returncode:
+        sys.exit(f"not put on {a.host}: {put.stderr.strip()[-300:]}")
+    print(f"{n} cards in {n_areas} areas: on {a.host} in {where.stdout.strip()}")
+
+
+if __name__ == "__main__":
+    main()

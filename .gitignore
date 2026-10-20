@@ -30,3 +30,5 @@ __pycache__/
 # This install's details (addresses, network names, the user): see CLAUDE.md.
 # tools/deploy skips it too.
 /local/
+# The board's data on the desktop (config/board-dev.toml: board-dev/).
+/board-dev*/

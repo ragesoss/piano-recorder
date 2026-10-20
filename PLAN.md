@@ -961,6 +961,90 @@ it right there, with playback; "Review it" sends the take to the review app (dob
     by hand and `sudo systemctl restart take-transcriber`. No new dependency: the generic path uses what the review
     venv has (numpy, scipy, librosa).
 
+### 9. The board (started 2026-10-19)
+
+The player's request: "we're starting to get more and more threads in this project going, so i think we need to
+start maintaining a project management board. i want basically kanban where i can see a list of cards organized by
+which part of the project they relate to, how important they are, how much work they are for whom, and who needs to
+do them ... so i can easily figure out where to focus depending on whether i want to do musical things or do software
+things." Then, the same day: "i want the kanban to be organized into the kind of work it is for me: listening and
+evaluating, playing an instrument and/or singing, managing an AI agent, communicating with other people, or working
+with the hardware".
+
+- **An eighth program on the control unit:** `board/`, port 8007, `setup/room-board.service`, its own config
+  (`/etc/room-board.toml` from `config/board.toml`) and data (`~/board-data`). It holds no audio device, is in no
+  peers list and answers no `/api/yield`. A tile on the home page.
+- **The cards are dobro-transcription's** `board/cards.toml` (its `board/README.md`: the fields, and `board.py`).
+  `python3 board/board.py json | tools/push-board` puts them on the unit as `cards.json` (written as
+  `cards.json.new`, then renamed; checked first: version 1, unique ids, each status, work, importance, who, area and
+  effort as the contract has them). Nothing restarts.
+- **The player's edits** are kept on the unit as a log, `changes.jsonl`, one JSON object a line, appended in one
+  write under a lock (`flock` on `changes.lock`; a line cut short before is left on its own line):
+  - `{"id", "at", "by": "player", "card", "set": {...}}`: status, importance, who, work, effort_player,
+    effort_claude, waiting_on, area. A set that changes nothing is not written.
+  - `{"id", "at", "by": "player", "new": {<every field of a card>}}`: from Add, its id a slug of the title (cut at a
+    word, 40 characters at most) and four hex digits; Backlog, importance 2, the work and who as chosen.
+  - `{"id", "at", "by": "player", "card", "note"}`. board.py adds a note to the card's details under "Notes:".
+  The app shows the base with every change not in its `applied` list laid over it, in order, so an edit shows at
+  once; a card with edits still in the log says "Not synced". A change for a card not there, or with a value the
+  contract does not have, is left out of the view (and stays in the log).
+- **Back to the desktop:** `tools/pull-board` reads the log on the unit (`python -m board.store pending`, under the
+  lock, whole lines), runs `board.py apply FILE` and `board.py fmt` in dobro-transcription, then `board.py json |
+  tools/push-board`, and only once that push has succeeded moves the changes in the new base's `applied` from
+  `changes.jsonl` to `changes.applied.jsonl` on the unit (`python -m board.store archive`). An edit made during the
+  sync, or one apply refused (a card deleted on the desktop, say), stays pending; the tool says which and exits 1.
+  If fmt, json or the push fails, nothing is archived and the next pull takes up from there (apply takes each
+  change once, by `applied.txt`). `cards.toml` and `applied.txt` are left to commit.
+- **Live cards** (shown, never stored), read every 10 s at most (`/api/status` uses the last read and refreshes in
+  the background, so the home tile never waits): the review app's open reviews (`/api/reviews`: not demos, not
+  all answered; Listen & evaluate), and the exercise app's "to record", counted as its board counts them (wanted
+  again or no take yet, not recorded here since), one card for every instrument (Play & sing), linking to its board
+  and each instrument's list. A review that a card links to (`#/r/<id>`) and that is not done is shown on that card
+  instead ("Live · 6 questions to answer"): on 2026-10-19 all three open reviews had a card. An app that does not
+  answer within 1.5 s has no cards.
+- **The page, iPad first,** in the room's look (`--faint` for lines only):
+  - **What kind of work:** Listen & evaluate, Play & sing, Manage the agent, People, Hardware, or All, each with its
+    glyph (headphones, a note, a robot's head, two people, a plug, four squares), its words and its count of open
+    cards. In All, each card says its work too.
+  - **The columns:** Backlog, Next, Doing, Waiting, Done (the last two weeks; "+ 3 older" shows the rest). On its side
+    every column is on the screen; upright three, and the board scrolls a column at a time (a row of the columns
+    with their counts to jump); a phone one column. Area as a chip on each card, or as lanes across the columns
+    (on a phone, the areas as headings in the column).
+  - **A card:** its title, importance in bars and words (High with a purple edge), its work (in All) and area, who
+    (You, Claude, Others), the efforts ("you 30m · Claude M"), blocked by (red, with a mark) or waiting on (amber,
+    with a clock), links, and "Not synced".
+  - **Its sheet:** move to a column, "Claude: do this next" (Next, Claude added to who, importance 1: Claude's
+    queue; the first action on the agent's cards), importance, who; folded: work, effort, area, waiting on (shown
+    open while waiting). The details as Markdown (escaped; only http(s) links are links), what blocks it and what it
+    blocks (each opens), the links (URLs open; repo paths are shown as paths on the desktop), notes and a new one,
+    the source and dates. A live card's sheet has its link and nothing to change.
+  - **Moving cards:** drag between columns with a mouse; on a touch screen the sheet's buttons (no drag).
+  - **Add:** a title, an area, who and the work (the view's, else the last chosen); into Backlog.
+  - **Filters** (area, importance, who, your time, Claude's size) and the grouping, with the view, kept per device
+    (localStorage, read and written in try/catch).
+  - **Accessibility:** text at 5.7:1 or more (white on the purple fill; ink3 #A79FB4 6.0:1 on cards, 7.4:1 on the
+    background, 5.9:1 on a disabled button), targets 44 px, a label for every control, and nothing told by colour alone (importance,
+    work and who in words, a pressed choice with a check).
+- **The home tile:** what is in Next or Doing for each kind of work, the first three that have any ("4 to listen · 3
+  to play · 14 for the agent"; `by_work` has all five), else "Nothing in Next or Doing"; "No cards yet" before the
+  first push.
+- **Tried on the desktop:** the tests (52 new; the suite 204 passed): the merge, the appends (80 notes from eight
+  threads through four stores, whole lines), the refusals, the archive, the live cards with the apps up, down and
+  slow (the status in under 0.5 s); push-board and pull-board locally and through a stand-in ssh laid out as the
+  unit, with a stand-in board.py (refusals, failures at each step, a retry) and with dobro-transcription's own
+  board.py on a copy of its 127 cards (three edits made in the app, pulled, applied, pushed, archived). Headless
+  Chrome via Playwright (`tests/board_page.cjs`, run by `tests/test_board_page.py` when node finds Playwright, or
+  `PLAYWRIGHT_NODE_PATH`) at 1180x820, 820x1180 and 390x844, on a fixture of 46 cards: each view and its count,
+  a card opened and moved with the buttons, a note, "Claude: do this next" on two cards, a card added, filters and
+  lanes kept over a reload, Done's fold, a drag (with a mouse); no console errors, no sideways scroll, no target
+  under 44 px. The real 127 cards with the unit's live apps at the three sizes: no console errors, nothing wider
+  than its card or the screen. Not deployed.
+- **To deploy** (everything idle; the board takes nothing from the others): add the tile to `/etc/room-home.toml`
+  by hand (`config/home.toml`'s `[[apps]] id = "board"`, a `.pre-board.bak` copy first), then `tools/deploy` (it
+  installs `/etc/room-board.toml`, makes `~/board-data`, installs and starts `room-board`, and restarts every app
+  here), then from dobro-transcription `python3 board/board.py json | ~/play/piano-recorder/tools/push-board`, then
+  the home page's Board tile ("4 to listen · ...") and `http://practice.local:8007/`.
+
 ## Open questions
 
 - ~~Which instrument?~~ The piano (2026-10-10). The speakers are across

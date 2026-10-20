@@ -771,6 +771,9 @@ either part is swapped.
     the band list it among their peers. After each take it runs the transcription project's pipeline on the CPU
     (nice 19, two threads), held still while it records; it plays the takes in the phone's browser, not over the
     speakers.
+  - **An eighth program** (2026-10-19): the board (`board/`, service `room-board`, port 8007; PLAN.md step 9), the
+    project's cards as a kanban. It holds no audio device, takes no turns (in no peers list, no `/api/yield`), and
+    reads the review app's and the exercise app's APIs for its live cards.
 
 ## Tests
 

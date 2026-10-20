@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Bring the player's edits on the board (port 8007) into dobro-transcription's board/cards.toml, then put
+the new cards back on the control unit.
+
+    tools/pull-board [--host practice | --from board-dev] [--repo ~/play/dobro-transcription]
+
+1. The unit's changes.jsonl (the edits not yet brought in) is copied to the desktop, read under the app's
+   lock: whole lines only.
+2. In the repo: `python3 board/board.py apply FILE`, then `python3 board/board.py fmt`. apply takes each edit
+   once (board/applied.txt) and refuses one it cannot apply (a card gone, say), saying why; the rest go in.
+3. `python3 board/board.py json | tools/push-board`: the new base on the unit. Its "applied" lists every edit
+   folded into the cards, and the app lays over only the others.
+4. Only once that push has succeeded, the edits in "applied" move on the unit from changes.jsonl to
+   changes.applied.jsonl, by their ids: an edit made during the sync, or one apply refused, stays pending.
+
+If fmt, json or the push fails nothing after it runs, and the copy of the edits is kept (its path is printed);
+the next pull takes up from there, since apply skips what it has already applied. Exits 1 when an edit was
+refused (after pushing and archiving the rest). cards.toml and applied.txt are left for you to commit.
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from collections import Counter
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+from board.store import Store  # noqa: E402
+
+REMOTE = "cd practice-recorder && .venv/bin/python -m board.store"
+
+
+def default_repo() -> Path:
+    return Path(os.environ.get("DOBRO_TRANSCRIPTION") or HERE.parent.parent / "dobro-transcription")
+
+
+def fail(msg: str, kept: Path | None = None) -> None:
+    sys.exit(msg + (f"\nthe edits pulled are kept in {kept}" if kept else ""))
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--host", default="practice", help="the control unit's ssh host")
+    ap.add_argument("--from", dest="local", type=Path, help="a local data folder instead (development, tests)")
+    ap.add_argument("--repo", type=Path, default=None,
+                    help="dobro-transcription's checkout (default: $DOBRO_TRANSCRIPTION, else ../dobro-transcription)")
+    ap.add_argument("--python", default="python3", help="what runs board/board.py (default: python3)")
+    a = ap.parse_args()
+    repo = (a.repo or default_repo()).expanduser().resolve()
+    board_py = repo / "board" / "board.py"
+    if not board_py.is_file():
+        sys.exit(f"no board/board.py in {repo} (--repo)")
+    where = str(a.local) if a.local else a.host
+
+    # 1. the edits, as the unit has them
+    if a.local:
+        text = Store(a.local).pending_text()
+    else:
+        got = subprocess.run(["ssh", a.host, f"{REMOTE} pending"], capture_output=True, text=True)
+        if got.returncode:
+            sys.exit(f"could not read the edits on {a.host}: {got.stderr.strip()[-300:]}")
+        text = got.stdout
+    changes = []
+    for line in text.splitlines():
+        try:
+            ch = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(ch, dict) and ch.get("id"):
+            changes.append(ch)
+    if not changes:
+        print(f"no edits on {where} to bring in")
+        return
+    fd, name = tempfile.mkstemp(prefix="board-changes-", suffix=".jsonl")
+    kept = Path(name)
+    with os.fdopen(fd, "w") as f:
+        f.write("".join(json.dumps(ch, ensure_ascii=False, separators=(",", ":")) + "\n" for ch in changes))
+
+    # 2. into cards.toml: apply's refusals are reported, and the rest pushed (it exits 1 for any refusal)
+    r = subprocess.run([a.python, "board/board.py", "apply", str(kept)], cwd=repo, capture_output=True, text=True)
+    if r.stdout.strip():
+        print(r.stdout.strip())
+    if r.returncode:
+        print(f"board.py apply exited {r.returncode}: {r.stderr.strip()[-1200:]}", file=sys.stderr)
+    r = subprocess.run([a.python, "board/board.py", "fmt"], cwd=repo, capture_output=True, text=True)
+    if r.returncode:
+        fail(f"board.py fmt failed ({r.returncode}): {(r.stderr or r.stdout).strip()[-600:]}\n"
+             f"nothing was pushed or archived", kept)
+
+    # 3. the new base on the unit
+    made = subprocess.run([a.python, "board/board.py", "json"], cwd=repo, capture_output=True, text=True)
+    try:
+        folded = set(json.loads(made.stdout).get("applied") or []) if not made.returncode else None
+    except (ValueError, AttributeError):
+        folded = None
+    if folded is None:
+        fail(f"board.py json failed: {(made.stderr or made.stdout).strip()[-600:]}\ncards.toml has the edits; "
+             f"nothing was pushed or archived", kept)
+    push = [str(HERE / "push-board")] + (["--to", str(a.local)] if a.local else ["--host", a.host])
+    pushed = subprocess.run(push, input=made.stdout, capture_output=True, text=True)
+    if pushed.returncode:
+        fail(f"push-board failed: {(pushed.stderr or pushed.stdout).strip()[-600:]}\ncards.toml has the edits; "
+             f"nothing was archived", kept)
+    print(pushed.stdout.strip())
+
+    # 4. the edits folded into the cards: archived on the unit, by id (any the base has, not only these)
+    ids = "".join(i + "\n" for i in sorted(folded))
+    if a.local:
+        moved, left = Store(a.local).archive(folded)
+        said = f"archived {moved}; {left} still pending"
+    else:
+        r = subprocess.run(["ssh", a.host, f"{REMOTE} archive"], input=ids, capture_output=True, text=True)
+        if r.returncode:
+            fail(f"the new cards are on {a.host}, but the edits were not archived there: {r.stderr.strip()[-300:]}\n"
+                 f"the next pull applies them again", kept)
+        said = r.stdout.strip()
+    took = [ch for ch in changes if ch["id"] in folded]
+    refused = [ch for ch in changes if ch["id"] not in folded]
+    kinds = Counter("new" if "new" in ch else "note" if "note" in ch else "set" for ch in took)
+    print(f"brought in {len(took)} edit{'s' if len(took) != 1 else ''} from {where}"
+          + (f" ({', '.join(f'{n} {k}' for k, n in sorted(kinds.items()))})" if took else "") + f"; {said}")
+    if took:
+        print(f"cards.toml and applied.txt in {repo} have them: commit them there")
+    if refused:
+        fail(f"{len(refused)} not applied, still pending on {where}: " + ", ".join(ch["id"] for ch in refused)
+             + " (board.py apply said why, above)", kept)
+    kept.unlink()
+
+
+if __name__ == "__main__":
+    main()

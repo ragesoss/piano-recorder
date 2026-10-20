@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Board</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#121016">
+<style>
+/* The project's cards as a kanban: Backlog, Next, Doing, Waiting, Done, for each kind of work it is for the
+   player (Listen & evaluate, Play & sing, Manage the agent, People, Hardware, or All), area as a chip or as
+   lanes, filters, and a sheet per card with its actions. The room's look
+   (exercises/static/index.html): dark, purple for what to tap. --faint is for lines only (3.5:1 on cards). */
+@font-face { font-family: "Bricolage Grotesque"; src: url(/fonts/bricolage-grotesque.woff2) format("woff2");
+  font-weight: 200 800; font-display: swap; }
+@font-face { font-family: "Public Sans"; src: url(/fonts/public-sans.woff2) format("woff2");
+  font-weight: 100 900; font-display: swap; }
+:root {
+  color-scheme: dark;
+  --bg: #121016; --surf2: #1E1A24; --surf: #28232F; --line: #3E3748; --line-soft: #2F2A37; --dash: #514960;
+  --ink: #F2EEF8; --ink2: #CEC7DA; --ink3: #A79FB4; --faint: #7E768B;
+  --purple-fill: #7C3AED; --purple: #8B5CF6; --purple-line: #A78BFA; --purple-ink: #B9A0FF;
+  --purple-tint: #33264F; --purple-tint2: #45356A;
+  --red-ink: #FF8F85; --red-tint: #3E1F24; --green: #4ADE80; --amber: #E8B93B;
+  --display: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --text: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pad: 20px; --gap: 12px;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.4 var(--text); -webkit-tap-highlight-color: transparent;
+  overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+a { color: var(--purple-ink); }
+h1, h2, h3, p { margin: 0; }
+:focus-visible { outline: 3px solid var(--purple-line); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.svg-i { flex: none; }
+.app { display: flex; flex-direction: column; height: 100vh; height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+
+/* the top: the way home, the views, filters and adding a card */
+.top { flex: none; display: flex; align-items: center; gap: 10px 14px; padding: 10px var(--pad) 6px; flex-wrap: wrap; }
+.home { min-height: 44px; display: inline-flex; align-items: center; gap: 4px; color: var(--ink3); font-size: 17px; text-decoration: none; flex: none; }
+.top h1 { font-family: var(--display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; flex: none; }
+.views { order: 5; flex: 1 1 100%; }
+.views button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 48px; }
+.views button .lbl { text-align: left; }
+@media (min-width: 1100px) { .views button { white-space: nowrap; } }
+.top .end { display: flex; align-items: center; gap: 10px; margin-left: auto; flex: none; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 3px; border-radius: 14px; background: var(--surf2); }
+.seg button { min-height: 44px; border: 0; border-radius: 11px; background: transparent; font-size: 15px; font-weight: 600; padding: 4px 8px;
+  line-height: 1.15; color: var(--ink2); }
+.seg button .n { font-weight: 400; color: var(--ink3); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.seg button[aria-pressed="true"] { background: var(--purple-fill); color: #fff; font-weight: 700; }
+.seg button[aria-pressed="true"] .n { color: #fff; }
+.btn { min-height: 48px; padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1.5px solid var(--line); border-radius: 16px; background: transparent; font-size: 16px; font-weight: 700; color: var(--ink); }
+.btn.go { border: 0; background: var(--purple-fill); color: #fff; }
+.btn.go:disabled { background: #2A2531; color: var(--ink3); }
+.btn.outline-p { border-color: var(--purple); color: var(--purple-ink); }
+.btn .count { min-width: 24px; height: 24px; padding: 0 7px; border-radius: 12px; background: var(--purple-fill); color: #fff; font-size: 14px;
+  display: inline-flex; align-items: center; justify-content: center; }
+.sub { flex: none; display: flex; align-items: center; gap: 8px 14px; padding: 0 var(--pad) 8px; flex-wrap: wrap; font-size: 15px; color: var(--ink3); }
+.sub b { color: var(--ink2); font-weight: 600; }
+.sub .linkish { min-height: 44px; padding: 0 6px; border: 0; background: transparent; color: var(--purple-ink); font-weight: 700; font-size: 15px;
+  text-decoration: underline; text-underline-offset: 3px; }
+.sync { display: inline-flex; align-items: center; gap: 6px; color: var(--ink2); }
+.banner { margin: 0 var(--pad) 8px; padding: 10px 14px; border-radius: 14px; background: var(--red-tint); border: 1.5px solid var(--red-ink);
+  font-size: 16px; display: flex; gap: 12px; align-items: center; }
+.banner.info { background: var(--purple-tint); border-color: var(--purple-line); }
+.banner button { margin-left: auto; min-height: 44px; padding: 0 14px; border-radius: 12px; border: 1.5px solid var(--ink3); background: transparent; }
+
+/* jumping between columns, where they do not all fit (an iPad upright, a phone) */
+.colnav { flex: none; display: none; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding: 0 var(--pad) 8px; }
+.colnav button { min-height: 48px; border: 1.5px solid var(--line); border-radius: 12px; background: transparent; font-size: 14px; font-weight: 600;
+  color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; padding: 2px; }
+.colnav button b { font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.colnav button[aria-current="true"] { border-color: var(--purple); background: var(--purple-tint); color: var(--ink); }
+
+/* the board: five columns; area lanes across them when grouped */
+.board { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 0 var(--pad) 24px;
+  scroll-padding-left: var(--pad); }
+.grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); column-gap: var(--gap); min-width: 100%; }
+.colhead { position: sticky; top: 0; z-index: 3; background: var(--bg); display: flex; align-items: center; gap: 8px; padding: 6px 4px 8px;
+  min-height: 52px; scroll-snap-align: start; }
+.colhead h2 { font-family: var(--display); font-size: 22px; font-weight: 700; }
+.colhead .n { font-size: 15px; color: var(--ink3); font-variant-numeric: tabular-nums; }
+.colhead .older { margin-left: auto; min-height: 44px; padding: 0 10px; border: 0; border-radius: 12px; background: transparent; color: var(--purple-ink);
+  font-size: 14px; font-weight: 700; white-space: nowrap; }
+.lane { grid-column: 1 / -1; padding: 14px 0 6px; }
+.lane h3 { font: inherit; }
+.lane span { position: sticky; left: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink2); }
+.lane span i { width: 10px; height: 10px; border-radius: 50%; background: var(--hue, var(--ink3)); }
+.lane span small { font-size: 14px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--ink3); }
+.cell { display: flex; flex-direction: column; gap: 8px; padding: 8px; background: var(--surf2); border-radius: 16px; min-height: 64px;
+  border: 2px solid transparent; min-width: 0; }
+.cell.over { border-color: var(--purple); background: var(--purple-tint); }
+.cell .empty { color: var(--ink3); font-size: 14px; padding: 8px 6px; }
+.lanes .cell { align-self: start; }
+.lanes .cell.none { min-height: 44px; background: transparent; border: 1.5px dashed var(--line-soft); }
+.cell h3 { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); margin: 8px 4px 0;
+  display: flex; align-items: center; gap: 8px; }
+.cell h3:first-child { margin-top: 2px; }
+.cell h3 i { width: 9px; height: 9px; border-radius: 50%; background: var(--hue, var(--ink3)); }
+.cell .more { min-height: 44px; border: 1.5px dashed var(--dash); border-radius: 12px; background: transparent; color: var(--purple-ink); font-size: 15px; font-weight: 700; }
+.board-empty { max-width: 620px; margin: 40px auto; text-align: center; color: var(--ink2); font-size: 18px; line-height: 1.5; }
+.board-empty code { color: var(--ink); }
+
+/* a card */
+.card { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 10px 12px 10px; text-align: left; background: var(--surf);
+  border: 1.5px solid var(--line); border-radius: 14px; min-height: 64px; flex: none; color: var(--ink); }
+.card:hover { border-color: var(--dash); }
+.card.imp1 { border-left: 5px solid var(--purple); padding-left: 9px; }
+.card.live { border-style: dashed; border-color: var(--green); background: #1F2622; }
+.card.dragging { opacity: .5; }
+.card.flash { outline: 3px solid var(--purple-line); outline-offset: 2px; }
+.card .meta { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; font-size: 13px; }
+.card .meta .area { background: transparent; padding: 0; height: auto; }
+.card .meta .work { background: transparent; padding: 0; height: auto; }
+.card .people { display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; }
+.card .title { font-size: 16px; font-weight: 700; line-height: 1.28; overflow-wrap: anywhere; }
+.card.imp3 .title { font-weight: 600; color: var(--ink2); }
+.card .summary { font-size: 14px; color: var(--ink2); }
+.card .effort { font-size: 14px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.card .flags { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; color: var(--ink3); }
+.work { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 6px; border-radius: 11px; background: var(--purple-tint);
+  color: var(--purple-ink); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.area { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; height: 22px; padding: 0 8px 0 7px; border-radius: 11px;
+  background: var(--surf2); font-size: 13px; font-weight: 600; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.area i { width: 8px; height: 8px; border-radius: 50%; background: var(--hue, var(--ink3)); flex: none; }
+.imp { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: var(--ink3); white-space: nowrap; }
+.imp.i1 { color: var(--purple-ink); }
+.imp.i2 { color: var(--ink2); font-weight: 600; }
+.imp.i3 { font-weight: 400; }
+.who { display: flex; flex-wrap: wrap; gap: 4px; }
+.badge { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 12px; font-size: 13px; font-weight: 700; }
+.badge.player { background: var(--purple-tint); color: var(--purple-ink); }
+.badge.claude { border: 1.5px solid var(--ink3); color: var(--ink); }
+.badge.others { background: var(--surf2); color: var(--ink2); border: 1.5px dashed var(--dash); }
+.flag { display: inline-flex; align-items: center; gap: 4px; }
+.flag.blocked { color: var(--red-ink); font-weight: 700; }
+.flag.waiting { color: var(--amber); font-weight: 600; }
+.flag.unsynced { color: var(--ink2); font-weight: 600; }
+.livepill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 11px; background: #173322; color: var(--green);
+  font-size: 13px; font-weight: 700; }
+.livepill i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+
+/* the sheets: a card, filters, a new card. Over the board on an iPad; the whole screen on a phone */
+dialog { padding: 0; border: 1.5px solid var(--line); border-radius: 22px; background: var(--surf2); color: var(--ink);
+  width: min(720px, calc(100vw - 48px)); max-height: calc(100dvh - 48px); overflow: hidden; }
+dialog[open] { display: flex; flex-direction: column; }
+dialog .seg { background: var(--bg); }
+dialog::backdrop { background: rgba(0, 0, 0, .62); }
+.sh-head { flex: none; display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 12px; border-bottom: 1px solid var(--line); }
+.sh-head .t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.sh-head h2 { font-family: var(--display); font-size: 26px; font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+.sh-head .meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sh-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px 18px 22px; display: flex; flex-direction: column; gap: 18px; }
+.sh-foot { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.sh-foot.said-only:has(.said:empty) { display: none; }
+.sh-foot .grow { flex: 1; min-width: 160px; font-size: 15px; color: var(--ink2); }
+.close { flex: none; }
+.group { display: flex; flex-direction: column; gap: 8px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.group > .k, .group > legend { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); padding: 0; margin-bottom: 8px; }
+.group > .k { margin-bottom: 0; }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 16px; margin: 0; }
+.facts div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.facts dt { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); }
+.facts dd { margin: 0; font-size: 16px; color: var(--ink); overflow-wrap: anywhere; }
+.toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+.toggles button { min-height: 44px; min-width: 44px; justify-content: center; padding: 0 14px; border-radius: 22px; border: 1.5px solid var(--line); background: transparent; font-size: 15px;
+  font-weight: 600; color: var(--ink2); display: inline-flex; align-items: center; gap: 6px; }
+.toggles button[aria-pressed="true"] { background: var(--purple-fill); border-color: var(--purple-fill); color: #fff; font-weight: 700; }
+.toggles button[aria-pressed="true"]::before { content: "✓"; font-weight: 700; }
+.toggles button:disabled { opacity: 1; cursor: not-allowed; }
+.seg.wide button { font-size: 15px; }
+.seg.wide button[aria-pressed="true"]::before { content: "✓ "; }
+.work-seg button { display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap; }
+.work-seg button[aria-pressed="true"]::before { content: "✓"; }
+.qnext { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; padding: 12px 14px; border-radius: 16px; background: var(--surf); border: 1.5px solid var(--line); }
+.qnext p { flex: 1; min-width: 200px; font-size: 15px; color: var(--ink2); }
+.field { display: flex; gap: 8px; flex-wrap: wrap; }
+.field input, .field select, textarea, .add-form input, .add-form select { min-height: 48px; padding: 0 12px; border-radius: 12px; border: 1.5px solid var(--line);
+  background: var(--bg); font-size: 16px; color: var(--ink); min-width: 0; }
+.field input { flex: 1 1 220px; }
+textarea { width: 100%; min-height: 96px; padding: 10px 12px; resize: vertical; line-height: 1.4; }
+details.more > summary { min-height: 44px; display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 16px; font-weight: 700; color: var(--purple-ink);
+  list-style: none; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "▸"; color: var(--ink3); }
+details.more[open] > summary::before { content: "▾"; }
+details.more > div { display: flex; flex-direction: column; gap: 14px; padding-top: 8px; }
+.md { font-size: 16px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
+.md > * + * { margin-top: 8px; }
+.md h2, .md h3, .md h4 { font-size: 17px; font-weight: 700; margin-top: 12px; }
+.md ul, .md ol { margin: 6px 0 0; padding-left: 22px; }
+.md code { font-size: 14px; background: var(--bg); padding: 1px 5px; border-radius: 6px; color: var(--ink); }
+.md pre { background: var(--bg); padding: 10px 12px; border-radius: 10px; overflow-x: auto; font-size: 14px; color: var(--ink); }
+.md table { border-collapse: collapse; font-size: 15px; display: block; overflow-x: auto; }
+.md td, .md th { border: 1px solid var(--line); padding: 4px 8px; text-align: left; }
+.md .none { color: var(--ink3); }
+.rel, .links, .notes { display: flex; flex-direction: column; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.rel button { width: 100%; min-height: 48px; display: flex; align-items: center; gap: 10px; padding: 6px 12px; border: 1.5px solid var(--line); border-radius: 12px;
+  background: var(--surf); text-align: left; font-size: 15px; }
+.rel button .st { margin-left: auto; color: var(--ink3); font-size: 14px; white-space: nowrap; }
+.rel button.open-blocker .st { color: var(--red-ink); font-weight: 700; }
+.links a, .links .path { min-height: 48px; display: flex; flex-direction: column; justify-content: center; gap: 1px; padding: 6px 12px; border-radius: 12px;
+  background: var(--surf); border: 1.5px solid var(--line); text-decoration: none; font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+.links a small, .links .path small { font-size: 13px; font-weight: 400; color: var(--ink3); }
+.links .path { color: var(--ink); font-weight: 600; }
+.links .path code { font-size: 13px; color: var(--ink2); }
+.links a.big { background: var(--purple-fill); border-color: var(--purple-fill); color: #fff; font-size: 18px; min-height: 56px; }
+.links a.big small { color: #FFFFFF; }
+.notes li { padding: 8px 12px; border-radius: 12px; background: var(--surf); font-size: 15px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.notes li small { display: block; color: var(--ink3); font-size: 13px; white-space: normal; margin-bottom: 2px; }
+.about { font-size: 14px; color: var(--ink3); display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.about b { color: var(--ink2); font-weight: 600; }
+.said { font-size: 15px; color: var(--ink2); min-height: 22px; }
+.live-note { font-size: 15px; color: var(--ink2); padding: 10px 12px; border-radius: 12px; background: #1F2622; border: 1.5px dashed var(--green); }
+.add-form { display: flex; flex-direction: column; gap: 16px; }
+.add-form label.k { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); }
+.add-form input[type=text] { width: 100%; font-size: 18px; }
+.add-form select { width: 100%; }
+.hint { font-size: 15px; color: var(--ink3); }
+
+/* an iPad upright: three columns in view, the board scrolls sideways a column at a time */
+@media (max-width: 1099px) {
+  .colnav { display: grid; }
+  .grid { grid-template-columns: repeat(5, var(--colw)); width: max-content; }
+  .board { --colw: calc((100vw - 2 * var(--pad) - 2 * var(--gap)) / 3); scroll-snap-type: x mandatory; }
+}
+/* a phone: one column at a time */
+@media (max-width: 640px) {
+  :root { --pad: 16px; --gap: 16px; }
+  .top { padding-top: 6px; gap: 8px; flex-wrap: wrap; }
+  .top h1 { font-size: 24px; }
+  .top .end { gap: 6px; }
+  .home { font-size: 16px; }
+  .btn { padding: 0 12px; }
+  .wide-only { display: none; }
+  #addBtn { padding: 0; width: 48px; }
+  #addBtn .lbl { display: none; }
+  .board { --colw: calc(100vw - 2 * var(--pad)); }
+  .cell { align-self: start; }  /* one column in view: it ends with its cards, not with the longest column's */
+  .seg button { font-size: 14px; padding: 4px 4px; }
+  .views { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .views button { gap: 4px; }
+  dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; border: 0; margin: 0; }
+  .sh-head h2 { font-size: 23px; }
+  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <a class="home" id="home" href="/"><svg class="svg-i" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="#A79FB4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Music room</a>
+    <h1>Board</h1>
+    <div class="views seg" id="views" role="group" aria-label="Which cards"></div>
+    <div class="end">
+      <button type="button" class="btn" id="filtersBtn" aria-haspopup="dialog">Filters</button>
+      <button type="button" class="btn go" id="addBtn" aria-haspopup="dialog" aria-label="Add a card"><svg class="svg-i" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round"></path></svg><span class="lbl">Add</span></button>
+    </div>
+  </header>
+  <div class="banner" id="error" role="alert" hidden><span id="errorText"></span><button type="button" id="errorOk">OK</button></div>
+  <div class="sub" id="sub"></div>
+  <nav class="colnav" id="colnav" aria-label="Columns"></nav>
+  <main class="board" id="board" aria-label="The cards"></main>
+</div>
+
+<dialog id="sheet" aria-labelledby="sheetTitle"></dialog>
+<dialog id="filters" aria-labelledby="filtersTitle"></dialog>
+<dialog id="add" aria-labelledby="addTitle"></dialog>
+<div class="sr-only" id="say" aria-live="polite"></div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+$("#home").href = `http://${location.hostname}/`;
+
+// --- the contract (dobro-transcription board/board.py; board/store.py)
+const COLS = [["backlog", "Backlog"], ["next", "Next"], ["doing", "Doing"], ["waiting", "Waiting"], ["done", "Done"]];
+const COL_NAME = Object.fromEntries(COLS);
+const WHO = [["player", "You"], ["claude", "Claude"], ["others", "Others"]];
+const WHO_NAME = Object.fromEntries(WHO);
+// the kind of work it is for the player: [id, its name, a short word for a card, what it covers]
+const WORK = [
+  ["listen", "Listen & evaluate", "Listen", "Listening and evaluating: reviews, takes, A/Bs by ear"],
+  ["play", "Play & sing", "Play", "Playing an instrument and singing: what wants recording"],
+  ["agent", "Manage the agent", "Agent", "Managing the agent: decisions, priorities, what it built, Claude's software work"],
+  ["people", "People", "People", "Communicating with other people: emails, maintainers, sign-ups, requests"],
+  ["hardware", "Hardware", "Hardware", "Working with the hardware"],
+];
+const WORK_NAME = Object.fromEntries(WORK.map((w) => [w[0], w[1]]));
+const WORK_WORD = Object.fromEntries(WORK.map((w) => [w[0], w[2]]));
+const IMP = [[1, "High"], [2, "Medium"], [3, "Low"]];
+const IMP_NAME = Object.fromEntries(IMP);
+const EFFORT_P = ["", "5m", "15m", "30m", "1h", "2h", "half-day", "day+"];
+const EFFORT_C = ["", "S", "M", "L", "XL"];
+const P_BUCKET = { "5m": "short", "15m": "short", "30m": "hour", "1h": "hour", "2h": "long", "half-day": "long", "day+": "long" };
+const P_BUCKETS = [["short", "Up to 15m"], ["hour", "30m to 1h"], ["long", "2h or more"]];
+const OLD_DAYS = 14;  // Done shows the last two weeks; older is folded
+const HUES = ["#B9A0FF", "#7DD3FC", "#4ADE80", "#E8B93B", "#FF8F85", "#F0ABFC", "#5EEAD4", "#CEC7DA"];
+
+// --- where to focus: a kind of work (the live cards too: the reviews are listening, the exercises playing), or all
+const VIEWS = WORK.map(([id, name, , about]) => ({ id, name, about, test: (c) => c.work === id }))
+  .concat([{ id: "all", name: "All", about: "Every card", test: () => true }]);
+const VIEW = Object.fromEntries(VIEWS.map((v) => [v.id, v]));
+const ADD_WHO = { agent: ["claude"] };  // who a new card is for, by its work (else you)
+
+// --- remembered on this device (the view, filters, grouping); the page works without it
+const KEY = "board.v1";
+const EMPTY_F = () => ({ area: [], importance: [], who: [], effortP: [], effortC: [] });
+function loadPrefs() {
+  try { const p = JSON.parse(localStorage.getItem(KEY) || "{}"); return p && typeof p === "object" ? p : {}; } catch (e) { return {}; }
+}
+const P = Object.assign({ view: "all", group: "columns", older: false, col: null, addArea: "", addWork: "play" }, loadPrefs());
+P.filters = Object.assign(EMPTY_F(), P.filters || {});
+delete P.filters.kind;
+if (!VIEW[P.view]) P.view = "all";
+function savePrefs() { try { localStorage.setItem(KEY, JSON.stringify(P)); } catch (e) {} }
+
+const S = { data: null, open: null, said: "", busy: false, loadedOnce: false };
+
+// --- the server
+async function api(method, path, body) {
+  const r = await fetch(path, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+  let j = null;
+  try { j = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error((j && j.detail && (typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail))) || `${r.status} ${r.statusText}`);
+  return j;
+}
+function showError(msg, info) { $("#errorText").textContent = msg; $("#error").classList.toggle("info", !!info); $("#error").hidden = false; }
+$("#errorOk").onclick = () => { $("#error").hidden = true; };
+function say(text) { $("#say").textContent = ""; setTimeout(() => { $("#say").textContent = text; }, 30); }
+
+async function load() {
+  try {
+    S.data = await api("GET", "/api/board");
+    render();
+    const c = S.open && byId(S.open), a = document.activeElement;
+    if (c && $("#sheet").open && !S.busy && JSON.stringify(c) !== S.sheetKey && !(a && $("#sheet").contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName))) renderSheet(true);
+  } catch (e) {
+    if (!S.data) showError(`The board did not load: ${e.message}`);
+  }
+}
+
+// --- the cards
+function all() { return S.data ? S.data.cards.concat(S.data.live || []) : []; }
+function byId(id) { return all().find((c) => c.id === id); }
+function areaOf(id) {
+  const list = (S.data && S.data.areas) || [];
+  const i = list.findIndex((a) => a.id === id);
+  if (i >= 0) return { ...list[i], hue: HUES[i % HUES.length] };
+  return { id, name: id ? id : "No area", about: "", hue: "var(--ink3)" };
+}
+function areaRank(id) { const i = ((S.data && S.data.areas) || []).findIndex((a) => a.id === id); return i < 0 ? 99 : i; }
+function today() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function dateOf(s) { const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(s || ""); return m ? new Date(+m[1], m[2] - 1, +m[3]) : null; }
+function isOld(c) {
+  const d = dateOf(c.done || c.updated || c.created);
+  return c.status === "done" && d && (today() - d) / 86400000 > OLD_DAYS;
+}
+function niceDate(s) {
+  const d = dateOf(s);
+  if (!d) return s || "";
+  const days = Math.round((today() - d) / 86400000);
+  const words = days === 0 ? "today" : days === 1 ? "yesterday" : days > 1 && days < 7 ? `${days} days ago` : "";
+  const md = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() === today().getFullYear() ? undefined : "numeric" });
+  return words ? `${md} (${words})` : md;
+}
+function niceTime(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || "";
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+function blockers(c) { return (c.blocked_by || []).map((id) => byId(id) || { id, title: id, status: "", missing: true }); }
+function openBlockers(c) { return blockers(c).filter((b) => b.status !== "done"); }
+function blocks(c) { return S.data.cards.filter((x) => (x.blocked_by || []).includes(c.id)); }
+function effortText(c) {
+  const p = [];
+  if (c.effort_player) p.push(`you ${c.effort_player}`);
+  if (c.effort_claude) p.push(`Claude ${c.effort_claude}`);
+  return p.join(" · ");
+}
+function whoWords(who) {
+  const n = who.map((w) => WHO_NAME[w] || w);
+  return n.length ? (n.length === 1 ? n[0] : n.slice(0, -1).join(", ") + " and " + n[n.length - 1]) : "nobody yet";
+}
+function filtered(view = P.view) {
+  const f = P.filters, v = VIEW[view];
+  return all().filter((c) => v.test(c)
+    && (!f.area.length || f.area.includes(c.area))
+    && (!f.importance.length || f.importance.includes(c.importance))
+    && (!f.who.length || c.who.some((w) => f.who.includes(w)))
+    && (!f.effortP.length || f.effortP.includes(P_BUCKET[c.effort_player]))
+    && (!f.effortC.length || f.effortC.includes(c.effort_claude)));
+}
+function nFilters() { return Object.values(P.filters).reduce((n, a) => n + a.length, 0); }
+function order(a, b) {
+  if (a.status === "done" && b.status === "done") return String(b.done || b.updated || "").localeCompare(String(a.done || a.updated || ""));
+  return (a.importance - b.importance) || ((b.live ? 1 : 0) - (a.live ? 1 : 0))
+    || ((openBlockers(a).length ? 1 : 0) - (openBlockers(b).length ? 1 : 0))
+    || String(b.updated || "").localeCompare(String(a.updated || "")) || a.title.localeCompare(b.title);
+}
+
+// --- small pieces
+const ICON = {
+  bars: (n) => `<svg class="svg-i" width="14" height="12" viewBox="0 0 14 12" aria-hidden="true">${[0, 1, 2].map((i) => `<rect x="${i * 5}" y="${8 - i * 4}" width="3.4" height="${4 + i * 4}" rx="1" fill="currentColor" opacity="${i < n ? 1 : 0.28}"></rect>`).join("")}</svg>`,
+  link: '<svg class="svg-i" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"></path></svg>',
+  block: '<svg class="svg-i" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.6"></circle><path d="M6 6l12 12" stroke="currentColor" stroke-width="2.6"></path></svg>',
+  wait: '<svg class="svg-i" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.6"></circle><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path></svg>',
+  listen: '<path d="M4 15v-3a8 8 0 0 1 16 0v3"></path><rect x="3" y="14" width="4.5" height="6.5" rx="1.6"></rect><rect x="16.5" y="14" width="4.5" height="6.5" rx="1.6"></rect>',
+  play: '<path d="M9 18V5.5l11-2.2v12.4"></path><circle cx="6.5" cy="18" r="2.6"></circle><circle cx="17.5" cy="15.8" r="2.6"></circle>',
+  agent: '<rect x="4.5" y="8" width="15" height="11.5" rx="3.2"></rect><path d="M12 4.2V8M9 13.2v1.2M15 13.2v1.2"></path><circle cx="12" cy="3.6" r="1.1"></circle>',
+  people: '<circle cx="9" cy="8.2" r="3.1"></circle><path d="M3 20a6 6 0 0 1 12 0"></path><circle cx="17" cy="9.2" r="2.5"></circle><path d="M16 14.1a5 5 0 0 1 5.2 5.4"></path>',
+  hardware: '<path d="M9 3v5M15 3v5M6 8h12v3.2a6 6 0 0 1-12 0zM12 17.2V21"></path>',
+  all: '<rect x="4" y="4" width="6.8" height="6.8" rx="1.6"></rect><rect x="13.2" y="4" width="6.8" height="6.8" rx="1.6"></rect><rect x="4" y="13.2" width="6.8" height="6.8" rx="1.6"></rect><rect x="13.2" y="13.2" width="6.8" height="6.8" rx="1.6"></rect>',
+  unsynced: '<svg class="svg-i" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-dasharray="4 3"></circle></svg>',
+};
+// one glyph for each kind of work, always with its word
+function glyph(id, size = 16) { return `<svg class="svg-i" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${ICON[id] || ""}</svg>`; }
+function workHtml(w) { return w ? `<span class="work">${glyph(w, 14)}${esc(WORK_WORD[w] || w)}</span>` : ""; }
+function impHtml(i) { return `<span class="imp i${i}">${ICON.bars(4 - i)}${IMP_NAME[i] || ""}</span>`; }
+function areaHtml(id) { const a = areaOf(id); return `<span class="area" style="--hue:${esc(a.hue)}"><i aria-hidden="true"></i>${esc(a.name)}</span>`; }
+function whoHtml(who) { return `<span class="who">${who.map((w) => `<span class="badge ${esc(w)}">${esc(WHO_NAME[w] || w)}</span>`).join("")}</span>`; }
+
+function cardHtml(c, lanes) {
+  const work = P.view === "all" ? workHtml(c.work) : "";
+  const ob = openBlockers(c), nl = (c.links || []).length;
+  const flags = [];
+  if (ob.length) flags.push(`<span class="flag blocked">${ICON.block}Blocked by ${ob.length}</span>`);
+  if (c.status === "waiting" || c.waiting_on) flags.push(`<span class="flag waiting">${ICON.wait}${c.waiting_on ? `Waiting on ${esc(c.waiting_on)}` : "Waiting"}</span>`);
+  if (nl) flags.push(`<span class="flag">${ICON.link}${nl} link${nl === 1 ? "" : "s"}</span>`);
+  if (c.pending) flags.push(`<span class="flag unsynced">${ICON.unsynced}Not synced</span>`);
+  const drag = canDrag && !c.live ? ' draggable="true"' : "";
+  const meta = (c.live ? '<span class="livepill"><i aria-hidden="true"></i>Live</span>' : "") + impHtml(c.importance) + work + (lanes ? "" : areaHtml(c.area));
+  const eff = effortText(c);
+  return `<button type="button" class="card imp${c.importance}${c.live ? " live" : ""}" data-id="${esc(c.id)}" data-work="${esc(c.work)}" data-status="${esc(c.status)}"${drag}>
+    <span class="title">${esc(c.title)}</span>
+    <span class="meta">${meta}</span>
+    ${c.summary ? `<span class="summary">${esc(c.summary)}</span>` : ""}
+    ${c.live_summary ? `<span class="summary"><span class="livepill"><i aria-hidden="true"></i>Live</span> ${esc(c.live_summary)}</span>` : ""}
+    ${c.live && !eff ? "" : `<span class="people">${c.live ? "" : whoHtml(c.who)}${eff ? `<span class="effort">${esc(eff)}</span>` : ""}</span>`}
+    ${flags.length ? `<span class="flags">${flags.join("")}</span>` : ""}</button>`;
+}
+
+// --- the board
+const canDrag = matchMedia("(hover: hover) and (pointer: fine)").matches;
+const phone = matchMedia("(max-width: 640px)");
+phone.addEventListener("change", () => { if (S.data) render(); });
+function render() {
+  const d = S.data;
+  renderViews();
+  const shown = filtered();
+  const fb = $("#filtersBtn"), nf = nFilters();
+  fb.innerHTML = `Filters${nf ? ` <span class="count">${nf}</span>` : ""}`;
+  fb.setAttribute("aria-label", nf ? `Filters, ${nf} on` : "Filters");
+  // the line under the top: how many, how fresh, what is not synced
+  const bits = [];
+  bits.push(`<span><b>${shown.length}</b> of ${all().length} cards<span class="wide-only"> · ${esc(VIEW[P.view].about)}</span></span>`);
+  if (nf) bits.push(`<button type="button" class="linkish" data-act="clear">Clear filters</button>`);
+  if (d.pending) bits.push(`<span class="sync">${ICON.unsynced}${d.pending} edit${d.pending === 1 ? "" : "s"} not synced to the desktop yet</span>`);
+  if (d.generated) bits.push(`<span class="wide-only">Cards of ${esc(niceTime(d.generated))}</span>`);
+  $("#sub").innerHTML = bits.join("");
+  const board = $("#board");
+  if (!d.has_base && !all().length) {
+    board.innerHTML = `<p class="board-empty">No cards on the unit yet. They come from the desktop:<br><code>python3 board/board.py json | tools/push-board</code></p>`;
+    $("#colnav").innerHTML = ""; return;
+  }
+  const inCol = P.group === "lanes" && phone.matches;  // one column at a time: the areas as headings in it
+  const lanes = P.group === "lanes" && !inCol;
+  const byCol = (list, col) => list.filter((c) => c.status === col).sort(order);
+  const doneAll = shown.filter((c) => c.status === "done"), olderN = doneAll.filter(isOld).length;
+  const visible = shown.filter((c) => !(isOld(c) && !P.older));
+  let html = COLS.map(([k, name]) => {
+    const n = visible.filter((c) => c.status === k).length;
+    const older = k === "done" && olderN ? `<button type="button" class="older" data-act="older" aria-pressed="${P.older}" aria-label="${P.older ? `Hide the ${olderN} done more than 2 weeks ago` : `Show ${olderN} more, done more than 2 weeks ago`}">${P.older ? "Hide older" : `+ ${olderN} older`}</button>` : "";
+    return `<div class="colhead" id="col-${k}" data-col="${k}"><h2>${name}</h2><span class="n">${n}</span>${older}</div>`;
+  }).join("");
+  const item = (c) => `<div role="listitem">${cardHtml(c, lanes || inCol)}</div>`;
+  const grouped = (list) => [...new Set(list.map((c) => c.area))].sort((a, b) => areaRank(a) - areaRank(b)).map((id) => {
+    const a = areaOf(id);
+    return `<h3 style="--hue:${esc(a.hue)}"><i aria-hidden="true"></i>${esc(a.name)}</h3>` + list.filter((c) => c.area === id).map(item).join("");
+  }).join("");
+  const cell = (list, k) => `<div class="cell${list.length ? "" : " none"}" data-status="${k}" role="list" aria-label="${COL_NAME[k]}">${list.length
+    ? (inCol ? grouped(list) : list.map(item).join("")) : `<span class="empty">${lanes ? "—" : "None"}</span>`}</div>`;
+  if (lanes) {
+    const ids = [...new Set([...(d.areas || []).map((a) => a.id), ...visible.map((c) => c.area)])];
+    for (const id of ids) {
+      const mine = visible.filter((c) => c.area === id);
+      if (!mine.length) continue;
+      const a = areaOf(id);
+      html += `<div class="lane"><h3><span style="--hue:${esc(a.hue)}"><i aria-hidden="true"></i>${esc(a.name)} <small>${mine.length} card${mine.length === 1 ? "" : "s"}</small></span></h3></div>`;
+      html += COLS.map(([k]) => cell(byCol(mine, k), k)).join("");
+    }
+    if (!visible.length) html += `<p class="board-empty" style="grid-column:1/-1">No cards here${nf ? " with these filters" : ""}.</p>`;
+  } else {
+    html += COLS.map(([k]) => cell(byCol(visible, k), k)).join("");
+  }
+  board.innerHTML = `<div class="grid${lanes ? " lanes" : ""}">${html}</div>`;
+  $("#colnav").innerHTML = COLS.map(([k, name]) => { const n = visible.filter((c) => c.status === k).length;
+    return `<button type="button" data-act="jump" data-col="${k}" aria-label="${name}, ${n} card${n === 1 ? "" : "s"}">${name}<b>${n}</b></button>`; }).join("");
+  markCol();
+  if (!S.loadedOnce) {  // the first time on a narrow screen: open at the column left last (Next the first time)
+    S.loadedOnce = true;
+    if (getComputedStyle($("#colnav")).display !== "none") jump(P.col || "next", false);
+  }
+}
+function renderViews() {
+  $("#views").innerHTML = VIEWS.map((v) => {
+    const n = all().filter((c) => v.test(c) && c.status !== "done").length;
+    return `<button type="button" data-view="${v.id}" aria-pressed="${P.view === v.id}" title="${esc(v.about)}" aria-label="${esc(v.name)}, ${n} open">${glyph(v.id, 18)}<span class="lbl">${esc(v.name)}<span class="n">${n}</span></span></button>`;
+  }).join("");
+}
+function colIndexInView() {
+  const b = $("#board"), heads = [...b.querySelectorAll(".colhead")];
+  if (!heads.length) return 0;
+  const left = b.scrollLeft;
+  let best = 0, dist = Infinity;
+  heads.forEach((h, i) => { const dd = Math.abs(h.offsetLeft - parseFloat(getComputedStyle(b).paddingLeft) - left); if (dd < dist) { dist = dd; best = i; } });
+  return best;
+}
+function markCol() {
+  const i = colIndexInView();
+  document.querySelectorAll("#colnav button").forEach((btn, j) => btn.setAttribute("aria-current", String(j === i)));
+}
+function jump(col, smooth = true) {
+  const h = document.getElementById(`col-${col}`), b = $("#board");
+  if (!h) return;
+  b.scrollTo({ left: h.offsetLeft - parseFloat(getComputedStyle(b).paddingLeft), behavior: smooth ? "smooth" : "auto" });
+  P.col = col; savePrefs();
+  setTimeout(markCol, smooth ? 400 : 0);
+}
+let scrollTimer = null;
+$("#board").addEventListener("scroll", () => {
+  clearTimeout(scrollTimer);
+  scrollTimer = setTimeout(() => { markCol(); const i = colIndexInView(); if (COLS[i] && getComputedStyle($("#colnav")).display !== "none") { P.col = COLS[i][0]; savePrefs(); } }, 120);
+}, { passive: true });
+
+// --- the markdown of a card's details: headings, paragraphs, lists, tables, code. Every bit of text
+// escaped; a link is a link only when it goes to http(s), else its text.
+function inline(s) {
+  return s.split(/(`[^`]+`)/).map((part) => {
+    if (/^`[^`]+`$/.test(part)) return `<code>${esc(part.slice(1, -1))}</code>`;
+    const out = [];
+    let last = 0;
+    const re = /\[([^\]]+)\]\(([^)\s]*)\)/g;
+    let m;
+    while ((m = re.exec(part))) {
+      out.push(emph(esc(part.slice(last, m.index))));
+      out.push(/^https?:\/\//i.test(m[2]) ? `<a href="${esc(m[2])}" target="_blank" rel="noopener noreferrer">${emph(esc(m[1]))}</a>` : emph(esc(m[1])));
+      last = re.lastIndex;
+    }
+    out.push(emph(esc(part.slice(last))));
+    return out.join("");
+  }).join("");
+}
+function emph(s) { return s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>"); }
+const LIST = /^\s*([-*]|\d+\.)\s+(.*)$/, BLOCK = /^(#{1,6}\s|```|\s*\||\s*([-*]|\d+\.)\s)/;
+function markdown(text) {
+  const lines = String(text || "").replace(/\r/g, "").split("\n"), out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+    if (/^```/.test(line)) {
+      const buf = [];
+      for (i++; i < lines.length && !/^```/.test(lines[i]); i++) buf.push(lines[i]);
+      i++; out.push(`<pre>${esc(buf.join("\n"))}</pre>`); continue;
+    }
+    const h = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (h) { const n = Math.min(h[1].length + 1, 4); out.push(`<h${n}>${inline(h[2])}</h${n}>`); i++; continue; }
+    if (/^\s*\|/.test(line)) {
+      const rows = [];
+      for (; i < lines.length && /^\s*\|/.test(lines[i]); i++) {
+        if (/^\s*\|[\s:|-]+\|?\s*$/.test(lines[i])) continue;
+        rows.push(lines[i].trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => inline(c.trim())));
+      }
+      out.push("<table>" + rows.map((r, n) => "<tr>" + r.map((c) => n ? `<td>${c}</td>` : `<th>${c}</th>`).join("") + "</tr>").join("") + "</table>");
+      continue;
+    }
+    const li = LIST.exec(line);
+    if (li) {
+      const ordered = /\d/.test(li[1]), items = [];
+      while (i < lines.length) {
+        const m = LIST.exec(lines[i]);
+        if (m && /\d/.test(m[1]) === ordered) items.push(m[2]);
+        else if (items.length && /^\s+\S/.test(lines[i]) && !m) items[items.length - 1] += " " + lines[i].trim();
+        else break;
+        i++;
+      }
+      const tag = ordered ? "ol" : "ul";
+      out.push(`<${tag}>` + items.map((x) => `<li>${inline(x)}</li>`).join("") + `</${tag}>`);
+      continue;
+    }
+    const buf = [];
+    for (; i < lines.length && lines[i].trim() && !BLOCK.test(lines[i]); i++) buf.push(lines[i].trim());
+    out.push(`<p>${inline(buf.join(" "))}</p>`);
+  }
+  return out.join("\n");
+}
+
+// --- a card's sheet
+function openCard(id, from) {
+  if (!$("#sheet").open) S.from = from || document.activeElement;
+  S.open = id; S.said = "";
+  renderSheet(false);
+  const dlg = $("#sheet");
+  if (!dlg.open) dlg.showModal();
+  dlg.querySelector(".sh-body").scrollTop = 0;
+  dlg.querySelector(".close").focus();
+}
+function linkHtml(l, big) {
+  // a URL is a link, whatever its repo says (every link has one); anything else is a path in that repo, on the desktop
+  if (/^https?:\/\//i.test(l.href || "")) {
+    let where = "";
+    try { const u = new URL(l.href); where = u.host + (u.hash || u.pathname !== "/" ? (u.pathname !== "/" ? u.pathname : "") + u.hash : ""); } catch (e) { where = l.href; }
+    return `<li><a href="${esc(l.href)}" target="_blank" rel="noopener"${big ? ' class="big"' : ""}>${esc(l.label || l.href)}<small>${esc(where)}</small></a></li>`;
+  }
+  return `<li><span class="path">${esc(l.label || l.href)}<small>${l.repo ? `On the desktop, in ${esc(l.repo)}: ` : "On the desktop: "}<code>${esc(l.href)}</code></small></span></li>`;
+}
+function workSeg(cur, id) {  // the five kinds of work, each with its glyph and word
+  return `<div class="seg wide work-seg" role="group" aria-label="Work"${id ? ` id="${id}"` : ""}>${WORK.map(([w, , word]) =>
+    `<button type="button" data-work="${w}" aria-pressed="${w === cur}">${glyph(w, 16)}${esc(word)}</button>`).join("")}</div>`;
+}
+function renderSheet(keep) {
+  const c = byId(S.open), dlg = $("#sheet");
+  if (!c) { if (dlg.open) dlg.close(); return; }
+  S.sheetKey = JSON.stringify(c);
+  const body = dlg.querySelector(".sh-body"), scroll = body ? body.scrollTop : 0;
+  const draft = dlg.querySelector("#noteText") ? dlg.querySelector("#noteText").value : "";
+  const waitDraft = dlg.querySelector("#waitText") ? dlg.querySelector("#waitText").value : null;
+  const moreOpen = dlg.querySelector("details.more") ? dlg.querySelector("details.more").open : false;
+  const head = `<div class="sh-head"><div class="t"><div class="meta">${c.live ? '<span class="livepill"><i aria-hidden="true"></i>Live</span>' : ""}${workHtml(c.work)}${areaHtml(c.area)}${impHtml(c.importance)}${c.pending ? `<span class="flag unsynced">${ICON.unsynced}Not synced yet</span>` : ""}</div>
+      <h2 id="sheetTitle">${esc(c.title)}</h2></div><button type="button" class="btn close" data-act="close">Done</button></div>`;
+  if (c.live) {
+    dlg.innerHTML = head + `<div class="sh-body">
+      ${c.summary ? `<p style="font-size:18px;font-weight:600">${esc(c.summary)}</p>` : ""}
+      ${c.details ? `<div class="md">${markdown(c.details)}</div>` : ""}
+      <ul class="links">${(c.links || []).map((l, i) => linkHtml(l, i === 0)).join("")}</ul>
+      <p class="live-note">Live from ${c.live === "review" ? "the review app" : "the exercise app"}: it changes there as you go, and is not kept on the board.</p></div>`;
+    return;
+  }
+  const ob = blockers(c), bl = blocks(c);
+  const seg = (name, items, cur, attr) => `<div class="seg wide" role="group" aria-label="${name}">${items.map(([v, label]) =>
+    `<button type="button" ${attr}="${esc(v)}" aria-pressed="${String(v) === String(cur)}">${esc(label)}</button>`).join("")}</div>`;
+  const queued = c.status === "next" && c.who.includes("claude") && c.importance === 1;
+  const qnext = `<div class="qnext"><p>${queued ? "<b>Queued for Claude:</b> in Next, Claude among who, high importance." : "Puts it in <b>Next</b>, adds <b>Claude</b> to who, and makes it <b>high</b> importance: Claude's queue."}</p>
+      <button type="button" class="btn ${c.work === "agent" ? "go" : "outline-p"}" data-act="claude-next"${queued ? " disabled" : ""}>${queued ? "Queued for Claude" : "Claude: do this next"}</button></div>`;
+  const facts = [["Column", COL_NAME[c.status]], ["Who", whoWords(c.who)], ["Work", WORK_NAME[c.work] || "Not set"],
+    ["Your time", c.effort_player || "Not set"], ["Claude's size", c.effort_claude || "Not set"]];
+  if (c.waiting_on) facts.push(["Waiting on", c.waiting_on]);
+  const notes = (c.notes || []).map((n) => `<li><small>${esc(niceTime(n.at))}${n.pending ? " · not synced yet" : ""}</small>${esc(n.text)}</li>`).join("");
+  const wait = c.status === "waiting" || c.waiting_on;
+  dlg.innerHTML = head + `<div class="sh-body">
+    ${c.live_summary ? `<div class="live-note">Live from the review app: <b>${esc(c.live_summary)}</b>.<ul class="links" style="margin-top:8px">${linkHtml(c.live_link, true)}</ul></div>` : ""}
+    <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
+    <div class="group"><span class="k" id="moveK">Move to</span>${seg("Move to", COLS, c.status, "data-status")}</div>
+    ${wait ? `<div class="group"><label class="k" for="waitText">Waiting on</label><div class="field"><input id="waitText" type="text" maxlength="300" value="${esc(waitDraft ?? c.waiting_on)}" placeholder="Who or what"><button type="button" class="btn" data-act="wait">Save</button></div></div>` : ""}
+    ${c.work === "agent" ? qnext : ""}
+    <div class="group"><span class="k">Importance</span>${seg("Importance", IMP, c.importance, "data-imp")}</div>
+    <div class="group"><span class="k">Who</span><div class="toggles" role="group" aria-label="Who">${WHO.map(([w, label]) => {
+      const on = c.who.includes(w), last = on && c.who.length === 1;
+      return `<button type="button" data-who="${w}" aria-pressed="${on}"${last ? ' disabled title="A card needs someone"' : ""}>${label}</button>`; }).join("")}</div></div>
+    ${c.work === "agent" ? "" : qnext}
+    <details class="more"${moreOpen ? " open" : ""}><summary>Work, effort, area${wait ? "" : ", waiting on"}</summary><div>
+      <div class="group"><span class="k">Work</span>${workSeg(c.work)}</div>
+      <div class="group"><label class="k" for="effP">Your time</label><div class="field"><select id="effP" data-field="effort_player">${EFFORT_P.map((e) => `<option value="${e}"${e === c.effort_player ? " selected" : ""}>${e || "Not set"}</option>`).join("")}</select></div></div>
+      <div class="group"><span class="k">Claude's size</span>${seg("Claude's size", EFFORT_C.map((e) => [e, e || "Not set"]), c.effort_claude, "data-effc")}</div>
+      <div class="group"><label class="k" for="areaSel">Area</label><div class="field"><select id="areaSel" data-field="area">${(S.data.areas || []).map((a) => `<option value="${esc(a.id)}"${a.id === c.area ? " selected" : ""}>${esc(a.name)}</option>`).join("")}</select></div></div>
+      ${wait ? "" : `<div class="group"><label class="k" for="waitText">Waiting on</label><div class="field"><input id="waitText" type="text" maxlength="300" value="${esc(waitDraft ?? c.waiting_on)}" placeholder="Who or what"><button type="button" class="btn" data-act="wait">Save</button></div></div>`}
+    </div></details>
+    <div class="group"><span class="k">Details</span><div class="md">${c.details ? markdown(c.details) : '<p class="none">None yet.</p>'}</div></div>
+    ${ob.length ? `<div class="group"><span class="k">Blocked by</span><ul class="rel">${ob.map((b) => `<li><button type="button" data-open="${esc(b.id)}" class="${b.status !== "done" ? "open-blocker" : ""}"${b.missing ? " disabled" : ""}>${esc(b.title)}<span class="st">${b.missing ? "not on the board" : b.status === "done" ? "Done" : COL_NAME[b.status]}</span></button></li>`).join("")}</ul></div>` : ""}
+    ${bl.length ? `<div class="group"><span class="k">Blocks</span><ul class="rel">${bl.map((b) => `<li><button type="button" data-open="${esc(b.id)}">${esc(b.title)}<span class="st">${COL_NAME[b.status]}</span></button></li>`).join("")}</ul></div>` : ""}
+    ${(c.links || []).length ? `<div class="group"><span class="k">Links</span><ul class="links">${c.links.map((l) => linkHtml(l)).join("")}</ul></div>` : ""}
+    <div class="group"><span class="k">Notes</span>${notes ? `<ul class="notes">${notes}</ul>` : ""}
+      <label class="sr-only" for="noteText">A note</label><textarea id="noteText" maxlength="4000" placeholder="A note for this card"></textarea>
+      <div><button type="button" class="btn outline-p" data-act="note">Add the note</button></div></div>
+    <div class="about">${c.source ? `<span><b>Source</b> ${esc(c.source)}</span>` : c.new ? "<span><b>Source</b> added on the board, not synced yet</span>" : ""}
+      <span><b>Created</b> ${esc(niceDate(c.created) || "—")} · <b>Updated</b> ${esc(niceDate(c.updated) || "—")}${c.done ? ` · <b>Done</b> ${esc(niceDate(c.done))}` : ""}</span>
+      <span>${esc(c.id)}</span></div>
+  </div>
+  <div class="sh-foot said-only"><span class="grow said">${esc(S.said)}</span></div>`;
+  dlg.querySelector("#noteText").value = draft;
+  if (keep) dlg.querySelector(".sh-body").scrollTop = scroll;
+}
+
+async function edit(fn, words) {
+  if (S.busy) return;
+  S.busy = true;
+  try {
+    const r = await fn();
+    if (r && r.card) {
+      const list = S.data.cards, i = list.findIndex((x) => x.id === r.card.id);
+      if (i >= 0) list[i] = r.card; else list.push(r.card);
+      S.data.pending = list.reduce((n, x) => n + (x.pending || 0), 0);
+    }
+    S.said = r && r.change === null ? "No change." : `${words} Not synced to the desktop yet.`;
+    say(S.said);
+    render();
+    if ($("#sheet").open) renderSheet(true);
+    return r;
+  } catch (e) {
+    showError(`Not saved: ${e.message}`);
+  } finally {
+    S.busy = false;
+  }
+}
+const patch = (fields, words) => edit(() => api("PATCH", `/api/cards/${encodeURIComponent(S.open)}`, fields), words);
+
+$("#sheet").addEventListener("click", (ev) => {
+  const dlg = $("#sheet");
+  if (ev.target === dlg) { dlg.close(); return; }  // a tap on the backdrop
+  const b = ev.target.closest("button");
+  if (!b || b.disabled) return;
+  const c = byId(S.open);
+  if (b.dataset.act === "close") dlg.close();
+  else if (b.dataset.open) openCard(b.dataset.open);
+  else if (!c || c.live) return;
+  else if (b.dataset.status) patch({ status: b.dataset.status }, `Moved to ${COL_NAME[b.dataset.status]}.`);
+  else if (b.dataset.imp) patch({ importance: +b.dataset.imp }, `${IMP_NAME[+b.dataset.imp]} importance.`);
+  else if (b.dataset.work) patch({ work: b.dataset.work }, `Work: ${WORK_NAME[b.dataset.work]}.`);
+  else if (b.dataset.effc !== undefined) patch({ effort_claude: b.dataset.effc }, `Claude's size: ${b.dataset.effc || "not set"}.`);
+  else if (b.dataset.who) {
+    const w = b.dataset.who, who = c.who.includes(w) ? c.who.filter((x) => x !== w) : WHO.map(([x]) => x).filter((x) => x === w || c.who.includes(x));
+    patch({ who }, `For ${whoWords(who)}.`);
+  } else if (b.dataset.act === "claude-next") edit(() => api("POST", `/api/cards/${encodeURIComponent(S.open)}/claude-next`), "Queued for Claude: in Next, high importance.");
+  else if (b.dataset.act === "wait") patch({ waiting_on: dlg.querySelector("#waitText").value }, "Waiting on saved.");
+  else if (b.dataset.act === "note") {
+    const t = dlg.querySelector("#noteText"), text = t.value.trim();
+    if (!text) { t.focus(); return; }
+    edit(() => api("POST", `/api/cards/${encodeURIComponent(S.open)}/notes`, { note: text }), "Note added.").then((r) => { if (r) { const tt = $("#noteText"); if (tt) tt.value = ""; } });
+  }
+});
+$("#sheet").addEventListener("change", (ev) => {
+  const f = ev.target.dataset && ev.target.dataset.field;
+  if (f === "effort_player") patch({ effort_player: ev.target.value }, `Your time: ${ev.target.value || "not set"}.`);
+  if (f === "area") patch({ area: ev.target.value }, `Area: ${areaOf(ev.target.value).name}.`);
+});
+$("#sheet").addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.target.id === "waitText") { ev.preventDefault(); patch({ waiting_on: ev.target.value }, "Waiting on saved."); } });
+$("#sheet").addEventListener("close", () => {
+  S.open = null;
+  const back = S.from && document.body.contains(S.from) ? S.from : document.querySelector(`.card[data-id="${CSS.escape(S.lastOpen || "")}"]`);
+  if (back) back.focus();
+});
+
+// --- filters
+function renderFilters() {
+  const f = P.filters, dlg = $("#filters");
+  const group = (key, name, items) => `<fieldset class="group"><legend>${name}</legend><div class="toggles">${items.map(([v, label]) =>
+    `<button type="button" data-f="${key}" data-v="${esc(v)}" aria-pressed="${f[key].includes(v)}">${esc(label)}</button>`).join("")}</div></fieldset>`;
+  const n = filtered().length;
+  dlg.innerHTML = `<div class="sh-head"><div class="t"><h2 id="filtersTitle">Filters</h2></div><button type="button" class="btn close" data-act="close">Done</button></div>
+    <div class="sh-body">
+      <p class="hint">Nothing chosen in a row shows them all. Kept on this ${/iPad|iPhone|Android/.test(navigator.userAgent) ? "device" : "browser"}.</p>
+      <fieldset class="group"><legend>Group by</legend><div class="seg wide" role="group" aria-label="Group by">
+        <button type="button" data-group="columns" aria-pressed="${P.group === "columns"}">Columns, an area on each card</button>
+        <button type="button" data-group="lanes" aria-pressed="${P.group === "lanes"}">Area lanes</button></div></fieldset>
+      ${group("area", "Area", (S.data.areas || []).map((a) => [a.id, a.name]))}
+      ${group("importance", "Importance", IMP)}
+      ${group("who", "Who", WHO)}
+      ${group("effortP", "Your time", P_BUCKETS)}
+      ${group("effortC", "Claude's size", EFFORT_C.filter(Boolean).map((e) => [e, e]))}
+    </div>
+    <div class="sh-foot"><button type="button" class="btn" data-act="clear"${nFilters() ? "" : " disabled"}>Clear filters</button>
+      <button type="button" class="btn go" data-act="close" style="margin-left:auto">Show ${n} card${n === 1 ? "" : "s"}</button></div>`;
+}
+$("#filtersBtn").onclick = () => { renderFilters(); $("#filters").showModal(); $("#filters").querySelector(".close").focus(); };
+$("#filters").addEventListener("click", (ev) => {
+  const dlg = $("#filters");
+  if (ev.target === dlg) { dlg.close(); return; }
+  const b = ev.target.closest("button");
+  if (!b || b.disabled) return;
+  if (b.dataset.act === "close") { dlg.close(); return; }
+  if (b.dataset.act === "clear") P.filters = EMPTY_F();
+  else if (b.dataset.group) P.group = b.dataset.group;
+  else if (b.dataset.f) {
+    const key = b.dataset.f, v = key === "importance" ? +b.dataset.v : b.dataset.v, list = P.filters[key];
+    P.filters[key] = list.includes(v) ? list.filter((x) => x !== v) : list.concat([v]);
+  }
+  savePrefs(); render();
+  const focus = b.dataset.f ? `[data-f="${b.dataset.f}"][data-v="${CSS.escape(b.dataset.v)}"]` : b.dataset.group ? `[data-group="${b.dataset.group}"]` : ".close";
+  renderFilters(); const el = dlg.querySelector(focus); if (el) el.focus();
+});
+$("#filters").addEventListener("close", () => $("#filtersBtn").focus());
+
+// --- a new card: a title, an area, who and its work; the rest defaults (Backlog, medium importance)
+function renderAdd() {
+  const dlg = $("#add"), areas = S.data.areas || [];
+  const work = P.view !== "all" ? P.view : WORK_NAME[P.addWork] ? P.addWork : "play";
+  const area = P.filters.area.length === 1 ? P.filters.area[0] : areas.some((a) => a.id === P.addArea) ? P.addArea : (areas[0] || {}).id;
+  S.addWho = (ADD_WHO[work] || ["player"]).slice(); S.addWork = work;
+  dlg.innerHTML = `<div class="sh-head"><div class="t"><h2 id="addTitle">Add a card</h2></div><button type="button" class="btn close" data-act="close">Cancel</button></div>
+    <form class="sh-body add-form" id="addForm" novalidate>
+      <div class="group"><label class="k" for="addTitleIn">Title</label><input id="addTitleIn" type="text" maxlength="200" required autocomplete="off" placeholder="What wants doing"></div>
+      <div class="group"><label class="k" for="addArea">Area</label><select id="addArea">${areas.map((a) => `<option value="${esc(a.id)}"${a.id === area ? " selected" : ""}>${esc(a.name)}</option>`).join("")}</select></div>
+      <div class="group"><span class="k">Who</span><div class="toggles" role="group" aria-label="Who" id="addWho"></div></div>
+      <div class="group"><span class="k">Work</span><div id="addWork"></div></div>
+      <p class="hint">It goes into Backlog, medium importance. Open it to move it or change the rest.</p>
+    </form>
+    <div class="sh-foot"><span class="grow said" id="addSaid" aria-live="polite"></span><button type="submit" form="addForm" class="btn go">Add the card</button></div>`;
+  renderAddChoices();
+}
+function renderAddChoices() {
+  $("#addWho").innerHTML = WHO.map(([w, label]) => `<button type="button" data-who="${w}" aria-pressed="${S.addWho.includes(w)}"${S.addWho.length === 1 && S.addWho[0] === w ? " disabled" : ""}>${label}</button>`).join("");
+  $("#addWork").innerHTML = workSeg(S.addWork);
+}
+$("#addBtn").onclick = () => {
+  if (!S.data || !(S.data.areas || []).length) { showError("There are no areas yet: push the cards from the desktop first (tools/push-board)."); return; }
+  renderAdd(); $("#add").showModal(); $("#addTitleIn").focus();
+};
+$("#add").addEventListener("click", (ev) => {
+  const dlg = $("#add");
+  if (ev.target === dlg) { dlg.close(); return; }
+  const b = ev.target.closest("button");
+  if (!b || b.disabled) return;
+  if (b.dataset.act === "close") dlg.close();
+  else if (b.dataset.who) {
+    const w = b.dataset.who;
+    S.addWho = S.addWho.includes(w) ? S.addWho.filter((x) => x !== w) : WHO.map(([x]) => x).filter((x) => x === w || S.addWho.includes(x));
+    renderAddChoices(); $(`#addWho [data-who="${w}"]`).focus();
+  } else if (b.dataset.work) { S.addWork = b.dataset.work; renderAddChoices(); $(`#addWork [data-work="${b.dataset.work}"]`).focus(); }
+});
+$("#add").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const title = $("#addTitleIn").value.trim();
+  if (!title) { $("#addSaid").textContent = "A card needs a title."; $("#addTitleIn").focus(); return; }
+  const area = $("#addArea").value;
+  P.addArea = area; if (P.view === "all") P.addWork = S.addWork; savePrefs();
+  try {
+    const r = await api("POST", "/api/cards", { title, area, who: S.addWho, work: S.addWork });
+    S.data.cards.push(r.card);
+    S.data.pending = S.data.cards.reduce((n, x) => n + (x.pending || 0), 0);
+    $("#add").close();
+    // shown even if this view or a filter would hide it: say where it went
+    const hidden = !filtered().some((c) => c.id === r.card.id);
+    render();
+    say(`Added "${r.card.title}" to Backlog${hidden ? ", which this view or a filter hides" : ""}. Not synced yet.`);
+    const el = document.querySelector(`.card[data-id="${CSS.escape(r.card.id)}"]`);
+    if (el) {
+      jump("backlog", false);
+      el.scrollIntoView({ block: "nearest", inline: "nearest" }); el.classList.add("flash"); el.focus();
+      setTimeout(() => el.classList.remove("flash"), 1600);
+    } else showError(`Added "${r.card.title}" to Backlog. This view or a filter hides it: All shows it.`, true);
+  } catch (e) { $("#addSaid").textContent = `Not added: ${e.message}`; }
+});
+
+// --- the board's own taps, and drags between columns (a mouse only; on a touch screen, the sheet's buttons)
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("button");
+  if (!b || ev.target.closest("dialog")) return;
+  if (b.dataset.view) { P.view = b.dataset.view; savePrefs(); render(); say(`${VIEW[P.view].name}: ${filtered().length} cards.`); }
+  else if (b.classList.contains("card")) { S.lastOpen = b.dataset.id; openCard(b.dataset.id, b); }
+  else if (b.dataset.act === "older") { P.older = !P.older; savePrefs(); render(); }
+  else if (b.dataset.act === "clear") { P.filters = EMPTY_F(); savePrefs(); render(); }
+  else if (b.dataset.act === "jump") jump(b.dataset.col);
+});
+let dragId = null;
+$("#board").addEventListener("dragstart", (ev) => {
+  const el = ev.target.closest && ev.target.closest(".card");
+  if (!el || !el.draggable) return;
+  dragId = el.dataset.id; el.classList.add("dragging");
+  ev.dataTransfer.effectAllowed = "move"; ev.dataTransfer.setData("text/plain", dragId);
+});
+$("#board").addEventListener("dragend", (ev) => {
+  dragId = null;
+  document.querySelectorAll(".dragging, .cell.over").forEach((el) => el.classList.remove("dragging", "over"));
+});
+$("#board").addEventListener("dragover", (ev) => {
+  const cell = ev.target.closest(".cell");
+  if (!cell || !dragId) return;
+  ev.preventDefault(); ev.dataTransfer.dropEffect = "move";
+  document.querySelectorAll(".cell.over").forEach((el) => el !== cell && el.classList.remove("over"));
+  cell.classList.add("over");
+});
+$("#board").addEventListener("drop", (ev) => {
+  const cell = ev.target.closest(".cell");
+  if (!cell || !dragId) return;
+  ev.preventDefault();
+  const id = dragId, to = cell.dataset.status, c = byId(id);
+  cell.classList.remove("over");
+  if (!c || c.status === to) return;
+  edit(() => api("PATCH", `/api/cards/${encodeURIComponent(id)}`, { status: to }), `"${c.title}" moved to ${COL_NAME[to]}.`);
+});
+
+// --- kept fresh: every 30 s while in view (the live cards, edits from another device)
+setInterval(() => { if (!document.hidden) load(); }, 30000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+load();
+</script>
+</body>
+</html>

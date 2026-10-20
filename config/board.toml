@@ -1,0 +1,18 @@
+# The board (board/server.py), installed once as /etc/room-board.toml by setup/install.sh.
+# It holds no audio device and takes no turns: it is in no peers list, and lists none.
+
+port = 8007
+# The cards (cards.json, from tools/push-board) and the player's edits (changes.jsonl, and
+# changes.applied.jsonl once tools/pull-board has brought them to the desktop). "~" is the home of the
+# user the service runs as.
+data_dir = "~/board-data"
+
+# Live cards: read from these apps on the unit, shown and never stored. One that does not answer has
+# no cards. The area is the board's area each one's cards go in (an id in cards.json's areas).
+[live]
+review = "http://127.0.0.1:8005"      # the review app: a card for each review with questions open
+review_area = "dobro"
+exercises = "http://127.0.0.1:8002"   # the exercise app: one card, what each instrument wants recorded
+exercises_area = "dobro"
+timeout = 1.5                         # seconds, each
+ttl = 10                              # read again at most this often

@@ -44,6 +44,14 @@ if [ ! -f /etc/take-transcriber.toml ]; then
 fi
 mkdir -p "$(PYTHONPATH="$app" "$app/.venv/bin/python" -c "from recorder.config import load_config; print(load_config('/etc/take-transcriber.toml').takes_dir)")"
 
+# The board (board/): its own config, and its data (the cards pushed by tools/push-board, the player's edits).
+# It holds no audio device and is in no peers list.
+if [ ! -f /etc/room-board.toml ]; then
+    sudo install -m 644 "$app/config/board.toml" /etc/room-board.toml
+    echo "installed /etc/room-board.toml"
+fi
+mkdir -p "$(ROOM_BOARD_CONFIG=/etc/room-board.toml PYTHONPATH="$app" "$app/.venv/bin/python" -m board.store datadir)"
+
 # The services: (re)installed and restarted on every run. room-home is the
 # home page on port 80, linking this and the other apps (home/server.py).
 if [ ! -f /etc/room-home.toml ]; then
@@ -55,12 +63,12 @@ fi
 user=$(id -un)
 unit_tmp=$(mktemp)
 trap 'rm -f "$unit_tmp"' EXIT
-for unit in practice-recorder exercise-recorder chord-listener take-transcriber room-home; do
+for unit in practice-recorder exercise-recorder chord-listener take-transcriber room-board room-home; do
     sed -e "s|@USER@|$user|g" -e "s|@APP@|$app|g" "$app/setup/$unit.service" >"$unit_tmp"
     sudo install -m 644 "$unit_tmp" /etc/systemd/system/$unit.service
 done
 sudo systemctl daemon-reload
-for unit in practice-recorder exercise-recorder chord-listener take-transcriber room-home; do
+for unit in practice-recorder exercise-recorder chord-listener take-transcriber room-board room-home; do
     sudo systemctl enable -q $unit
     sudo systemctl restart $unit
 done
@@ -85,4 +93,5 @@ for f in /etc/practice-recorder.toml /etc/exercise-recorder.toml; do
 done
 grep -q 'port = 8006' /etc/room-home.toml || echo "note: /etc/room-home.toml does not list the transcribe app (port 8006)"
 grep -q '^\[instruments.piano\]' /etc/take-transcriber.toml || echo "note: /etc/take-transcriber.toml has no [instruments.piano] (config/transcribe.toml: the piano on input 4)"
+grep -q 'port = 8007' /etc/room-home.toml || echo "note: /etc/room-home.toml does not list the board (port 8007): config/home.toml's [[apps]] id = \"board\""
 grep -q '^\[instruments.strings\]' /etc/take-transcriber.toml || echo "note: /etc/take-transcriber.toml has no [instruments.strings] (config/transcribe.toml: any stringed instrument on input 4)"

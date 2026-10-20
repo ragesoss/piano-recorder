@@ -1,0 +1,17 @@
+# The board (board/server.py) on port 8007: the project's cards as a kanban. It holds no audio device.
+# setup/install.sh installs it as /etc/systemd/system/room-board.service.
+[Unit]
+Description=Board
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=@USER@
+WorkingDirectory=@APP@
+Environment=PYTHONPATH=@APP@
+ExecStart=@APP@/.venv/bin/python -m board.server
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

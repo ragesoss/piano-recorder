@@ -1,0 +1,14 @@
+# The board on the desktop: python -m board.server with ROOM_BOARD_CONFIG=config/board-dev.toml.
+# Its data in board-dev/ (tools/push-board --to board-dev); the live cards from the unit's apps.
+
+port = 8007
+host = "127.0.0.1"
+data_dir = "board-dev"
+
+[live]
+review = "http://practice.local:8005"
+review_area = "dobro"
+exercises = "http://practice.local:8002"
+exercises_area = "dobro"
+timeout = 1.5
+ttl = 10

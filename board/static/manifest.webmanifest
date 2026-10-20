@@ -1,0 +1,9 @@
+{
+  "name": "Board",
+  "short_name": "Board",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#121016",
+  "theme_color": "#121016",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
