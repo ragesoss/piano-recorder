@@ -306,8 +306,9 @@ def test_another_input_can_carry_the_instrument(client, setup):
 def test_a_piano_take_is_a_folder_of_the_corpus_and_a_grand_staff(client, setup):
     cfg, _ = setup
     piano = next(i for i in client.get("/api/setup").json()["instruments"] if i["kind"] == "piano")
-    # the room mic, as the exercise app's
-    assert piano == {"kind": "piano", "name": "Piano", "input": 4, "tab": False, "staves": "grand"}
+    # the room mic, as the exercise app's: found by its name
+    assert piano == {"kind": "piano", "name": "Piano", "input": 4, "input_name": "Room mic", "found": "name",
+                     "tab": False, "staves": "grand"}
     take = record(client, 2.0, instrument="piano", bpm=120)
     t = wait_for(client, take)
     d = cfg.takes_dir / take
@@ -780,6 +781,32 @@ def test_a_recording_made_elsewhere_is_brought_in_as_a_take(setup, monkeypatch, 
     assert meta["imported_from"] == "phone.wav" and meta["click"] and meta["downbeat_s"] == 0.5 and meta["seconds"] == 2.0
     row = next(csv.DictReader((d / "takes.csv").open()))
     assert row["beat0_s"] == "0.500" and row["metronome"] == "yes"
+
+
+def test_an_app_take_is_brought_in_by_its_inputs_name(setup, monkeypatch, tmp_path, capsys):
+    """An exercise app take (its WAV and sidecar, tools/pull-take): the channel by the input's name, whatever its
+    place; the sidecar's names kept in meta.json. One with no sidecar: by its place only."""
+    cfg, _ = setup
+    t = np.arange(48000) / 48000
+    src = tmp_path / "2026-10-20_170656.wav"
+    write_wav(src, np.stack([0.3 * np.sin(2 * np.pi * 196 * t), 0.1 * np.sin(2 * np.pi * 98 * t), 0 * t], axis=1), 48000)
+    src.with_suffix(".json").write_text(json.dumps({"channels": [
+        {"channel": 0, "input": 3, "input_name": "Bluebird SL", "carries": "beard"},
+        {"channel": 1, "input": 4, "input_name": "Room mic", "carries": "beard"},
+        {"channel": 2, "input": 7, "input_name": "Piezo", "carries": "none"}]}))
+    monkeypatch.setattr("transcriber.importer.load_config", lambda path: cfg)
+    from transcriber import importer
+    importer.main([str(src), "--instrument", "dobro", "--bpm", "100", "--input", "room mic", "--no-transcribe"])
+    take = capsys.readouterr().out.split(":")[0]
+    meta = json.loads((cfg.takes_dir / take / "meta.json").read_text())
+    assert (meta["channel"], meta["input"], meta["input_name"]) == (1, 4, "Room mic")
+    assert [c["input_name"] for c in meta["imported_channels"]] == ["Bluebird SL", "Room mic", "Piezo"]
+    with pytest.raises(SystemExit, match="Bluebird SL"):
+        importer.main([str(src), "--instrument", "dobro", "--bpm", "100", "--input", "Nadine", "--no-transcribe"])
+    bare = tmp_path / "phone.wav"
+    write_wav(bare, np.stack([0.3 * np.sin(2 * np.pi * 196 * t)] * 2, axis=1), 48000)
+    with pytest.raises(SystemExit, match="no sidecar"):
+        importer.main([str(bare), "--instrument", "dobro", "--bpm", "100", "--input", "Room mic", "--no-transcribe"])
 
 
 def test_a_piano_exercise_take_is_brought_in(setup, monkeypatch, tmp_path, capsys):

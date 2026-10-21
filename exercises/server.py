@@ -24,6 +24,7 @@ from recorder import audio
 from recorder.backing import BackingNotFound, Backings
 from recorder.config import Config, ConfigError, load_config
 from recorder.engine import Busy, Engine, LowSpace
+from recorder.inputs import Inputs, add_routes
 from recorder.takes import TakeNotFound, Takes
 
 from .store import ExerciseNotFound, Exercises
@@ -139,9 +140,11 @@ def create_app(cfg: Config) -> FastAPI:
     takes = Takes(cfg.takes_dir)
     backings = Backings(cfg.backing_dir)
     exercises = Exercises(cfg.exercises_dir)
-    engine = Engine(cfg, takes, backings, name="the exercise app")
+    inputs = Inputs(cfg)
+    engine = Engine(cfg, takes, backings, name="the exercise app", inputs=inputs)
     app = FastAPI(title="Exercises", docs_url=None, redoc_url=None)
     app.state.engine = engine
+    add_routes(app, inputs)  # the room's inputs, shared by the apps: GET /api/inputs, PUT /api/inputs/N, /inputs.js
     choices_path = cfg.takes_dir / "choices.json"
 
     def guard(fn, *args, **kw):
@@ -182,12 +185,6 @@ def create_app(cfg: Config) -> FastAPI:
     @app.get("/api/status")
     def status():
         return engine.status()
-
-    @app.get("/api/inputs")
-    def list_inputs():
-        """What is plugged into each input the app keeps, in the take's channel order."""
-        return [{"input": i.number, "channel": c, "name": i.name, "details": i.details, "for": i.for_kind}
-                for c, i in enumerate(cfg.inputs)]
 
     @app.post("/api/monitor")
     def monitor():
@@ -277,7 +274,8 @@ def create_app(cfg: Config) -> FastAPI:
             ex = guard(exercises.get, body.exercise)
             meta = {"exercise": ex.id, "exercise_title": ex.title, "instrument": ex.instrument}
         meta["kind"] = "exercise" if ex else "playalong" if body.backing else "free"
-        on = played_on(body, exercises.instruments(), cfg.inputs)
+        kept = inputs.kept()  # the inputs this take records, in its channel order (the room's, now)
+        on = played_on(body, exercises.instruments(), kept)
         if ex is not None and len(on.get("instruments", [])) > 1:
             raise HTTPException(400, "an exercise is for one instrument")
         if ex is not None and ex.instrument == ANY_KIND:
@@ -292,7 +290,7 @@ def create_app(cfg: Config) -> FastAPI:
         if not meta.get("instrument") and len(kinds) == 1:  # a free take: at least the kind
             meta["instrument"] = kinds[0]
         if body.backing:
-            return {"take": guard(engine.start_recording, body.backing, body.count_in, meta=meta)}
+            return {"take": guard(engine.start_recording, body.backing, body.count_in, meta=meta, inputs=kept)}
         if ex is not None and (body.click or body.count_in):
             tempo = dict(ex.tempo)
             if body.tempo_bpm:
@@ -300,7 +298,7 @@ def create_app(cfg: Config) -> FastAPI:
                     raise HTTPException(400, "tempo out of range (20-300)")
                 tempo["bpm"] = float(body.tempo_bpm)
             return {"take": guard(engine.start_click, tempo, ex.beats, count_in=body.count_in,
-                                  through=body.click, title=ex.title, meta=meta)}
+                                  through=body.click, title=ex.title, meta=meta, inputs=kept)}
         if ex is None and body.click and body.tempo_bpm:  # a free take over a click, until stopped
             if not 20 <= body.tempo_bpm <= 300:
                 raise HTTPException(400, "tempo out of range (20-300)")
@@ -309,8 +307,8 @@ def create_app(cfg: Config) -> FastAPI:
                 raise HTTPException(400, "beats in a bar out of range (1-12)")
             tempo = {"bpm": float(body.tempo_bpm), "pickup_beats": 0.0, "beats_per_bar": bpb}
             return {"take": guard(engine.start_click, tempo, None, count_in=body.count_in, through=True,
-                                  title="Click", meta=meta)}
-        return {"take": guard(engine.start_recording, meta=meta)}
+                                  title="Click", meta=meta, inputs=kept)}
+        return {"take": guard(engine.start_recording, meta=meta, inputs=kept)}
 
     @app.post("/api/record/stop")
     def record_stop():

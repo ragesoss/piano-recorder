@@ -18,9 +18,15 @@ rate = 48000
 # At 44.1 and 48 kHz the device captures 20 channels: PCM 01-08 = inputs 1-8, 09-10 S/PDIF,
 # 11-12 the Pi's playback (PCM 1-2), 13-20 ADAT.
 channels = 20
-# Inputs 3 (the Nadine) and 4 (a condenser on the piano), as wired 2026-10-14. Change with the
-# cables: the channels are the inputs' numbers less one. A program's config can keep others in
-# place of these (`keep_channels` there: the exercise app adds input 1, 2026-10-15).
+# The interface's eight analogue inputs, input N on channel N - 1 (PCM 01-08, the factory routing
+# pinned below). Which of them the apps record, and what is on each, is the room's inputs file
+# (recorder/inputs.py: ~/room-inputs.toml, named from the apps' pages), not this profile.
+inputs = 8
+sockets = ["Front, mic, line or instrument", "Front, mic, line or instrument", "Front, mic or line",
+           "Front, mic or line", "Rear, line", "Rear, line", "Rear, line", "Rear, line"]
+# Before the inputs file (an app's first start, configs of before 2026-10-20): inputs 3 (the Nadine)
+# and 4 (a condenser on the piano), as wired 2026-10-14; a program's config could keep others in
+# place of these (`keep_channels` there: the exercise app added input 1, 2026-10-15).
 keep_channels = [2, 3]
 buffer_ms = 2000
 

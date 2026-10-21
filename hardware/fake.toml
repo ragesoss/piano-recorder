@@ -18,6 +18,9 @@ device = "fake"
 format = "S16_LE"
 rate = 48000
 channels = 4
+# Four inputs, input N on channel N - 1, each 6 dB quieter than the one before.
+inputs = 4
+sockets = ["Fake 1", "Fake 2", "Fake 3", "Fake 4"]
 keep_channels = [0]
 remove_dc = true
 

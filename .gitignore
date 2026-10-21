@@ -16,6 +16,8 @@ __pycache__/
 /chord-checks*/
 # The transcribe app's takes (config/transcribe-dev.toml: transcribe-takes-dev/).
 /transcribe-takes*/
+# The room's inputs on the desktop (the dev configs' inputs_file), as the pages name them.
+/inputs-dev.toml*
 *.wav
 *.flac
 *.mp3

@@ -1,17 +1,27 @@
 #!/bin/sh
 # Copy a take from the control unit: its WAV, its sidecar and, for a play-along
-# take, the copy without the backing. --exercises: one of the exercise app's takes
-# (its config, /etc/exercise-recorder.toml), else the practice recorder's.
-#   tools/pull-take [--exercises] TAKE_ID DEST_DIR [HOST]     HOST: an ssh host (default: practice)
-# An exercise take then goes into ~/play/dobro-transcription by its exercises/bring_in.py.
+# take, the copy without the backing; then say what each channel is, by the name
+# of the input it came from (the sidecar's `channels`: recorder/sidecar.py).
+# --exercises: one of the exercise app's takes (its config, /etc/exercise-recorder.toml),
+# else the practice recorder's. --input NAME (an input's name as the sidecar has it,
+# or its number): also that input's channel alone, as DEST_DIR/TAKE_ID.<name>.wav.
+#   tools/pull-take [--exercises] [--input NAME] TAKE_ID DEST_DIR [HOST]     HOST: an ssh host (default: practice)
+# An exercise take then goes into ~/play/dobro-transcription by its exercises/bring_in.py
+# (which picks the instrument's channel by name too).
 set -eu
+here=$(cd "$(dirname "$0")/.." && pwd)
 config=""
-if [ "${1:-}" = "--exercises" ]; then
-  config='"/etc/exercise-recorder.toml"'
-  shift
-fi
+input=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --exercises) config='"/etc/exercise-recorder.toml"'; shift ;;
+    --input) [ $# -ge 2 ] || { echo "--input needs a name" >&2; exit 2; }; input=$2; shift 2 ;;
+    --*) echo "unknown option: $1" >&2; exit 2 ;;
+    *) break ;;
+  esac
+done
 if [ $# -lt 2 ]; then
-  echo "usage: tools/pull-take [--exercises] TAKE_ID DEST_DIR [HOST]" >&2
+  echo "usage: tools/pull-take [--exercises] [--input NAME] TAKE_ID DEST_DIR [HOST]" >&2
   exit 2
 fi
 take=$1
@@ -26,3 +36,8 @@ scp -q "$host:$takes/$take.wav" "$dest/"
 scp -q "$host:$takes/$take.json" "$dest/" 2>/dev/null || true
 scp -q "$host:$takes/$take.clean.wav" "$dest/" 2>/dev/null || true
 ls -l "$dest" | grep "$take"
+PYTHONPATH="$here" python3 -m recorder.sidecar "$dest/$take.wav" || true
+if [ -n "$input" ]; then
+  slug=$(printf '%s' "$input" | tr 'A-Z' 'a-z' | tr -cs 'a-z0-9' '-' | sed 's/^-*//; s/-*$//')
+  PYTHONPATH="$here" python3 -m recorder.sidecar "$dest/$take.wav" --input "$input" --out "$dest/$take.$slug.wav"
+fi

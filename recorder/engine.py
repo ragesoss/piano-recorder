@@ -12,7 +12,8 @@ import numpy as np
 
 from . import audio, dsp, peers, playalong
 from .backing import Backings, load_wav
-from .config import Config
+from .config import Config, Input
+from .inputs import Inputs, input_levels, merge_channels
 from .takes import Takes
 
 MIN_FREE_MB = 200
@@ -32,6 +33,10 @@ class LowSpace(Exception):
     pass
 
 
+class NoInputs(Busy):
+    """No input is set to be recorded (the room's inputs file: recorder/inputs.py)."""
+
+
 @dataclass
 class _Recording:
     take_id: str
@@ -44,6 +49,11 @@ class _Recording:
     peak_ch: list = field(default_factory=list)
     clipped: bool = False
     thread: threading.Thread | None = None
+    # the inputs it records, in its channel order (the room's inputs as the take started), and every device
+    # input's level and peak, recorded or not
+    inputs: tuple[Input, ...] = ()
+    recent_in: collections.deque = field(default_factory=lambda: collections.deque(maxlen=3))
+    peak_in: list = field(default_factory=list)
     # a play-along take: the backing, prepared for the speakers, and how far it has played
     backing_id: str | None = None
     backing_title: str = ""
@@ -85,6 +95,8 @@ class _Monitor:
     stop: threading.Event = field(default_factory=threading.Event)
     recent: collections.deque = field(default_factory=lambda: collections.deque(maxlen=3))
     peaks: list = field(default_factory=list)
+    recent_in: collections.deque = field(default_factory=lambda: collections.deque(maxlen=3))  # every device input's
+    peak_in: list = field(default_factory=list)
     thread: threading.Thread | None = None
 
 
@@ -99,10 +111,12 @@ def _guided(rec: _Recording) -> bool:
 
 
 class Engine:
-    def __init__(self, cfg: Config, takes: Takes, backings: Backings | None = None, name: str = "the practice recorder"):
+    def __init__(self, cfg: Config, takes: Takes, backings: Backings | None = None, name: str = "the practice recorder",
+                 inputs: Inputs | None = None):
         self.cfg = cfg
         self.name = name  # how a peer is told who is busy
         self.takes = takes
+        self.inputs = inputs or Inputs(cfg)  # the room's inputs: what each one is, which a take records
         self.backings = backings or Backings(cfg.backing_dir)
         self.lock = threading.Lock()
         self.rec: _Recording | None = None
@@ -137,6 +151,7 @@ class Engine:
                     "peak_dbfs": round(rec.peak_dbfs, 1),
                     "meters_dbfs": _levels(rec.recent_ch),  # each channel's, in the take's order
                     "peaks_dbfs": [round(p, 1) for p in rec.peak_ch],
+                    "inputs": [i.number for i in rec.inputs],  # what each channel is, by input number
                     "clipped": rec.clipped,
                     "backing": _guided(rec) and {
                         "kind": rec.guide,
@@ -155,6 +170,12 @@ class Engine:
                     "peaks_dbfs": [round(p, 1) for p in mon.peaks],
                 },
                 "monitor_error": self.mon_error,
+                # every device input's level and peak (dBFS, input N at N - 1), recorded or not, while recording or
+                # listening; None otherwise
+                "input_levels": _levels(rec.recent_in) if rec else _levels(mon.recent_in) if mon else None,
+                "input_peaks": ([round(p, 1) for p in rec.peak_in] if rec else
+                                [round(p, 1) for p in mon.peak_in] if mon else None),
+                "inputs_version": self.inputs.version,
                 "playing": pl and {
                     "take": pl.take_id,
                     "backing": pl.backing_id,
@@ -179,9 +200,11 @@ class Engine:
 
     # Recording
 
-    def start_recording(self, backing_id: str | None = None, count_in: bool = True, meta: dict | None = None) -> str:
+    def start_recording(self, backing_id: str | None = None, count_in: bool = True, meta: dict | None = None,
+                        inputs: tuple[Input, ...] | None = None) -> str:
         """Record; with a backing, play it over the speakers meanwhile (a play-along take), after a
-        count-in when the backing's tempo is known and `count_in` is on."""
+        count-in when the backing's tempo is known and `count_in` is on. `inputs`: the inputs to record, in the
+        take's channel order (default: the room's recorded inputs, now)."""
         with self.lock:
             if self.rec:
                 raise Busy("already recording")
@@ -197,7 +220,8 @@ class Engine:
             title, y, rate, gain_db = prepared
             y, lead = playalong.with_count_in(y, rate, tempo)
             prepared = (title, y, rate, gain_db)
-        rec = _Recording(take_id="", rate=self.cfg.capture.capture.rate, meta=dict(meta or {}))
+        rec = _Recording(take_id="", rate=self.cfg.capture.capture.rate, meta=dict(meta or {}),
+                         inputs=tuple(inputs or ()))
         if prepared is not None:
             rec.backing_id = backing_id
             rec.backing_title, rec.backing, rec.backing_rate, rec.backing_gain_db = prepared
@@ -205,7 +229,7 @@ class Engine:
         return self._start(rec)
 
     def start_click(self, tempo: dict, beats: float | None, count_in: bool = True, through: bool = True,
-                    title: str = "Click", meta: dict | None = None) -> str:
+                    title: str = "Click", meta: dict | None = None, inputs: tuple[Input, ...] | None = None) -> str:
         """Record over a click in `tempo` ({"bpm", "pickup_beats", "beats_per_bar"}): a bar's
         count-in (with `count_in`), then every beat through `beats` beats from the first note
         (with `through`); `beats` None: until the take is stopped (a free take's click, no pickup),
@@ -225,16 +249,21 @@ class Engine:
             click = {"beats": None, "count_in_bars": 1 if count_in else 0, "through": bool(through)}
             rec = _Recording(take_id="", rate=self.cfg.capture.capture.rate, backing_title=title, backing_rate=rate,
                              tempo=dict(tempo), guide="click", beat0_s=stream.beat0_s, click=click,
-                             count_in_s=stream.beat0_s, stream=stream, meta=dict(meta or {}))
+                             count_in_s=stream.beat0_s, stream=stream, meta=dict(meta or {}),
+                             inputs=tuple(inputs or ()))
             return self._start(rec)
         click = {"beats": float(beats), "count_in_bars": 1 if count_in else 0, "through": bool(through)}
         y, beat0 = playalong.click_track(tempo, rate, **click)
         rec = _Recording(take_id="", rate=self.cfg.capture.capture.rate, backing_title=title, backing=y,
                          backing_rate=rate, tempo=dict(tempo), guide="click", beat0_s=beat0, click=click,
-                         count_in_s=beat0, meta=dict(meta or {}))
+                         count_in_s=beat0, meta=dict(meta or {}), inputs=tuple(inputs or ()))
         return self._start(rec)
 
     def _start(self, rec: _Recording) -> str:
+        if not rec.inputs:
+            rec.inputs = self.inputs.kept()
+        if not rec.inputs:
+            raise NoInputs("no input is set to be recorded: choose one under Inputs")
         self._claim()  # a peer's music would end up in the take
         self.stop_playback()
         self._stop_monitor()  # the take's capture needs the inputs
@@ -311,7 +340,7 @@ class Engine:
         return rec.take_id
 
     def _record(self, rec: _Recording) -> None:
-        cap = audio.Capture(self.cfg.capture)
+        cap = audio.Capture(self.cfg.capture, keep=self.inputs.channels(rec.inputs))
         path = self.takes.dir / f"{rec.take_id}.wav"
         try:
             cap.start()
@@ -328,6 +357,8 @@ class Engine:
                 w.setnchannels(cap.channels)
                 w.setsampwidth(cap.dtype.itemsize)
                 w.setframerate(cap.rate)
+                # what each channel is, by name, from the start (a restart mid-take keeps it)
+                self.takes.update_meta(rec.take_id, {"channels": merge_channels(rec.meta.get("channels"), rec.inputs)})
                 while not rec.stop.is_set():
                     if feeder is not None and rec.backing_done.is_set():
                         if end_frame is None:
@@ -351,11 +382,14 @@ class Engine:
                     peak = int(peaks.max())
                     level = dsp.db(peak / fs)
                     levels = [dsp.db(int(p) / fs) for p in peaks]
+                    every = input_levels(cap.input_peaks, fs, cap.n_inputs)
                     with self.lock:
                         rec.frames += len(block)
                         rec.recent.append(level)
                         rec.recent_ch.append(levels)
                         rec.peak_ch = [max(a, b) for a, b in zip(rec.peak_ch, levels)] if rec.peak_ch else levels
+                        rec.recent_in.append(every)
+                        rec.peak_in = [max(a, b) for a, b in zip(rec.peak_in, every)] if rec.peak_in else every
                         rec.peak_dbfs = max(rec.peak_dbfs, level)
                         rec.clipped = rec.clipped or peak >= fs - 1
                     if time.monotonic() - last_space_check > 10:
@@ -376,8 +410,9 @@ class Engine:
                 self.takes.delete(rec.take_id)
             else:
                 self.takes.finish(rec.take_id, rec.peak_dbfs)
-                if rec.meta:
-                    self.takes.update_meta(rec.take_id, rec.meta)
+                # each channel named as the room has it now: a mic named during the take is named in it
+                self.takes.update_meta(rec.take_id, {
+                    **rec.meta, "channels": merge_channels(rec.meta.get("channels"), rec.inputs, self.inputs)})
             with self.lock:
                 self.rec = None
                 if _guided(rec) and not empty:
@@ -618,7 +653,7 @@ class Engine:
                 mon.thread.join(timeout=5)
 
     def _monitor(self, mon: _Monitor) -> None:
-        cap = audio.Capture(self.cfg.capture)
+        cap = audio.Capture(self.cfg.capture, keep=self.inputs.channels(self.inputs.kept()) or None)
         try:
             cap.start()
             fs = dsp.full_scale(cap.dtype)
@@ -631,10 +666,13 @@ class Engine:
                         self._mon_wait_until = time.monotonic() + MONITOR_RETRY_S
                     break
                 levels = [dsp.db(int(p) / fs) for p in np.max(np.abs(block.astype(np.int64)), axis=0)]
+                every = input_levels(cap.input_peaks, fs, cap.n_inputs)
                 with self.lock:
                     self.mon_error = None
                     mon.recent.append(levels)
                     mon.peaks = [max(a, b) for a, b in zip(mon.peaks, levels)] if mon.peaks else levels
+                    mon.recent_in.append(every)
+                    mon.peak_in = [max(a, b) for a, b in zip(mon.peak_in, every)] if mon.peak_in else every
         except Exception as e:
             with self.lock:
                 self.mon_error = f"could not listen to the inputs: {e}"

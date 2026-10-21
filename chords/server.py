@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from recorder.config import Config, load_config
+from recorder.inputs import Inputs, add_routes
 
 from .listen import DemoSource, Listener, parse_target
 
@@ -40,10 +41,12 @@ class LabelIn(BaseModel):
     chord: str | None = None  # what it was, as a check's target is named; None: nothing
 
 
-def create_app(cfg: Config, source=None) -> FastAPI:
-    listener = Listener(cfg, cfg.takes_dir, source)
+def create_app(cfg: Config, source=None, inputs: Inputs | None = None) -> FastAPI:
+    inputs = inputs or Inputs(cfg)
+    listener = Listener(cfg, cfg.takes_dir, source, inputs=inputs)
     app = FastAPI(title="Chords", docs_url=None, redoc_url=None)
     app.state.listener = listener
+    add_routes(app, inputs)  # the room's inputs, shared by the apps: GET /api/inputs, PUT /api/inputs/N, /inputs.js
 
     def target_of(name: str | None):
         try:
@@ -74,16 +77,11 @@ def create_app(cfg: Config, source=None) -> FastAPI:
     def status():
         return listener.status()
 
-    @app.get("/api/inputs")
-    def inputs():
-        return [{"input": i.number, "channel": c, "name": i.name, "details": i.details, "for": i.for_kind}
-                for c, i in enumerate(cfg.inputs)]
-
     @app.post("/api/listen")
     def listen(body: ListenIn | None = None):
         """Keep listening a few seconds more (the page asks again while it is open)."""
         body = body or ListenIn()
-        known = {i.number for i in cfg.inputs}
+        known = {i.number for i in inputs.kept()}
         if body.inputs is not None and (not body.inputs or any(n not in known for n in body.inputs)):
             raise HTTPException(400, "no such input")
         listener.listen(body.inputs, body.instrument)
@@ -158,10 +156,11 @@ def main() -> None:
     a = p.parse_args()
     cfg = load_config(Path(os.environ.get("CHORD_LISTENER_CONFIG", SYSTEM_CONFIG)))
     source = None
+    inputs = Inputs(cfg)
     if a.demo:
         chords = a.demo.split(",")
-        source = lambda: DemoSource(chords, len(cfg.inputs), cfg.capture.capture.rate)  # noqa: E731
-    uvicorn.run(create_app(cfg, source), host=cfg.web_host, port=cfg.web_port, log_level="warning")
+        source = lambda: DemoSource(chords, max(1, len(inputs.kept())), cfg.capture.capture.rate)  # noqa: E731
+    uvicorn.run(create_app(cfg, source, inputs), host=cfg.web_host, port=cfg.web_port, log_level="warning")
 
 
 if __name__ == "__main__":

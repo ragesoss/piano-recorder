@@ -30,6 +30,7 @@ from recorder import audio
 from recorder.backing import Backings
 from recorder.config import Config, load_config
 from recorder.engine import Busy, Engine, LowSpace
+from recorder.inputs import Inputs, add_routes
 from recorder.takes import TakeNotFound, Takes
 
 from . import VERSION
@@ -77,15 +78,22 @@ def create_app(cfg: Config) -> FastAPI:
     settings = load_settings(cfg)
     folders = Folders(cfg.takes_dir)
     work = Takes(cfg.takes_dir / ".work")  # the engine's takes while they record and line up
-    engine = Engine(cfg, work, Backings(work.dir / "backing"), name="the transcribe app")
+    inputs = Inputs(cfg)  # the room's inputs (recorder/inputs.py): what each is, which a take records
+    engine = Engine(cfg, work, Backings(work.dir / "backing"), name="the transcribe app", inputs=inputs)
     jobs = Jobs(cfg, settings, folders, work, busy=lambda: engine.rec is not None)
     reviews = Reviews(settings, folders)
     charts = Charts(settings, folders)
     app = FastAPI(title="Transcribe", docs_url=None, redoc_url=None)
     app.state.engine, app.state.jobs, app.state.reviews, app.state.folders = engine, jobs, reviews, folders
     app.state.charts = charts
+    add_routes(app, inputs)  # GET /api/inputs, PUT /api/inputs/N (a mic named from the page), /inputs.js
     choices_path = cfg.takes_dir / "choices.json"
-    inputs = {i.number: (c, i) for c, i in enumerate(cfg.inputs)}
+
+    def preset(inst) -> dict:
+        """The input an instrument is heard on unless the page says another: by its name (`Inputs.pick`)."""
+        i, how = inputs.pick(inst.input, kind=inst.kind, number=inst.input_number)
+        return {"input": i.number if i else None, "input_name": inst.input, "found": how}
+
     for t in work.list():  # takes the app stopped before saving (a restart mid-take): save them now
         jobs.submit(t.id, build=True)
 
@@ -179,12 +187,13 @@ def create_app(cfg: Config) -> FastAPI:
         ok, why = reviews.available()
         chart_ok, chart_why = charts.available()
         return {
-            "instruments": [{"kind": i.kind, "name": i.name, "input": i.input, "tab": staves(i.kind) == "tab",
+            "instruments": [{"kind": i.kind, "name": i.name, **preset(i), "tab": staves(i.kind) == "tab",
                              "staves": staves(i.kind),
                              **({"kinds": [{"kind": k, "name": n} for k, n in KINDS.items()]} if i.kind == "strings" else {})}
                             for i in settings.instruments],
-            "inputs": [{"input": i.number, "channel": c, "name": i.name, "details": i.details, "for": i.for_kind}
-                       for c, i in enumerate(cfg.inputs)],
+            # every input of the device (recorder/inputs.py): the recorded ones have a `channel`
+            "inputs": inputs.as_json(),
+            "inputs_version": inputs.version,
             "review": {"available": ok, "why": why, "port": settings.review.port,
                        "instruments": list(reviews.instruments())},
             "chart": {"available": chart_ok, "why": chart_why,
@@ -223,9 +232,12 @@ def create_app(cfg: Config) -> FastAPI:
         inst = settings.instrument(body.instrument)
         if inst is None:
             raise HTTPException(400, f"not an instrument this app records: {body.instrument!r}")
-        number = body.input if body.input is not None else inst.input
-        if number not in inputs:
-            raise HTTPException(400, f"no input {number} (kept: {sorted(inputs)})")
+        kept = inputs.kept()  # the inputs this take records, in its channel order (the room's, now)
+        number = body.input if body.input is not None else preset(inst)["input"]
+        place = {i.number: c for c, i in enumerate(kept)}
+        if number not in place:
+            raise HTTPException(400, f"input {number} is not recorded (recorded: {sorted(place)})" if number
+                                else "no input is recorded: choose one under Inputs")
         if not BPM_RANGE[0] <= body.bpm <= BPM_RANGE[1]:
             raise HTTPException(400, "tempo out of range (20-300)")
         if body.beats_per_bar not in METERS:
@@ -233,7 +245,8 @@ def create_app(cfg: Config) -> FastAPI:
         kind = body.kind or None
         if kind is not None and (inst.kind != "strings" or kind not in KINDS):
             raise HTTPException(400, f"a kind is for any stringed instrument: one of {list(KINDS)}, or none")
-        channel, inp = inputs[number]
+        channel = place[number]
+        inp = kept[channel]
         info = {"instrument": inst.kind, "instrument_name": inst.name, "input": number, "input_name": inp.name,
                 "channel": channel, "bpm": round(float(body.bpm), 2), "beats_per_bar": body.beats_per_bar,
                 "count_in_bars": 1 if body.count_in else 0, "click": bool(body.click),
@@ -245,9 +258,9 @@ def create_app(cfg: Config) -> FastAPI:
         try:
             if body.click or body.count_in:
                 take = guard(engine.start_click, tempo, None, count_in=body.count_in, through=body.click,
-                             title="Click", meta={"transcribe": info})
+                             title="Click", meta={"transcribe": info}, inputs=kept)
             else:
-                take = guard(engine.start_recording, meta={"transcribe": info})
+                take = guard(engine.start_recording, meta={"transcribe": info}, inputs=kept)
         except HTTPException:
             hold(False)
             raise

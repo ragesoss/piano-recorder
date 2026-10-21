@@ -52,12 +52,16 @@ def record_briefly(client, body, seconds=0.5):
     return take_id
 
 
-def test_the_inputs_are_listed_in_the_takes_channel_order(client):
-    assert client.get("/api/inputs").json() == [
-        {"input": 3, "channel": 0, "name": "Nadine", "details": "Ear Trumpet Labs Nadine, on the bass", "for": "bass"},
-        {"input": 4, "channel": 1, "name": "Room mic", "details": "The condenser, pointed at the player", "for": ""},
-        {"input": 1, "channel": 2, "name": "Piezo",
-         "details": "Fishman Full Circle, through the Fishman Pro-EQ Platinum DI", "for": "bass"}]
+def test_the_inputs_are_listed_with_their_place_in_a_take(client):
+    # every input of the device, by number; the recorded ones (before the room's inputs file: the config's
+    # keep_channels, in its order) with their channel
+    got = client.get("/api/inputs").json()["inputs"]
+    assert [(i["input"], i["channel"], i["record"]) for i in got] == [(1, 2, True), (2, None, False), (3, 0, True),
+                                                                      (4, 1, True)]
+    assert {k: got[2][k] for k in ("name", "details", "for", "named")} == {
+        "name": "Nadine", "details": "Ear Trumpet Labs Nadine, on the bass", "for": "bass", "named": True}
+    assert {k: got[1][k] for k in ("name", "named", "socket")} == {"name": "Input 2", "named": False,
+                                                                   "socket": "Fake 2"}
 
 
 def test_the_choices_come_back_as_left(client):
@@ -78,7 +82,8 @@ def test_a_take_on_two_instruments_says_what_each_channel_carried(client, tmp_pa
     # by default: the bass's pickups carry the bass, the room mic the guitar (it has no pickup)
     assert [(c["input"], c["carries"]) for c in t["channels"]] == [(3, "cleveland"), (4, "d1"), (1, "cleveland")]
     assert t["channels"][1] == {"channel": 1, "input": 4, "input_name": "Room mic", "carries": "d1",
-                                "carries_name": "Martin D-1"}
+                                "carries_name": "Martin D-1", "input_details": "The condenser, pointed at the player"}
+    assert t["channels"][0]["input_for"] == "bass" and "input_for" not in t["channels"][1]
     side = json.loads((tmp_path / "takes" / f"{t['id']}.json").read_text())
     assert "instrument" not in side  # two kinds: no one kind for the take
 

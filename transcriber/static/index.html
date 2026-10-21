@@ -302,6 +302,7 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
 <div id="scoreHost" hidden></div>
 <audio id="player" preload="auto"></audio>
 <script src="/alphatab/alphaTab.min.js"></script>
+<script src="/inputs.js"></script>
 <script>
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -353,7 +354,15 @@ function plural(n, one, many) { return `${n} ${n === 1 ? one : many || one + "s"
 
 // the instruments and inputs (GET /api/setup)
 function inst(kind) { return (S.setup ? S.setup.instruments : []).find((i) => i.kind === kind) || null; }
-function inputOf(n) { return (S.setup ? S.setup.inputs : []).find((i) => i.input === Number(n)) || null; }
+// the inputs a take records (the room's: recorder/inputs.py; S.setup.inputs has every input of the device), by
+// number or by name
+function recordedInputs() { return (S.setup ? S.setup.inputs : []).filter((i) => i.record).sort((a, b) => a.channel - b.channel); }
+function inputOf(n) {
+  if (n == null || n === "") return null;
+  const all = recordedInputs();
+  if (typeof n === "string" && !/^\d+$/.test(n)) return all.find((i) => i.name.toLowerCase() === n.toLowerCase()) || null;
+  return all.find((i) => i.input === Number(n)) || null;
+}
 function chosenInst() { return inst(C().instrument); }
 function kindName(k) { const i = inst("strings"), x = i && (i.kinds || []).find((y) => y.kind === k); return x ? x.name : ""; }
 function playingName() {  // what is played, as chosen: any stringed instrument's kind when one is
@@ -371,7 +380,8 @@ function writesText() {  // what the pipeline writes for the instrument chosen (
   const parts = ["tab", "grand", "one"].filter((k) => of(k).length).map((k) => `${WRITES[k]} for ${of(k).join(" or ")}`);
   return parts.length > 1 ? `The pipeline writes ${parts.join("; ")}.` : "The pipeline writes notation and tab for it.";
 }
-function chosenInput() {  // the input the chosen instrument is on: the page's choice, else the config's
+function chosenInput() {  // the input the chosen instrument is on: the page's choice (by the input's name; a number
+  // before 2026-10-20), else the config's, by its name (the server's `found`: wherever that mic is plugged in)
   const i = chosenInst();
   if (!i) return null;
   return inputOf((C().inputs || {})[i.kind]) || inputOf(i.input);
@@ -511,16 +521,21 @@ function renderOn() {
   const kinds = i && i.kind === "strings" ? `<section class="panel" aria-label="Kind"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><h2>Which kind?</h2><span class="muted" style="font-size:14px">if you know it</span></div>
       <div class="kindset" role="radiogroup" aria-label="Kind">${(i.kinds || []).map((k) => `<button type="button" role="radio" aria-pressed="${c.kind === k.kind}" data-act="kind" data-kind="${esc(k.kind)}">${esc(k.name)}</button>`).join("")}<button type="button" role="radio" aria-pressed="${!c.kind}" data-act="kind" data-kind="">Not sure</button></div>
       <p class="muted" style="font-size:13px">It only says where the notes may lie (a mandolin's are high, a bass's low). Not sure: the range is read from the take.</p></section>` : "";
-  const opts = i ? S.setup.inputs.slice().sort((a, b) => a.input - b.input).map((x) => {
+  const opts = i ? recordedInputs().slice().sort((a, b) => a.input - b.input).map((x) => {
     const sel = inp && x.input === inp.input;
     return `<button type="button" class="opt${sel ? " sel" : ""}" role="radio" aria-checked="${!!sel}" data-act="input" data-n="${x.input}">
       <span class="radio"></span><span class="m"><b>In ${x.input} · ${esc(x.name)}${x.input === i.input ? ' <span class="badge dim">usual</span>' : ""}</b>${x.details ? `<span>${esc(x.details)}</span>` : ""}</span>
-      <span class="meter" data-meter="${x.channel}" style="max-width:90px"><i></i><b></b></span></button>`;
+      <span class="meter" data-meter="${x.input}" style="max-width:90px"><i></i><b></b></span></button>`;
   }).join("") : "";
+  // the usual input is found by its name; when no recorded input has that name, say what stands in
+  const stand = { kind: "the one for this instrument", room: "the room's", first: "the first recorded", number: "the input it was on" };
+  const usual = i && i.input_name && i.found && i.found !== "name"
+    ? `<p class="muted" style="font-size:14px">No recorded input is called ${esc(i.input_name)}${inputOf(i.input) ? `: the usual is ${esc(stand[i.found] || "another")}, In ${i.input} · ${esc(inputOf(i.input).name)}` : ""}.</p>` : "";
   return `<div class="body"><div class="q"><h1>What are you playing?</h1><p>${esc(writesText())}</p></div>
     <div class="kinds" role="radiogroup" aria-label="Instrument">${cards}</div>${kinds}
     ${i ? `<section class="panel" aria-label="Input"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><h2>Heard on</h2><span class="muted" style="font-size:14px">the take is this input alone</span></div>
-      <div class="opts" role="radiogroup" aria-label="Input">${opts}</div><p class="muted" id="monNote" style="font-size:13px"></p></section>` : ""}</div>
+      <div class="opts" role="radiogroup" aria-label="Input">${opts}</div>${usual}<p class="muted" id="monNote" style="font-size:13px"></p>
+      ${RoomInputs.extras()}</section>` : ""}</div>
     <div class="foot">${leftButton()}${nextButton("on")}</div>`;
 }
 
@@ -556,7 +571,7 @@ function renderReady() {
     <p class="sentence" style="margin-top:-6px">${sentenceHtml()}</p>
     <div class="rows">
       <div><span class="k">What</span><span class="v"><span class="big">${esc(playingName())}</span><span class="sm">${i.kind === "strings" && !C().kind ? "Kind not sure · " : ""}In ${inp.input} · ${esc(inp.name)}</span>
-        <span class="meter" data-meter="${inp.channel}" style="max-width:220px;margin-top:6px"><i></i><b></b></span></span><button type="button" class="change" data-act="step" data-step="on">Change</button></div>
+        <span class="meter" data-meter="${inp.input}" style="max-width:220px;margin-top:6px"><i></i><b></b></span>${alsoText(inp)}${RoomInputs.extras()}</span><button type="button" class="change" data-act="step" data-step="on">Change</button></div>
       <div><span class="k">Timing</span><span class="v"><span class="big">${esc(timingText(c))}</span><span class="sm">${esc(timingText(c, true).split(" · ").slice(2).join(""))}</span></span><button type="button" class="change" data-act="step" data-step="details">Change</button></div>
       <div><span class="k">Name</span><span class="v"><span class="big">${c.title ? esc(c.title) : '<span class="muted" style="font-weight:400">none</span>'}</span></span><button type="button" class="change" data-act="step" data-step="details">Change</button></div>
     </div>
@@ -565,6 +580,13 @@ function renderReady() {
   </div>
   <div class="foot"><button type="button" class="btn" data-act="start-over">${ICON.restart} From the top</button>
     <button type="button" class="btn go" data-act="go" data-to="record">${ICON.dot} Ready to record ${ICON.next}</button></div>`;
+}
+
+// the other inputs a take records (its raw/ copy keeps them all, each named)
+function others(inp) { return recordedInputs().filter((x) => !inp || x.input !== inp.input); }
+function alsoText(inp) {
+  const o = others(inp);
+  return o.length ? `<span class="sm" style="margin-top:4px">Also kept: ${esc(o.map((x) => `In ${x.input} · ${x.name}`).join(", "))}</span>` : "";
 }
 
 // --- recording: the record screen (the input, the speakers, Record)
@@ -584,8 +606,10 @@ function renderRecord() {
   const c = C(), inp = chosenInput(), s = S.status, level = s ? s.level_offset_db : 0, speakers = c.click || c.countIn;
   return `<div class="body rec-body"><p class="rec-sentence">${recSentence()}</p>
     <div class="box"><span class="label">Listening</span>
-      <div class="row"><span>In ${inp.input} · ${esc(inp.name)}</span><span class="tnum" data-meter-text="${inp.channel}">–</span></div>
-      <span class="meter big" data-meter="${inp.channel}"><i></i><b></b></span>
+      <div class="row"><span>In ${inp.input} · ${esc(inp.name)}</span><span class="tnum" data-meter-text="${inp.input}">–</span></div>
+      <span class="meter big" data-meter="${inp.input}"><i></i><b></b></span>
+      ${others(inp).map((x) => `<div class="row" style="font-size:15px;color:var(--ink3)"><span>Also kept: In ${x.input} · ${esc(x.name)}</span><span class="tnum" data-meter-text="${x.input}">–</span></div><span class="meter" data-meter="${x.input}"><i></i><b></b></span>`).join("")}
+      ${RoomInputs.extras()}
       <span class="muted" id="monNote" style="font-size:13px"></span><span class="dev-line" data-dev-line>${devLine()}</span></div>
     ${speakers ? `<div class="box"><div class="row"><label for="recLevel" style="font-weight:700">The click on the speakers</label><span data-level-text class="tnum">${esc(dbText(level))}</span></div>
       <input id="recLevel" type="range" min="-30" max="12" step="1" value="${level}" data-level></div>` : ""}
@@ -608,7 +632,8 @@ function renderRecording() {
       <div class="live"><div class="where"><div class="v tnum" data-where>…</div><div class="s" data-where-s></div></div>
         <div class="beats" data-beats hidden></div><div class="clock tnum" data-clock>0:00</div></div></div>
     <div class="rec-bar"><div class="meters" style="display:flex;flex-direction:column;gap:6px">
-        <div class="mrow"><span>${esc(inp ? inp.name : "")}</span><span class="meter big" data-meter="${inp ? inp.channel : 0}"><i></i><b></b></span></div>
+        <div class="mrow"><span>${esc(inp ? inp.name : "")}</span><span class="meter big" data-meter="${inp ? inp.input : 0}"><i></i><b></b></span></div>
+        ${others(inp).map((x) => `<div class="mrow" style="font-size:14px;color:var(--ink3)"><span>${esc(x.name)}</span><span class="meter" data-meter="${x.input}"><i></i><b></b></span></div>`).join("")}
         <span class="peak" data-peak>No clipping</span></div>
       <button type="button" class="stopbtn" data-act="stop-rec"><i></i>Stop</button></div>`;
 }
@@ -766,24 +791,68 @@ function renderTakes() {
 
 // --- the score: alphaTab, kept across renders (the screen is drawn again often; the score is not)
 const host = $("#scoreHost");
-const SC = { take: null, view: null, api: null, xml: null, map: null, beats: null, bars: null, ready: false };
+const SC = { take: null, view: null, api: null, xml: null, map: null, beats: null, bars: null, ready: false, el: null,
+  fit: null, shrink: 1, tries: 0 };
 const RES = { mainGlyphColor: "#F2EEF8", secondaryGlyphColor: "#A79FB4", staffLineColor: "#7E768B", barSeparatorColor: "#A79FB4",
   barNumberColor: "#A79FB4", scoreInfoColor: "#CEC7DA" };
 const HIDE = ["scoreTitle", "scoreSubTitle", "scoreArtist", "scoreAlbum", "scoreWords", "scoreMusic", "scoreWordsAndMusic", "scoreCopyright"];
 function scaleFor() { const w = window.innerWidth; return w < 600 ? 0.62 : w < 900 ? 0.85 : 1.0; }
+// the page's margin round the music, in screen px (alphaTab's [sides, top and bottom]; its default is 35 all round,
+// a fifth of a phone's card: 12 at the sides there)
+function paddingFor() { return window.innerWidth < 600 ? [12, 24] : [35, 35]; }
+const MIN_SCALE = 0.4;  // a bar too wide for the card is drawn smaller, down to this, never past the card's edge
 function parkScore() { if (host.parentNode !== document.body) { host.hidden = true; document.body.append(host); } }
 function placeScore() {
   const slot = $("#scoreSlot"), t = takeById(S.take);
   if (!slot || !t) return;
   host.hidden = false; slot.append(host);
   if (SC.take !== t.id || SC.view !== viewOf(t) || SC.finished !== (t.transcription || {}).finished) loadScore(t);
+  else fitScore();  // the window may have changed while it was put away
+}
+// The score drawn again in full whenever the card's width, or the scale for it, is not what it was drawn at. Only
+// while it is shown: alphaTab skips a render of a hidden score (width 0), and its own resize (on any change of width)
+// only lays the bars it has out again, with the margin and the bar widths of its last full render: a scale set
+// while the score was put away would reach the rows of that resize and not its bars.
+function fitScore() {
+  const api = SC.api, el = SC.el;
+  if (!api || !SC.ready || !el || !el.isConnected || !el.offsetWidth) return;  // not drawn yet, or put away
+  const w = el.offsetWidth, base = scaleFor();
+  if (SC.fit && SC.fit.w === w && SC.fit.base === base && api.renderer.width === w) return;
+  SC.fit = { w, base }; SC.shrink = 1; SC.tries = 0;
+  drawAt(api, base);
+}
+function drawAt(api, scale) {
+  api.settings.display.scale = scale;
+  api.settings.display.padding = paddingFor();
+  api.updateSettings();
+  api.render();
+}
+// After each render: every bar inside the card. A bar wider than the card on its own row (alphaTab cannot break it)
+// makes the score smaller until it fits; anything else drawn past the edge (a partial layout) is drawn again in full.
+function checkFit(api) {
+  const el = SC.el, lk = api.renderer.boundsLookup;
+  if (SC.api !== api || !el || !el.offsetWidth || !lk) return;
+  const avail = el.offsetWidth;
+  let need = 0;
+  lk.staffSystems.forEach((sys) => sys.bars.forEach((mb) => {
+    need = Math.max(need, mb.realBounds.x + mb.realBounds.w, mb.visualBounds.x + mb.visualBounds.w);
+  }));
+  const left = el.getBoundingClientRect().left;
+  let drawn = 0;
+  el.querySelectorAll(".at-surface > div > svg").forEach((s) => { drawn = Math.max(drawn, s.getBoundingClientRect().right - left); });
+  if (SC.tries >= 4 || (need <= avail + 1 && drawn <= avail + 1)) return;
+  SC.tries += 1;
+  const scale = api.settings.display.scale, base = (SC.fit && SC.fit.base) || scaleFor();
+  if (need > avail + 1 && scale > MIN_SCALE) SC.shrink = Math.max(MIN_SCALE / base, SC.shrink * (avail - 2) / need);
+  drawAt(api, Math.max(MIN_SCALE, base * SC.shrink));
 }
 // a grand staff has no tab to show alone, nor one staff (any stringed instrument)
 function viewOf(t) { return t.staves === "one" ? "one" : t.tab === false ? "grand" : S.view; }
 async function loadScore(t) {
   if (SC.api) { try { SC.api.destroy(); } catch (e) {} }
   const view = viewOf(t), grand = view === "grand";
-  Object.assign(SC, { take: t.id, view, grand, finished: (t.transcription || {}).finished, api: null, map: null, beats: null, bars: null, ready: false });
+  Object.assign(SC, { take: t.id, view, grand, finished: (t.transcription || {}).finished, api: null, map: null, beats: null, bars: null,
+    ready: false, el: null, fit: null, shrink: 1, tries: 0 });
   host.innerHTML = `<p class="score-empty">Drawing the notation…</p>`;
   let xml, data;
   try {
@@ -804,12 +873,12 @@ async function loadScore(t) {
   const elements = Object.fromEntries(HIDE.map((k) => [k, false]));
   const api = new alphaTab.AlphaTabApi(el, {
     core: { fontDirectory: "/alphatab/font/", useWorkers: false, engine: "svg", enableLazyLoading: false },
-    display: { layoutMode: "Page", scale: scaleFor(), resources: RES },
+    display: { layoutMode: "Page", scale: scaleFor(), padding: paddingFor(), resources: RES },
     notation: { rhythmMode: view === "tab" ? "ShowWithBars" : "Hidden", elements },
     player: { playerMode: alphaTab.PlayerMode.Disabled, soundFont: SOUND.font, enableCursor: true, enableAnimatedBeatCursor: true,
       enableUserInteraction: false, scrollMode: alphaTab.ScrollMode.Off },
   });
-  SC.api = api; SC.scale = scaleFor();
+  SC.api = api; SC.el = el;
   api.scoreLoaded.on((score) => {
     const tr = score.tracks[0];
     if (grand || view === "one") score.tracks.forEach((x) => x.staves.forEach((st) => { st.showStandardNotation = true; st.showTablature = false; st.showSlash = false; st.showNumbered = false; }));
@@ -818,7 +887,12 @@ async function loadScore(t) {
   api.error.on((e) => { if (Q.api === api && Q.on) { Q.failed = (e && e.message) || String(e); Q.want = null; playBtns(); return; }
     host.innerHTML = `<p class="score-empty">The notation could not be drawn: ${esc((e && e.message) || e)}</p>`; });
   synthFor(api, t);
-  api.postRenderFinished.on(() => { if (SC.api === api) buildMap(api); });
+  api.postRenderFinished.on(() => {
+    if (SC.api !== api) return;
+    if (!SC.fit) SC.fit = { w: api.renderer.width, base: scaleFor() };
+    buildMap(api);
+    requestAnimationFrame(() => checkFit(api));  // once its drawing is in the page
+  });
   api.load(new TextEncoder().encode(text));
 }
 function buildMap(api) {
@@ -844,11 +918,17 @@ function buildMap(api) {
   }));
   entries.sort((a, b) => a.tick - b.tick);
   SC.map = entries; SC.bars = bars; SC.ready = true;
-  const surface = host.querySelector(".at-surface");
-  if (surface) {
-    if (!surface.querySelector(".at-cursor")) surface.insertAdjacentHTML("beforeend", '<div class="at-bar"></div><div class="at-cursor"></div>');
-  }
+  // the take's cursor beside alphaTab's drawing, never in it: alphaTab puts each piece of a render into the surface's
+  // children by their order, so a cursor kept among them got a row of the next render that had more rows (a narrower
+  // card) and drew it where the cursor was, past the card's edge (2026-10-20)
+  if (!host.querySelector(":scope > .at-cursor")) host.insertAdjacentHTML("beforeend", '<div class="at-bar"></div><div class="at-cursor"></div>');
   drawCursor();
+}
+function surfaceOffset() {  // where alphaTab's surface is in the host (the cursor's frame: the bars' bounds are the surface's)
+  const s = host.querySelector(".at-surface");
+  if (!s) return { x: 0, y: 0 };
+  const a = s.getBoundingClientRect(), h = host.getBoundingClientRect();
+  return { x: a.left - h.left, y: a.top - h.top };
 }
 // the take's time (s) at a score beat, and the score beat at a time: the transcription's beats (its JSON)
 function timeAt(b) {
@@ -870,8 +950,8 @@ function beatAt(t) {
   return a.beat + (t - a.t) * (c.beat - a.beat) / ((c.t - a.t) || 1);
 }
 function drawCursor() {
-  const cur = host.querySelector(".at-cursor"), bar = host.querySelector(".at-bar");
-  if (!cur || !SC.ready || !SC.map.length) return;
+  const cur = host.querySelector(":scope > .at-cursor"), bar = host.querySelector(":scope > .at-bar");
+  if (!cur || !bar || !SC.ready || !SC.map.length) return;
   const show = P.take === SC.take && (P.at > 0 || !player.paused);
   const b = show ? beatAt(P.at) : null;
   if (b == null) { cur.style.display = bar.style.display = "none"; return; }
@@ -885,8 +965,9 @@ function drawCursor() {
     x = e.x + (toX - e.x) * Math.min(1, (tick - e.tick) / Math.max(1, toTick - e.tick));
   }
   if (b * 960 > (SC.bars[SC.bars.length - 1].end || 0) + 960) { cur.style.display = bar.style.display = "none"; return; }
-  Object.assign(cur.style, { display: "block", left: `${x - 1}px`, top: `${br.y + 4}px`, height: `${br.h - 8}px` });
-  Object.assign(bar.style, { display: "block", left: `${br.x}px`, top: `${br.y + 2}px`, width: `${br.w}px`, height: `${br.h - 4}px` });
+  const o = surfaceOffset();
+  Object.assign(cur.style, { display: "block", left: `${o.x + x - 1}px`, top: `${o.y + br.y + 4}px`, height: `${br.h - 8}px` });
+  Object.assign(bar.style, { display: "block", left: `${o.x + br.x}px`, top: `${o.y + br.y + 2}px`, width: `${br.w}px`, height: `${br.h - 4}px` });
   if (!player.paused) follow(br);
 }
 function follow(br) {  // keep the bar played in view as the take plays
@@ -911,10 +992,10 @@ host.addEventListener("click", (ev) => {
   if (P.src === "score") playScore(b.tick);
   else if (t != null) playFrom(Math.max(0, t - 0.12));
 });
-window.addEventListener("resize", () => {  // a phone turned: the score's scale for its width
-  clearTimeout(window._rs);
-  window._rs = setTimeout(() => { if (SC.api && SC.scale !== scaleFor()) { SC.scale = scaleFor(); SC.api.settings.display.scale = SC.scale; SC.api.updateSettings(); SC.api.render(); } }, 250);
-});
+// a phone turned, or the card's width changed: the score drawn again for it (fitScore; nothing while it is put away)
+function fitSoon() { clearTimeout(window._rs); window._rs = setTimeout(fitScore, 150); }
+window.addEventListener("resize", fitSoon);
+if (window.ResizeObserver) new ResizeObserver(fitSoon).observe(host);
 
 // --- the transcription's sound: the score drawn, played as written by alphaTab's synthesizer (SOUND), its cursor
 // following. Turned on when first asked for (the SoundFont then loads, 1.35 MB, kept a day). The pipeline writes each note
@@ -1046,14 +1127,16 @@ function live() {
   const rec = s.recording, mon = s.monitor;
   $$("[data-dev-line]").forEach((el) => { const h = devLine(); if (el.innerHTML !== h) el.innerHTML = h; });
   $$("[data-act=record]").forEach((b) => { b.disabled = !s.devices.capture; });
-  const meters = rec ? rec.meters_dbfs : mon ? mon.meters_dbfs : null, peaks = rec ? rec.peaks_dbfs : mon ? mon.peaks_dbfs : null;
+  // each meter by its input's number: every input's level, recorded or not (input N at N - 1)
+  const meters = s.input_levels, peaks = s.input_peaks;
   $$("[data-meter]").forEach((el) => {
-    const ch = Number(el.dataset.meter), v = meters ? meters[ch] : null, i = el.firstElementChild, b = el.lastElementChild;
+    const n = Number(el.dataset.meter) - 1, v = meters ? meters[n] : null, i = el.firstElementChild, b = el.lastElementChild;
     i.style.width = v == null ? "0" : meterPct(v) + "%";
     i.style.background = v > -6 ? "var(--red-dot)" : v > -12 ? "var(--amber)" : "var(--ink2)";
-    if (peaks && peaks[ch] != null && rec) { b.style.display = "block"; b.style.left = `calc(${meterPct(peaks[ch])}% - 2px)`; } else b.style.display = "none";
+    if (peaks && peaks[n] != null && rec) { b.style.display = "block"; b.style.left = `calc(${meterPct(peaks[n])}% - 2px)`; } else b.style.display = "none";
   });
-  $$("[data-meter-text]").forEach((el) => { const v = meters ? meters[Number(el.dataset.meterText)] : null; el.textContent = v == null ? "–" : dbText(v); });
+  $$("[data-meter-text]").forEach((el) => { const v = meters ? meters[Number(el.dataset.meterText) - 1] : null; el.textContent = v == null ? "–" : dbText(v); });
+  RoomInputs.update(s);
   const note = $("#monNote");
   if (note) note.textContent = rec ? "" : s.monitor_error ? `Not listening: ${s.monitor_error}.` : !mon && listening() ? "Listening…" : !listening() ? "Not listening (idle a while): tap anywhere to listen again." : "";
   if (S.screen === "recording" && rec) {
@@ -1158,7 +1241,10 @@ document.addEventListener("click", (ev) => {
     // (any stringed instrument stays, for its kind)
     const other = d.kind !== c.instrument; set({ instrument: d.kind }); if (other && !S.walk && d.kind !== "strings") answered("on"); }
   else if (a === "kind") set({ kind: d.kind || null });
-  else if (a === "input") { const i = chosenInst(); if (i) { set({ inputs: { ...(c.inputs || {}), [i.kind]: Number(d.n) } }); if (!S.walk) answered("on"); } }
+  else if (a === "input") {  // kept by the input's name: the same mic wherever it is plugged in next time
+    const i = chosenInst(), x = inputOf(Number(d.n));
+    if (i && x) { set({ inputs: { ...(c.inputs || {}), [i.kind]: x.name } }); if (!S.walk) answered("on"); }
+  }
   else if (a === "bpm") { readDetails(); set({ bpm: Math.max(20, Math.min(300, Math.round(c.bpm) + Number(d.d))) }); }
   else if (a === "bpb") { readDetails(); set({ bpb: Number(d.v) }); }
   else if (a === "toggle") { readDetails(); set({ [d.k]: !c[d.k] }); }
@@ -1230,12 +1316,19 @@ function fromHash() {
 }
 window.addEventListener("hashchange", fromHash);
 
+// the room's inputs (recorder/static/inputs.js): a mic named, or recorded or not, on any app's page: the setup again
+// (each instrument's usual input is found by its name among them)
+RoomInputs.onChange(async () => {
+  try { S.setup = await api("GET", "/api/setup"); } catch (e) { return; }
+  if (S.screen !== "recording") render();
+});
 (async function startUp() {
   try { await loadAll(); } catch (e) { showError(`Could not load: ${e.message}`); S.setup = S.setup || { instruments: [], inputs: [], meters: [2, 3, 4], review: {} }; S.choices = S.choices || { ...DEFAULTS }; }
   S.screen = readyOk() ? "ready" : "on";
   S.walk = !readyOk();
   if (STEPS.includes(S.screen)) S.snapshot = null;
   if (!fromHash()) render();
+  RoomInputs.init({ monitor: () => { lastTouch = Date.now(); api("POST", "/api/monitor").catch(() => {}); } });
   poll(true);
 })();
 </script>

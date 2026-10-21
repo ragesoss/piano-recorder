@@ -990,6 +990,42 @@ it right there, with playback; "Review it" sends the take to the review app (dob
     42 tests passed, the whole suite 249); the page in headless Chromium (muted) at 390x844, 820x1180 and 1180x820 against the stand-ins:
     the dialog, drafting, another take's button waiting, the link; no sideways scroll. Not with the real drafter
     (being written beside this). Not deployed.
+- **The score inside its card at a phone's width** (2026-10-20, branch `phone-width`; dobro-transcription's card
+  `transcribe-phone-width`, from the note of 2026-10-19 above: "the first system's third bar runs past the card's
+  edge at 390 wide").
+  - **Why:** the page kept the take's cursor (`.at-bar`, `.at-cursor`) inside alphaTab's `.at-surface`, and alphaTab
+    puts each row of a render into the surface's children by their order. A render with more rows than the one the
+    cursor was added after (the window narrower: a phone or an iPad turned upright) put two rows into the cursor's
+    elements, drawn where the cursor was, on the bar last played: past the card's edge. Not seen on a page drawn once
+    at 390 wide, only after a turn or another render.
+  - **Also:** alphaTab's own resize lays its bars out again with the margin and bar widths of its last full render,
+    and skips a render while the score is hidden. The page set the new scale even with the score put away (another
+    screen), which the next resize would have laid out with the old bars. Not seen on its own in these runs.
+  - **The fix,** in `transcriber/static/index.html`: the cursor beside alphaTab's drawing in the score's host, placed
+    by the surface's offset. The score drawn again in full whenever the card's width or the scale for it is not what
+    it was drawn at, and only while it is shown (on a resize, a `ResizeObserver` on the score, and when the take's
+    screen is drawn again). After each render every bar and every drawn row is checked against the card: a bar too
+    wide for the card on its own row makes the score smaller, down to 0.4 (not reached on these takes); a row drawn
+    past the edge is drawn again in full, at most four times. Under 600 px wide, alphaTab's margin is 12 px at the
+    sides and 24 at the top and bottom (its default 35 all round): the music has 332 px of a 390-wide phone's card,
+    not 286. The iPad's scale and margin are as before.
+  - **Measured** in headless Chromium (Playwright, muted, the fake device) on six takes brought in by
+    `tools/import-take` and transcribed: Red Wing (the dobro, notation and tab, and tab alone), Tennessee Waltz (the
+    bass, both views), piano exercises 011 and 015 (grand staves), the guitar's Cherokee Shuffle and its G major
+    scale (any stringed instrument). Drawn, a bar tapped, then turned from 844x390 to 390x844: 2 of the 8 drew past
+    the card's edge before (222 and 292 px), none after; the same drawn at 1180x820, the takes list, 390x844 and the
+    take again: 2 of 8 before (222, 292), none after; an iPad turned from 1180x820 to 820x1180: 5 of 8 before (33 to
+    331 px), none after. Drawn once at 390x844: none before or after, the bars 36 px inside the card's edge before and
+    13 after, so fewer rows: Red Wing 23 to 18 (notation and tab) and 21 to 17 (tab), Tennessee Waltz 22 to 19 and 21
+    to 17, Cherokee Shuffle 46 to 36, the G scale 4 to 3, exercise 015 3 to 2, 011 2 as before. 1180x820 and
+    820x1180: the same rows before and after. Playwright's WebKit at 390x844 (media muted), drawn once and turned:
+    none past the edge. No sideways scroll, no console errors; every tap (the 8 cases in each of 7 runs) played the
+    take from its bar within 0.12 s, with the cursor in that bar.
+  - **The test:** `tests/test_transcribe_page.py` (`tests/transcribe_page.cjs`) on a made-up score (24 bars of eighth
+    notes on one staff, silent sound): a phone turned both ways and an iPad turned upright. Against the page before
+    it fails (124 and 152 px past the edge, the score drawn in the cursor); it passes after. Skipped without node's
+    Playwright and ffmpeg. `tests/test_transcriber.py` 42 passed, the whole suite 258 (Playwright found). Not
+    deployed.
 
 ### 9. The board (started 2026-10-19)
 
@@ -1185,6 +1221,89 @@ with the hardware".
      ignores a push's goals.
   6. `http://practice.local:8007/`: the Goals view and a card's stripes; `curl -s
      http://practice.local:8007/api/status` has `goals`; the home page's Board tile as before.
+
+### 10. The room's inputs (started 2026-10-20)
+
+The player, 2026-10-20, with a new mic (a Blue Bluebird SL) plugged in: each app kept only the inputs its own config
+listed (`keep_channels`: the exercise and transcribe apps inputs 3, 4 and 7, the chord app 3, 4 and 1, the practice
+recorder the profile's 3 and 4), so a mic on any other input reached the unit and was thrown away; and input 3 was
+still "Nadine" in every sidecar with the Bluebird on it ("the mxl and new mic (still labeled nadine)").
+dobro-transcription's card `the-music-room-apps-record-any-or`.
+
+- **One file for the room:** `~/room-inputs.toml` (`recorder/inputs.py`; an app config's `inputs_file`, and
+  `$ROOM_INPUTS_FILE` over it, may name another). An `[inputs.N]` per input, by the interface's number: `name`,
+  `details`, `for` (a pickup or mic on one kind of instrument; none: the room's), `record`, and `since` (when a page
+  last changed it). Every app reads it again when it changes (one stat a call), so a mic named in one app is named
+  in all of them, from their next take. `config/inputs.toml` is its first copy, installed once by
+  `setup/install.sh` (as wired on 2026-10-17: 3 the Nadine, 4 the MXL 990, 7 the piezo, all recorded; 5 and 6 the
+  record player's, named and not recorded); after that the pages keep it. An input with no table is not recorded.
+- **The device's inputs are the profile's:** `[capture] inputs` (the 18i8: 8, input N on capture channel N - 1) and
+  `sockets` ("Front, mic, line or instrument" for 1-2, "Front, mic or line" for 3-4, "Rear, line" for 5-8). The
+  fake profile has four, the BMG-04F one (its main mix).
+- **Every app records the room's recorded inputs,** in input-number order: the practice recorder, the exercise app,
+  the transcribe app (take-01.flac the instrument's input alone, raw/ all of them) and the chord app (what it hears
+  and keeps in its clips). Every take's sidecar has `channels`: `{"channel", "input", "input_name",
+  "input_details", "input_for"}` per channel (the exercise app's with `carries` too, as before; the chord app's
+  keeps `name` as well), written when the take starts and again at its end, so a mic named while a take is recorded
+  is named in it. A transcribe app take's `meta.json` has them too (what raw/ holds), and its take-01.flac is cut from
+  the channel the sidecar says carried its input. With nothing recorded a take is refused ("no input is set to be
+  recorded", 409).
+- **Every input's level, recorded or not:** the capture reads all 20 channels as before; each block's peak per
+  input goes in the status as `input_levels` and `input_peaks` (by input number), while recording and while
+  listening between takes, with `inputs_version` (raised when the file changes: the pages read `/api/inputs`
+  again). The pages' meters are keyed by input number now, not by channel.
+- **The pages: one script for all four,** `recorder/static/inputs.js` (each app serves it at `/inputs.js`, with
+  `GET /api/inputs`, every input of the device, and `PUT /api/inputs/N`, `{"name", "details", "for", "record"}`).
+  On each record screen: the recorded inputs, named, each with its meter (the practice recorder's record panel in
+  place of its one meter: "Records", "Recording" while it does); an input not recorded and not named that hears
+  something (its peak over -70 dBFS: the 18i8's empty inputs read -110 to -112 dBFS rms, the MXL in a quiet room -67
+  with peaks of -52) says so, with "Record it"; and "Inputs…" opens the sheet. The sheet lists all of the device's
+  inputs with live meters (it asks the app to listen while open): for each, Recorded or Not recorded, Edit, and "A
+  new mic here" (a blank name, what it is, and what it hears: the room or one instrument); an input with nothing named
+  has "Name it", and naming it records it. The look is the apps' own: dark, purple for what to tap. The exercise
+  app's step 1 and Ready, the transcribe app's step 1, Ready and record screens, and the chord app's chips have the
+  same lines; the transcribe app also says what else a take keeps ("Also kept: In 4 · Room mic"). The practice
+  recorder listens to its inputs only while its sheet is open or a take records (it never listened between takes).
+- **The transcribe app's instruments by name:** `[instruments.*] input = "Room mic"` (the dobro, the piano, any
+  stringed instrument), `"Nadine"` (the bass), found among the recorded inputs wherever that mic is plugged in;
+  with no recorded input of that name, one `for` the instrument's kind (the bass: the piezo), else the first room
+  mic (`Inputs.pick`, its `found` in `/api/setup`; the page says "No recorded input is called Nadine: the usual is
+  the one for this instrument, In 7 · Piezo"). The page keeps its own choice for an instrument by the input's name.
+  `/etc/take-transcriber.toml` as installed before (`input = 3`) reads as the name its own `[inputs.3]` gave that
+  input ("Nadine"), so the unit needs no edit; a number alone is used only where no mic is named on that input.
+- **The tools read a take's channels by name:** `recorder/sidecar.py` (`find_channel`: by an input's name, any case,
+  or its number, "In 4"; or by what it carried); `python -m recorder.sidecar TAKE.wav` lists them, `--input NAME
+  --out X.wav` writes that one alone. `tools/pull-take` prints each channel's input after copying, and `--input NAME`
+  also writes `TAKE_ID.<name>.wav`. `tools/import-take --input NAME` takes FILE's channel that carried NAME, from the
+  sidecar beside it (`--channel N`, by place, as before), and its meta.json names the input. dobro-transcription's
+  `exercises/bring_in.py` has the same (`--input`), with its own copy of the reader.
+- **Before the file, and old sidecars:** while `~/room-inputs.toml` does not exist (an app's first start, the
+  tests), an app's own config stands in as before: its `keep_channels` (else the profile's), in that order, named by
+  its `[inputs.N]`; the first change from a page writes the file from that. The `/etc` configs' `keep_channels` and
+  `[inputs.N]` are not read once the file exists (install.sh says so). Sidecars of before 2026-10-20 read as they are:
+  the exercise app's had `channels` already, the chord app's named each `name`, the practice recorder's had none (a
+  channel then only by its place).
+- **Tried on the desktop** (the fake device, its four inputs; 2026-10-20): `tests/test_inputs.py` (16: the file
+  and the config standing in, writing it, another app's write read, bad tables left out and said, `pick`, a take's
+  sidecar and a name given mid-take, a take refused with nothing recorded, the monitor hearing every input, a name
+  from the practice recorder in the exercise and chord apps, an exercise take's channels, the chord listener
+  following the file, the transcribe app's instruments by name and by number before, the bass following the
+  Nadine to another input, `find_channel` on new and old sidecars, the sidecar tool, pull-take's options), an
+  importer test (by name, the sidecar's names kept, a name not there, no sidecar), and
+  `tests/test_inputs_page.py` (headless Chromium, muted, the four apps on one file: the practice recorder at
+  390x844 names the recorded inputs, its sheet lists all four with input 1's meter moving, input 2 "hears something"
+  and is named from "Record it"; the exercise app at 1180x820 has the name, a new mic on input 3 is named from its
+  sheet and the practice page shows it by itself within a few seconds; a practice take keeps the four inputs, each
+  named; the transcribe app's bass falls back to the piezo and says so; the chord app's chips; no console errors, no
+  sideways scroll, the sheet inside the screen). Not deployed.
+- **To deploy** (only with the player's go-ahead, every app idle; it restarts every app here): `tools/deploy` (it
+  installs `~/room-inputs.toml` from `config/inputs.toml`, and says that the `/etc` configs' inputs are no longer
+  read). The takes' channels change from the next take on: the practice recorder gains input 7, the chord app drops
+  input 1, every take's channels are in input-number order. Then on any app's page: Inputs…, input 3, "A new mic
+  here": "Bluebird SL", what it is, the room; Save. The bass's usual input is then the piezo until the Nadine is
+  plugged in again and named "Nadine", on whichever input. dobro-transcription needs nothing on the unit for this.
+- **Left:** phantom power is still the profile's (on for 3-4, off for 1-2): a condenser named on input 1 or 2 hears
+  nothing until it is switched there (dobro-transcription's card `inputs-phantom-from-the-page`).
 
 ## Open questions
 
