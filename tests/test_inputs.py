@@ -1,7 +1,9 @@
-"""The room's inputs (recorder/inputs.py): one file for every app, what is on each of the interface's inputs and
-whether it is recorded; a take keeps the recorded ones, each named in its sidecar; a mic named on one app's page is
-named on every app's; the transcribe app's instruments find their input by its name; the tools pick a take's channel
-by its input's name (recorder/sidecar.py, transcriber/importer.py); configs and sidecars of before still read."""
+"""The room's inputs (recorder/inputs.py): one file for every app, the room's mics and what is on each of the
+interface's inputs and whether it is recorded; a mic chosen from the list for an input (taken off the one it was
+on), a mic not on the list, named or not, and onto the list; a take keeps the recorded ones, each named in its
+sidecar; a mic chosen on one app's page is named on every app's; the transcribe app's instruments find their input
+by its name; the tools pick a take's channel by its input's name (recorder/sidecar.py, transcriber/importer.py);
+configs, room files and sidecars of before still read."""
 
 import json
 import subprocess
@@ -16,15 +18,54 @@ import pytest
 from fastapi.testclient import TestClient
 
 from recorder.config import REPO, load_config
-from recorder.inputs import Inputs, InputError, channels_meta
+from recorder.inputs import KNOWN_MICS, Inputs, InputError, channels_meta, mic_id
 from recorder.sidecar import channels as sidecar_channels
 from recorder.sidecar import find_channel
 
 ROOM = """
-[inputs.1]
+[mics.piezo]
 name = "Piezo"
 for = "bass"
+
+[mics.nadine]
+name = "Nadine"
+details = "Ear Trumpet Labs Nadine, on the bass"
+for = "bass"
+
+[mics.mxl-990]
+name = "MXL 990"
+details = "MXL 990, a large-diaphragm condenser"
+aka = ["Room mic"]
+
+[mics.bluebird-sl]
+name = "Bluebird SL"
+details = "Blue Bluebird SL"
+
+[inputs.1]
+mic = "piezo"
 record = true
+
+[inputs.3]
+mic = "nadine"
+record = true
+
+[inputs.4]
+mic = "mxl-990"
+record = true
+"""
+# The room's file as installed 2026-10-20, before the list (on the control unit until the first change from a page),
+# on the fake device's four inputs (the unit's 5 and 7 here 2 and 1)
+BEFORE = """
+[inputs.1]
+name = "Piezo"
+details = "Fishman Full Circle, through the Fishman Pro-EQ Platinum DI, into rear line input 7"
+for = "bass"
+record = true
+
+[inputs.2]
+name = "Records, left"
+details = "The record player, for the speakers (the 18i8's Mix A): not recorded"
+record = false
 
 [inputs.3]
 name = "Nadine"
@@ -34,6 +75,7 @@ record = true
 
 [inputs.4]
 name = "Room mic"
+details = "MXL 990 (cardioid large-diaphragm condenser, phantom power), gain about halfway (2026-10-17)"
 record = true
 """
 
@@ -54,8 +96,9 @@ def wait_idle(client, limit=20):
 def test_with_no_file_the_config_stands_in_as_before(tmp_path, room_inputs):
     ins = Inputs(dev("exercises-dev.toml", tmp_path))
     assert not room_inputs.exists()
-    assert [(i.number, i.name, i.record) for i in ins.kept()] == [(3, "Nadine", True), (4, "Room mic", True),
-                                                                   (1, "Piezo", True)]  # keep_channels' order
+    # keep_channels' order; the config's names read as the first copy's list has them ("Room mic", the MXL 990)
+    assert [(i.number, i.name, i.mic, i.record) for i in ins.kept()] == [
+        (3, "Nadine", "nadine", True), (4, "MXL 990", "mxl-990", True), (1, "Piezo", "piezo", True)]
     assert [(i.number, i.named, i.record) for i in ins.all()] == [(1, True, True), (2, False, False), (3, True, True),
                                                                   (4, True, True)]
     # the practice recorder's config names nothing: the profile's kept input, unnamed
@@ -65,39 +108,104 @@ def test_with_no_file_the_config_stands_in_as_before(tmp_path, room_inputs):
 
 def test_a_change_writes_the_file_from_what_the_app_had(tmp_path, room_inputs):
     ins = Inputs(dev("exercises-dev.toml", tmp_path))
-    ins.update(2, name="  Bluebird\tSL ", details="Blue Bluebird SL", for_kind="")
-    raw = tomllib.loads(room_inputs.read_text())["inputs"]
-    assert sorted(raw) == ["1", "2", "3", "4"]  # the config's three, and the new one
-    assert raw["2"]["name"] == "Bluebird SL" and raw["2"]["record"] is True and raw["2"]["since"]
-    assert raw["3"] == {"name": "Nadine", "details": "Ear Trumpet Labs Nadine, on the bass", "for": "bass", "record": True}
+    ins.update(2, mic="bluebird-sl")
+    raw = tomllib.loads(room_inputs.read_text())
+    known = tomllib.loads(KNOWN_MICS.read_text())["mics"]
+    assert raw["mics"] == known  # the first copy's list, written in
+    assert sorted(raw["inputs"]) == ["1", "2", "3", "4"]  # the config's three, and the new one
+    assert raw["inputs"]["2"]["mic"] == "bluebird-sl" and raw["inputs"]["2"]["record"] is True and raw["inputs"]["2"]["since"]
+    assert raw["inputs"]["3"] == {"mic": "nadine", "record": True}
     # from now on the file: the recorded inputs by number
-    assert [i.number for i in ins.kept()] == [1, 2, 3, 4]
+    assert [(i.number, i.name) for i in ins.kept()] == [(1, "Piezo"), (2, "Bluebird SL"), (3, "Nadine"), (4, "MXL 990")]
+    with pytest.raises(InputError, match="no mic"):
+        ins.update(2, mic="banjo-mic")
     with pytest.raises(InputError):
         ins.update(2, name="")
     with pytest.raises(InputError):
         ins.update(9, name="Nine")
+    with pytest.raises(InputError, match="from the list"):
+        ins.update(2, for_kind="bass")  # the Bluebird's kind is the list's
     with pytest.raises(InputError):
-        ins.update(2, for_kind="Bass Guitar!")
+        ins.update(2, name="Shure SM57", for_kind="Bass Guitar!")
     with pytest.raises(InputError):
         ins.update(2, name="x" * 41)
+
+
+def test_a_mic_from_the_list_is_in_one_place(tmp_path, room_inputs):
+    room_inputs.write_text(ROOM)
+    ins = Inputs(dev("exercises-dev.toml", tmp_path))
+    assert [(m.id, m.name) for m in ins.mics()][:2] == [("piezo", "Piezo"), ("nadine", "Nadine")]
+    ins.update(2, mic="mxl-990")  # the MXL moved from input 4 to input 2
+    assert (ins.get(2).name, ins.get(2).record) == ("MXL 990", True)
+    assert (ins.get(4).name, ins.get(4).named, ins.get(4).record) == ("Input 4", False, False)
+    assert "4" not in tomllib.loads(room_inputs.read_text())["inputs"]
+    ins.update(3, mic="bluebird-sl")  # the Bluebird in the Nadine's place: the Nadine on no input
+    assert [(i.number, i.name) for i in ins.kept()] == [(1, "Piezo"), (2, "MXL 990"), (3, "Bluebird SL")]
+    ins.update(3, record=False)
+    ins.update(3, mic="nadine")  # another mic on an input not recorded: still not recorded
+    assert (ins.get(3).name, ins.get(3).for_kind, ins.get(3).record) == ("Nadine", "bass", False)
+    ins.update(3, clear=True)  # nothing plugged in
+    assert not ins.get(3).named and not ins.get(3).record
+    on = {m["id"]: m["input"] for m in ins.mics_json()}
+    assert on == {"piezo": 1, "nadine": None, "mxl-990": 2, "bluebird-sl": None}
+
+
+def test_a_mic_not_on_the_list_and_onto_it(tmp_path, room_inputs):
+    room_inputs.write_text(ROOM)
+    ins = Inputs(dev("exercises-dev.toml", tmp_path))
+    ins.update(2, name=" Shure  SM57 ")
+    two = ins.get(2)
+    assert (two.name, two.mic, two.record, two.details) == ("Shure SM57", "", True, "")
+    assert tomllib.loads(room_inputs.read_text())["inputs"]["2"]["name"] == "Shure SM57"
+    ins.update(2, details="a dynamic mic, on the dobro")  # its own details
+    assert ins.get(2).name == "Shure SM57" and ins.get(2).details == "a dynamic mic, on the dobro"
+    ins.update(2, add_to_list=True)
+    assert ins.get(2).mic == "shure-sm57" and [m.name for m in ins.mics()][-1] == "Shure SM57"
+    raw = tomllib.loads(room_inputs.read_text())
+    assert raw["mics"]["shure-sm57"] == {"name": "Shure SM57", "details": "a dynamic mic, on the dobro"}
+    assert raw["inputs"]["2"]["mic"] == "shure-sm57"
+    with pytest.raises(InputError, match="on the list"):
+        ins.update(2, add_to_list=True)
+    ins.update(4, name="nadine")  # a name on the list is that mic: moved from input 3
+    assert ins.get(4).mic == "nadine" and not ins.get(3).named
+    ins.update(4, name="Another mic")  # a mic not on the list, in the Nadine's place: none of its details
+    assert (ins.get(4).name, ins.get(4).details, ins.get(4).for_kind) == ("Another mic", "", "")
+    assert mic_id("Shure SM-57", {"shure-sm57"}) == "shure-sm-57" and mic_id("Shure SM57!", {"shure-sm57"}) == "shure-sm57-2"
+    assert mic_id("***", {}) == "mic"
+
+
+def test_a_room_file_of_before_the_list_reads_its_mics_from_the_first_copy(tmp_path, room_inputs):
+    room_inputs.write_text(BEFORE)
+    ins = Inputs(dev("transcribe-dev.toml", tmp_path))
+    assert [(i.number, i.name, i.mic) for i in ins.all() if i.named] == [
+        (1, "Piezo", "piezo"), (2, "Records, left", "records-left"), (3, "Nadine", "nadine"), (4, "MXL 990", "mxl-990")]
+    assert ins.problems == []
+    assert ins.pick("Room mic", "dobro") == (ins.get(4), "name")  # a preset of before: the name the MXL went by
+    ins.update(3, mic="bluebird-sl")
+    raw = tomllib.loads(room_inputs.read_text())
+    assert "bluebird-sl" in raw["mics"] and raw["inputs"]["4"] == {"mic": "mxl-990", "record": True}
+    assert [(i.number, i.name) for i in ins.kept()] == [(1, "Piezo"), (3, "Bluebird SL"), (4, "MXL 990")]
 
 
 def test_every_app_reads_the_file_again_when_another_writes_it(tmp_path, room_inputs):
     room_inputs.write_text(ROOM)
     a, b = Inputs(dev("exercises-dev.toml", tmp_path)), Inputs(dev("transcribe-dev.toml", tmp_path))
     v = b.version
-    a.update(3, name="Bluebird SL", details="Blue Bluebird SL", for_kind="")
+    a.update(3, mic="bluebird-sl")
     assert b.version != v and b.get(3).name == "Bluebird SL" and b.get(3).for_kind == ""
     a.update(4, record=False)
     assert [i.number for i in b.kept()] == [1, 3]
-    assert b.get(4).name == "Room mic" and not b.get(4).record  # named, not recorded
+    assert b.get(4).name == "MXL 990" and not b.get(4).record  # named, not recorded
 
 
 def test_a_bad_table_is_left_out_and_said(tmp_path, room_inputs):
-    room_inputs.write_text(ROOM + '\n[inputs.12]\nname = "Too far"\n\n[inputs.2]\nname = ""\nfor = "Bad Kind!"\n')
+    room_inputs.write_text(ROOM + '\n[inputs.12]\nname = "Too far"\n\n[inputs.2]\nname = ""\nfor = "Bad Kind!"\n'
+                           '\n[mics."Bad Key"]\nname = "Bad"\n\n[mics.twin]\nname = "nadine"\n')
     ins = Inputs(dev("exercises-dev.toml", tmp_path))
     assert [i.number for i in ins.kept()] == [1, 3, 4]
-    assert len(ins.problems) == 2
+    assert len(ins.problems) == 4 and [m.id for m in ins.mics()] == ["piezo", "nadine", "mxl-990", "bluebird-sl"]
+    room_inputs.write_text(ROOM.replace('mic = "nadine"', 'mic = "banjo-mic"'))
+    assert ins.get(3).name == "banjo-mic" and ins.get(3).mic == "" and "banjo-mic" in ins.problems[0]
     room_inputs.write_text("not = [toml")
     assert [i.number for i in ins.kept()] == [1, 3, 4]  # the last good reading stands
     assert ins.problems and "room-inputs.toml" in ins.problems[0]
@@ -106,9 +214,9 @@ def test_a_bad_table_is_left_out_and_said(tmp_path, room_inputs):
 def test_an_instrument_picks_its_input_by_name(tmp_path, room_inputs):
     room_inputs.write_text(ROOM)
     ins = Inputs(dev("transcribe-dev.toml", tmp_path))
-    assert (ins.pick("Room mic", "dobro")[0].number, ins.pick("room MIC", "dobro")[1]) == (4, "name")
+    assert (ins.pick("MXL 990", "dobro")[0].number, ins.pick("room MIC", "dobro")[1]) == (4, "name")  # or as it was
     assert ins.pick("Nadine", "bass")[0].number == 3
-    ins.update(3, name="Bluebird SL", for_kind="")  # the Nadine's input has another mic now
+    ins.update(3, mic="bluebird-sl")  # the Nadine's input has another mic now
     hit, how = ins.pick("Nadine", "bass")
     assert (hit.number, how) == (1, "kind")  # the piezo, for the bass
     hit, how = ins.pick("Nadine", "bass", number=3)  # a config of before: "input = 3", named Nadine there
@@ -137,14 +245,14 @@ def test_a_take_records_the_rooms_inputs_each_named(tmp_path, room_inputs):
         assert len(s["input_levels"]) == 4 and len(s["recording"]["meters_dbfs"]) == 3
         assert s["recording"]["inputs"] == [1, 3, 4]
         assert s["input_levels"][1] < s["input_levels"][0]  # the fake device: each input 6 dB under the one before
-        # a mic named while the take is recorded: the take has its name
-        assert c.put("/api/inputs/3", json={"name": "Bluebird SL", "for": ""}).status_code == 200
+        # a mic chosen while the take is recorded: the take has its name
+        assert c.put("/api/inputs/3", json={"mic": "bluebird-sl"}).status_code == 200
         time.sleep(0.2)
         c.post("/api/record/stop")
         wait_idle(c)
         side = json.loads((cfg.takes_dir / f"{take}.json").read_text())
         assert [(ch["channel"], ch["input"], ch["input_name"]) for ch in side["channels"]] == [
-            (0, 1, "Piezo"), (1, 3, "Bluebird SL"), (2, 4, "Room mic")]
+            (0, 1, "Piezo"), (1, 3, "Bluebird SL"), (2, 4, "MXL 990")]
         assert side["channels"][0]["input_for"] == "bass" and "input_for" not in side["channels"][1]
         with wave.open(str(cfg.takes_dir / f"{take}.wav")) as w:
             assert w.getnchannels() == 3
@@ -157,7 +265,7 @@ def test_a_take_records_the_rooms_inputs_each_named(tmp_path, room_inputs):
         wait_idle(c)
         side = json.loads((cfg.takes_dir / f"{take}.json").read_text())
         assert [(ch["input"], ch["input_name"]) for ch in side["channels"]] == [(2, "Test mic"), (3, "Bluebird SL"),
-                                                                                (4, "Room mic")]
+                                                                                (4, "MXL 990")]
 
 
 def test_with_nothing_recorded_a_take_is_refused(tmp_path, room_inputs):
@@ -191,13 +299,17 @@ def test_a_name_from_one_app_is_in_the_others(tmp_path, room_inputs):
     with TestClient(practice_app(dev("dev.toml", tmp_path / "p"))) as p, TestClient(exercise_app(ex_cfg)) as e, \
             TestClient(chords_app(replace(dev("chords-dev.toml", tmp_path / "c")))) as ch:
         v = e.get("/api/status").json()["inputs_version"]
-        r = p.put("/api/inputs/3", json={"name": "Bluebird SL", "details": "Blue Bluebird SL", "for": ""})
+        r = p.put("/api/inputs/3", json={"mic": "bluebird-sl"})
         assert r.status_code == 200 and r.json()["inputs"][2]["name"] == "Bluebird SL"
+        assert {m["id"]: m["input"] for m in r.json()["mics"]} == {"piezo": 1, "nadine": None, "mxl-990": 4,
+                                                                   "bluebird-sl": 3}
         assert e.get("/api/status").json()["inputs_version"] != v  # the page reads /api/inputs again
         three = e.get("/api/inputs").json()["inputs"][2]
-        assert (three["name"], three["details"], three["for"], three["record"]) == ("Bluebird SL", "Blue Bluebird SL", "", True)
+        assert (three["name"], three["mic"], three["details"], three["for"], three["record"]) == (
+            "Bluebird SL", "bluebird-sl", "Blue Bluebird SL", "", True)
         assert ch.get("/api/inputs").json()["inputs"][2]["name"] == "Bluebird SL"
-        assert p.put("/api/inputs/3", json={"for": "Not a kind!"}).status_code == 400
+        assert p.put("/api/inputs/3", json={"for": "bass"}).status_code == 400  # the list's mic: its own kind
+        assert p.put("/api/inputs/3", json={"mic": "banjo-mic"}).status_code == 400
         assert p.put("/api/inputs/7", json={"name": "Seven"}).status_code == 400  # the fake device has four
         for app in (p, e, ch):
             r = app.get("/inputs.js")
@@ -210,7 +322,7 @@ def test_a_name_from_one_app_is_in_the_others(tmp_path, room_inputs):
         wait_idle(e)
         t = next(x for x in e.get("/api/takes").json() if x["id"] == take)
         assert [(c["input"], c["input_name"], c["carries"]) for c in t["channels"]] == [
-            (1, "Piezo", "none"), (2, "Test mic", "room"), (3, "Bluebird SL", "room"), (4, "Room mic", "room")]
+            (1, "Piezo", "none"), (2, "Test mic", "room"), (3, "Bluebird SL", "room"), (4, "MXL 990", "room")]
 
 
 def test_the_chord_app_hears_the_recorded_inputs(tmp_path, room_inputs):
@@ -220,7 +332,7 @@ def test_the_chord_app_hears_the_recorded_inputs(tmp_path, room_inputs):
     ins = Inputs(cfg)
     lis = Listener(cfg, cfg.takes_dir, inputs=ins)
     assert [i.number for i in lis.inputs] == [1, 3, 4] and [lis.inputs[c].number for c in lis.mix] == [4]  # the room's
-    ins.update(2, name="Bluebird SL")
+    ins.update(2, mic="bluebird-sl")
     lis._follow_inputs()  # each listen starts so
     assert [i.number for i in lis.inputs] == [1, 2, 3, 4] and [lis.inputs[c].number for c in lis.mix] == [2, 4]
     lis.listen(inputs=[3])
@@ -235,8 +347,8 @@ def test_the_transcribe_apps_instruments_by_name_and_by_number_before(tmp_path):
     from transcriber.settings import load_settings
     s = load_settings(load_config(REPO / "config" / "transcribe.toml"))
     assert {i.kind: (i.input, i.input_number) for i in s.instruments} == {
-        "dobro": ("Room mic", None), "bass": ("Nadine", None), "piano": ("Room mic", None),
-        "strings": ("Room mic", None)}
+        "dobro": ("MXL 990", None), "bass": ("Nadine", None), "piano": ("MXL 990", None),
+        "strings": ("MXL 990", None)}
     old = tmp_path / "old.toml"  # /etc/take-transcriber.toml as installed before 2026-10-20
     old.write_text('capture = "fake"\nplayback = "fake"\nkeep_channels = [2, 3, 0]\ntakes_dir = "t"\n'
                    '[inputs.3]\nname = "Nadine"\n[inputs.4]\nname = "Room mic"\n[inputs.1]\nname = "Piezo"\n'
@@ -255,8 +367,8 @@ def test_the_transcribe_apps_bass_follows_the_nadine_by_name(tmp_path, room_inpu
     with TestClient(create_app(cfg)) as c:
         bass = next(i for i in c.get("/api/setup").json()["instruments"] if i["kind"] == "bass")
         assert (bass["input"], bass["found"]) == (3, "name")
-        c.put("/api/inputs/3", json={"name": "Bluebird SL", "for": ""})
-        c.put("/api/inputs/2", json={"name": "Nadine", "for": "bass"})  # the Nadine, plugged into input 2
+        c.put("/api/inputs/3", json={"mic": "bluebird-sl"})
+        c.put("/api/inputs/2", json={"mic": "nadine"})  # the Nadine, plugged into input 2
         setup = c.get("/api/setup").json()
         bass = next(i for i in setup["instruments"] if i["kind"] == "bass")
         assert (bass["input"], bass["found"]) == (2, "name")
@@ -321,8 +433,8 @@ def test_channels_meta_names_each_input_as_the_room_has_it(tmp_path, room_inputs
     room_inputs.write_text(ROOM)
     ins = Inputs(dev("dev.toml", tmp_path))
     kept = ins.kept()
-    ins.update(3, name="Bluebird SL", details="Blue Bluebird SL", for_kind="")
-    assert [c["input_name"] for c in channels_meta(kept)] == ["Piezo", "Nadine", "Room mic"]  # as at its start
+    ins.update(3, mic="bluebird-sl")
+    assert [c["input_name"] for c in channels_meta(kept)] == ["Piezo", "Nadine", "MXL 990"]  # as at its start
     now = channels_meta(kept, ins)
-    assert [c["input_name"] for c in now] == ["Piezo", "Bluebird SL", "Room mic"]
+    assert [c["input_name"] for c in now] == ["Piezo", "Bluebird SL", "MXL 990"]
     assert now[1] == {"channel": 1, "input": 3, "input_name": "Bluebird SL", "input_details": "Blue Bluebird SL"}

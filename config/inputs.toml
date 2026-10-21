@@ -1,34 +1,65 @@
-# The music room's inputs: what is plugged into each of the interface's inputs, by its number, and whether the apps
-# record it (recorder/inputs.py). Every app on the control unit reads this file; their pages write it (naming a mic,
-# recording an input or not), so comments added here are not kept. An input with no table is not recorded.
+# The music room's inputs (recorder/inputs.py): the room's mics, the list the apps' pages offer for an input
+# ([mics.*]), and what is plugged into each of the interface's inputs, by its number, and whether the apps record it
+# ([inputs.N]). Every app on the control unit reads this file; their pages write it (choosing a mic, recording an
+# input or not), so comments added here are not kept. An input with no table is not recorded.
 #
 # setup/install.sh installs this copy once, as ~/room-inputs.toml (the home of the user the apps run as); after that
-# the pages keep it. As wired on 2026-10-17 (config/exercises.toml's inputs then): input 3 the Nadine, input 4 the MXL
-# 990, rear line input 7 the bass's piezo; rear inputs 5 and 6 the record player's line, for the speakers only.
+# the pages keep it. A room file with no [mics] (one written before the list, 2026-10-21) takes this copy's list.
+# The mics are docs/components.md's, slot 1. As wired on 2026-10-21 (the player): input 3 the Bluebird SL, input 4
+# the MXL 990, rear line input 7 the bass's piezo; rear inputs 5 and 6 the record player's line, for the speakers only.
+
+[mics.bluebird-sl]
+name = "Bluebird SL"
+details = "Blue Bluebird SL: cardioid large-diaphragm condenser, phantom power"
+
+[mics.mxl-990]
+name = "MXL 990"
+details = "MXL 990: cardioid large-diaphragm condenser, phantom power"
+# its name on input 4 before the list (2026-10-17 to 2026-10-21), and in the transcribe app's presets then
+aka = ["Room mic"]
+
+[mics.nadine]
+name = "Nadine"
+details = "Ear Trumpet Labs Nadine, the upright bass's mic, phantom power"
+for = "bass"
+
+[mics.piezo]
+name = "Piezo"
+details = "Fishman Full Circle on the bass, through the Fishman Pro-EQ Platinum DI, a line input"
+for = "bass"
+
+[mics.small-condenser-1]
+name = "Small condenser 1"
+details = "One of the two small-diaphragm condensers (they sound the same), phantom power"
+
+[mics.small-condenser-2]
+name = "Small condenser 2"
+details = "One of the two small-diaphragm condensers (they sound the same), phantom power"
+
+[mics.records-left]
+name = "Records, left"
+details = "The record player's left channel, a line input, for the speakers (the 18i8's Mix A)"
+
+[mics.records-right]
+name = "Records, right"
+details = "The record player's right channel, a line input, for the speakers (the 18i8's Mix B)"
 
 [inputs.3]
-name = "Nadine"
-details = "Ear Trumpet Labs Nadine, on the bass"
-for = "bass"
+mic = "bluebird-sl"
 record = true
 
 [inputs.4]
-name = "Room mic"
-details = "MXL 990 (cardioid large-diaphragm condenser, phantom power), gain about halfway (2026-10-17)"
+mic = "mxl-990"
 record = true
 
 [inputs.5]
-name = "Records, left"
-details = "The record player, for the speakers (the 18i8's Mix A): not recorded"
+mic = "records-left"
 record = false
 
 [inputs.6]
-name = "Records, right"
-details = "The record player, for the speakers (the 18i8's Mix B): not recorded"
+mic = "records-right"
 record = false
 
 [inputs.7]
-name = "Piezo"
-details = "Fishman Full Circle, through the Fishman Pro-EQ Platinum DI, into rear line input 7"
-for = "bass"
+mic = "piezo"
 record = true

@@ -306,7 +306,7 @@ def test_another_input_can_carry_the_instrument(client, setup):
 def test_a_piano_take_is_a_folder_of_the_corpus_and_a_grand_staff(client, setup):
     cfg, _ = setup
     piano = next(i for i in client.get("/api/setup").json()["instruments"] if i["kind"] == "piano")
-    # the room mic, as the exercise app's: found by its name
+    # the room mic, as the exercise app's: found by the name the MXL 990 went by (the dev config's "Room mic")
     assert piano == {"kind": "piano", "name": "Piano", "input": 4, "input_name": "Room mic", "found": "name",
                      "tab": False, "staves": "grand"}
     take = record(client, 2.0, instrument="piano", bpm=120)
@@ -317,7 +317,7 @@ def test_a_piano_take_is_a_folder_of_the_corpus_and_a_grand_staff(client, setup)
     # the folder as for the others: the room mic's channel alone, every kept input in raw/, the corpus's takes.csv
     assert flac_info(d / "take-01.flac") == (48000, 1, 24) and flac_info(d / "raw" / f"{take}.flac") == (48000, 3, 24)
     meta = json.loads((d / "meta.json").read_text())
-    for k, v in {"instrument": "piano", "input": 4, "input_name": "Room mic", "channel": 1, "bpm": 120.0, "click": True,
+    for k, v in {"instrument": "piano", "input": 4, "input_name": "MXL 990", "channel": 1, "bpm": 120.0, "click": True,
                  "count_in_bars": 1, "click_found": True}.items():
         assert meta[k] == v, k
     rows = list(csv.DictReader((d / "takes.csv").open()))

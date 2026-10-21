@@ -1,8 +1,8 @@
 """The room's inputs on the four apps' pages (tests/inputs_page.cjs, Playwright for Node, muted): the practice
 recorder, the exercise app, the chord app and the transcribe app on the fake device, sharing one room inputs file; a
-mic named on one page shows on another, a take keeps every recorded input named, the transcribe app's bass finds its
-input by name. Needs node and Playwright's package (found by node, or in $PLAYWRIGHT_NODE_PATH); skipped without.
-The screenshots go to $INPUTS_SHOTS if set."""
+mic chosen on one page shows on another, a take keeps every recorded input named, the transcribe app's bass finds its
+input by name. The room's list of mics is the first copy's (config/inputs.toml). Needs node and Playwright's package
+(found by node, or in $PLAYWRIGHT_NODE_PATH); skipped without. The screenshots go to $INPUTS_SHOTS if set."""
 
 import os
 import shutil
@@ -20,21 +20,13 @@ from recorder.config import REPO, load_config
 
 SCRIPT = REPO / "tests" / "inputs_page.cjs"
 ROOM = """[inputs.1]
-name = "Piezo"
-details = "Fishman Full Circle, through the Fishman Pro-EQ Platinum DI"
-for = "bass"
-record = true
+mic = "piezo"
 
 [inputs.3]
-name = "Nadine"
-details = "Ear Trumpet Labs Nadine, on the bass"
-for = "bass"
-record = true
+mic = "nadine"
 
 [inputs.4]
-name = "Room mic"
-details = "MXL 990"
-record = true
+mic = "mxl-990"
 """
 
 

@@ -71,6 +71,11 @@ yet.
 - **Room mic since 2026-10-17: an MXL 990** (the player), on the 18i8's input 4 in place of the
   small-diaphragm condenser, gain knob about halfway, phantom on. Cardioid only, about 20 dB(A)
   self-noise as listed (the note below had passed it over for that). T4 and T5 done (swap log); T8 due.
+- **A Blue Bluebird SL since 2026-10-20** (the player, used): a cardioid large-diaphragm condenser,
+  phantom power, on input 3 in the Nadine's place (slot 2).
+- **The list the apps offer:** the room's inputs file's `[mics]` (`config/inputs.toml` its first copy,
+  PLAN.md step 10): each mic, pickup or line source above, which the pages choose for an input. A mic
+  added here goes there too (or is added from a page, "A mic not on the list", then "Add it to the list").
 - **Wanted, when a good used one turns up locally (not a priority):** a
   room mic, for what a listener hears (the instruments and the room
   together), beside the close mics and pickups. It needs its own input:
