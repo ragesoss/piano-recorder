@@ -2,6 +2,9 @@
 
 capture = "fake"
 playback = "fake"
+# The room's inputs on the desktop, shared by the dev configs (recorder/inputs.py; not in git). Until a page
+# names one: the fake profile's keep_channels (input 1).
+inputs_file = "inputs-dev.toml"
 # Backing tracks for play-along takes (tools/push-backing puts them here).
 backing_dir = "backing-dev"
 takes_dir = "takes-dev"

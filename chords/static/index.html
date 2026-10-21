@@ -38,6 +38,7 @@ button { cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--purple-fill); color: #fff; font-weight: 700; }
 .grow { flex: 1; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.chips .ri-strip { flex-direction: row; flex-wrap: wrap; align-items: center; }  /* the room's inputs: Inputs… beside the chips */
 .chips .lbl { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); }
 .chip { min-height: 40px; padding: 0 14px; border-radius: 20px; border: 1.5px solid var(--line); background: transparent; font-size: 15px; font-weight: 600; }
 .chip[aria-pressed="true"] { border-color: var(--purple); background: var(--purple-tint); color: var(--purple-ink); }
@@ -208,6 +209,7 @@ main.zones { justify-content: flex-start; gap: 12px; }
   </div>
 </div>
 
+<script src="/inputs.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 $("home").href = `http://${location.hostname}/`;
@@ -287,7 +289,7 @@ function stopClip() { const a = $("clip"); a.pause(); if (a.dataset.btn) $(a.dat
 $("clip").onended = stopClip;
 function renderInputs() {
   const box = $("inputs");
-  box.querySelectorAll("button").forEach((b) => b.remove());
+  box.querySelectorAll("button, .ri-strip").forEach((b) => b.remove());
   for (const i of [...inputs].sort((a, b) => a.input - b.input)) {
     const b = document.createElement("button");
     b.type = "button"; b.className = "chip"; b.textContent = i.name; b.title = i.details;
@@ -296,12 +298,15 @@ function renderInputs() {
       mix = on ? mix.filter((x) => x !== i.input) : [...mix, i.input]; store.set("mix", mix); renderInputs(); ask(); };
     box.appendChild(b);
   }
+  // an input not recorded that hears something, and Inputs… (name a mic plugged in)
+  box.insertAdjacentHTML("beforeend", RoomInputs.extras());
 }
 function ask() { if (!document.hidden && mix) api("POST", "/api/listen", { inputs: mix, instrument }).catch((e) => showError(e.message)); }
 function showError(m) { $("error").textContent = m || ""; $("error").hidden = !m; }
 
 function render(s) {
   st = s;
+  RoomInputs.update(s);
   const on = s.state === "listening";
   $("dot").classList.toggle("on", on);
   $("stateText").textContent = on ? "Listening" : s.state === "waiting" ? "Letting a recorder have the inputs" : "Not listening";
@@ -463,12 +468,19 @@ $("pickPair").onclick = (e) => { const b = e.target.closest("[data-p]"); if (!b)
 $("pairKeep").onclick = () => { if (pickPair.length === 2) { $("picker").hidden = true; answer(pickPair.join("+")); } };
 document.addEventListener("visibilitychange", () => { if (!document.hidden) ask(); });
 
-(async () => {
-  try { inputs = await api("GET", "/api/inputs"); } catch (e) { inputs = []; }
+// the inputs it hears: the ones the room records (recorder/inputs.py, shared with the recorders), the room's by
+// default; a mic named or recorded on any app's page shows here at once (recorder/static/inputs.js)
+function takeInputs() {
+  inputs = RoomInputs.recorded();
   const known = inputs.map((i) => i.input);
-  if (!mix || !mix.every((x) => known.includes(x))) mix = inputs.filter((i) => !i.for).map((i) => i.input).concat().slice(0) || known;
+  if (!mix || !mix.every((x) => known.includes(x))) mix = inputs.filter((i) => !i.for).map((i) => i.input);
   if (!mix.length) mix = known;
-  renderInputs(); renderTally(); setView(view); ask(); setInterval(ask, 2000); poll();
+  renderInputs();
+}
+RoomInputs.onChange(() => { takeInputs(); ask(); });
+(async () => {
+  await RoomInputs.init({ monitor: ask });
+  takeInputs(); renderTally(); setView(view); ask(); setInterval(ask, 2000); poll();
 })();
 </script>
 </body>

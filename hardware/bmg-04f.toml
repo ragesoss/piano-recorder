@@ -16,7 +16,10 @@ device = "hw:CARD=spker,DEV=0"
 format = "S16_LE"
 rate = 48000
 channels = 2
-# The two channels are identical sample for sample: the mono main mix.
+# The two channels are identical sample for sample: the mono main mix, the one input the
+# software sees (the mixer's own inputs are mixed in it).
+inputs = 1
+sockets = ["The mixer's main mix"]
 keep_channels = [0]
 # About -4 LSB of DC offset.
 remove_dc = true

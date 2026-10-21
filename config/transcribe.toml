@@ -1,12 +1,12 @@
 # The transcribe app's config (transcriber/), installed as /etc/take-transcriber.toml by setup/install.sh.
-# The same devices and inputs as the exercise app (config/exercises.toml): the 18i8, inputs 3, 4 and 7.
-# It records the dobro, the bass and the piano ([instruments.*]).
+# The same devices as the exercise app (config/exercises.toml): the 18i8. It records the dobro, the bass, the
+# piano and any stringed instrument ([instruments.*]).
 
 capture = "scarlett-18i8-gen3"
 playback = "scarlett-18i8-gen3"
-# As the exercise app keeps them: 0 the Nadine (input 3), 1 the room mic (input 4), 2 the piezo (rear line
-# input 7). A take's folder holds the instrument's input alone (take-01.flac) and all three (raw/).
-keep_channels = [2, 3, 6]
+# The inputs it records, and what is on each, are the room's (~/room-inputs.toml, recorder/inputs.py: named from
+# the apps' pages), as every app's. A take's folder holds the instrument's input alone (take-01.flac) and every
+# recorded input (raw/, its sidecar naming each channel).
 # The take folders ("~" is the home of the user the service runs as): what "Review it" hands the review app.
 takes_dir = "~/transcribe-takes"
 # Before recording, this app asks each of these to let go of the inputs and the speakers (recorder/peers.py):
@@ -15,43 +15,29 @@ takes_dir = "~/transcribe-takes"
 peers = ["http://127.0.0.1:8000", "http://127.0.0.1:8001", "http://127.0.0.1:8002", "http://127.0.0.1:8003",
          "http://127.0.0.1:8004"]
 
-# As in config/exercises.toml.
-[inputs.7]
-name = "Piezo"
-details = "Fishman Full Circle, through the Fishman Pro-EQ Platinum DI, into rear line input 7"
-for = "bass"
-
-[inputs.3]
-name = "Nadine"
-details = "Ear Trumpet Labs Nadine, on the bass"
-for = "bass"
-
-[inputs.4]
-name = "Room mic"
-details = "MXL 990 (cardioid large-diaphragm condenser, phantom power), gain about halfway (2026-10-17)"
-
 # What this app records, as the pipeline names it (`transcribe --instrument`), and the input that carries it
-# unless the page says another: the dobro on the room mic; the bass on the Nadine, as the corpus's bass takes
-# (dobro-transcription tunes/bass/*: "the Nadine's channel alone"); the piano on the room mic, as the exercise
-# app records it (every piano exercise take's sidecar: input 4, "Room mic", carries the piano; the Nadine and the
-# piezo nothing). The piano is written as a grand staff, no tab. Any stringed instrument (the pipeline's generic
-# path: a mandolin, a banjo, a guitar...; its kind chosen on the page, or not) on the room mic, written as one
-# staff, no tab.
+# unless the page says another, by its name in the room's inputs (wherever it is plugged in): the dobro on the room
+# mic; the bass on the Nadine, as the corpus's bass takes (dobro-transcription tunes/bass/*: "the Nadine's channel
+# alone"); the piano on the room mic, as the exercise app records it (every piano exercise take's sidecar: input 4,
+# "Room mic", carries the piano; the Nadine and the piezo nothing). The piano is written as a grand staff, no tab.
+# Any stringed instrument (the pipeline's generic path: a mandolin, a banjo, a guitar...; its kind chosen on the
+# page, or not) on the room mic, written as one staff, no tab. With no recorded input of that name: one for the
+# instrument's kind (the bass: the piezo), else the room's (recorder/inputs.py, `Inputs.pick`).
 [instruments.dobro]
 name = "Dobro"
-input = 4
+input = "Room mic"
 
 [instruments.bass]
 name = "Bass"
-input = 3
+input = "Nadine"
 
 [instruments.piano]
 name = "Piano"
-input = 4
+input = "Room mic"
 
 [instruments.strings]
 name = "Any stringed instrument"
-input = 4
+input = "Room mic"
 
 # The transcription project's package as synced to the unit, and the venv that has its dependencies (numpy,
 # scipy, librosa, soundfile): the review app's. A run gets a few threads and nice 19.

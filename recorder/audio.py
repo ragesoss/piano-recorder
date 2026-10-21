@@ -10,6 +10,7 @@ import re
 import subprocess
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -170,13 +171,19 @@ class Capture:
     """Read blocks from the capture device.
 
     Blocks are int arrays shaped (frames, channels), in the profile's sample
-    format. By default they hold the profile's kept channels with DC
-    removed; raw=True gives every channel as the device sends it.
+    format. By default they hold the kept channels (`keep`, else the
+    profile's) with DC removed; raw=True gives every channel as the device
+    sends it. Each block also leaves every device input's peak in
+    `input_peaks` (input N on channel N - 1), kept or not: the pages' meters.
     """
 
-    def __init__(self, profile: Profile, block_s: float = 0.1, raw: bool = False):
+    def __init__(self, profile: Profile, block_s: float = 0.1, raw: bool = False, keep: tuple[int, ...] | None = None):
         self.profile = profile
-        self.stream = profile.capture
+        self.stream = profile.capture if keep is None else replace(profile.capture, keep_channels=tuple(keep))
+        if any(c < 0 or c >= self.stream.channels for c in self.stream.keep_channels):
+            raise ValueError(f"keep: channels 0-{self.stream.channels - 1}")
+        self.n_inputs = self.stream.inputs or self.stream.channels
+        self.input_peaks: np.ndarray | None = None
         self.dtype = dsp.dtype_for(self.stream.format)
         self.block_frames = int(self.stream.rate * block_s)
         self.raw = raw
@@ -235,6 +242,7 @@ class Capture:
             return None
         frames = np.frombuffer(data, dtype=self.dtype).reshape(-1, self.stream.channels)
         self.frames_read += len(frames)
+        self.input_peaks = np.max(np.abs(frames[:, :self.n_inputs].astype(np.int64)), axis=0)
         if self.raw:
             return frames
         kept = frames[:, list(self.stream.keep_channels)]

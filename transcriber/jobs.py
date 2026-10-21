@@ -195,6 +195,12 @@ class Jobs:
         wav = self.work.path(take_id)
         info = dict(side.get("transcribe") or {})
         d = self.folders.create(take_id)
+        # the instrument's channel: the one the sidecar says carried its input (a take of before 2026-10-20 has no
+        # `channels`: the channel it was told), named as the room has that input now
+        chans = side.get("channels") or []
+        mine = next((c for c in chans if c.get("input") == info.get("input")), None)
+        if mine is not None:
+            info.update(channel=int(mine["channel"]), input_name=mine.get("input_name", info.get("input_name", "")))
         channel = int(info.get("channel", 0))
         self._ffmpeg(["-i", str(wav), "-af", f"pan=mono|c0=c{channel}", *FLAC24], d / TAKE)
         if self.settings.keep_raw:
@@ -216,6 +222,8 @@ class Jobs:
             "app_version": VERSION,
             "transcription": {"state": "building"},
         }
+        if chans:  # what each channel of raw/<id>.flac carried, by name
+            meta["channels"] = chans
         tmp = d / "meta.json.tmp"
         tmp.write_text(json.dumps(meta, indent=1, ensure_ascii=False))
         tmp.replace(d / "meta.json")

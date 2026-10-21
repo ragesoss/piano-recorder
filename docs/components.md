@@ -118,6 +118,11 @@ yet.
     and pad per input, software.
   - Wired 2026-10-14: the Nadine on input 3, one condenser on the piano on input 4
     (phantom 3-4 on); kept channels 3 and 4. To change with more XLR cables.
+  - From 2026-10-20 what is on each input, and which are recorded, is the room's inputs file
+    (`~/room-inputs.toml`, PLAN.md step 10), named from the apps' pages; the profile has the
+    inputs themselves (`inputs = 8`, the sockets). As of 2026-10-20 (the player): a Blue
+    Bluebird SL on input 3 in the Nadine's place, the MXL 990 on input 4, the piezo's DI on
+    rear line input 7.
   - Standalone mode on: the unit keeps its routing with the Pi off.
 - **Before: the BOMGE BMG-04F** (`hardware/bmg-04f.toml`), described below. Off the Pi's USB
   from 2026-10-14; until RCA-to-1/4" cables come, its main out carries the record player

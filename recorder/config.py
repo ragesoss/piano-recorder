@@ -37,6 +37,10 @@ class Stream:
     remove_dc: bool = False
     buffer_ms: int = 2000
     controls: dict[str, Control] = field(default_factory=dict)
+    # the device's inputs (a capture stream's): how many, input N on channel N - 1 (0: one per channel), and what
+    # each socket is, for the pages ("Front, mic or line")
+    inputs: int = 0
+    sockets: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -59,11 +63,16 @@ class Profile:
 
 @dataclass(frozen=True)
 class Input:
-    """What is plugged into one of the inputs a program keeps (the config's [inputs.N])."""
+    """What is plugged into one of the device's inputs: the room's inputs file's [inputs.N] (recorder/inputs.py),
+    or before it a program's own config's."""
     number: int  # the interface's input number: the capture channel's index plus one
     name: str  # "Nadine"
     details: str = ""  # "Ear Trumpet Labs Nadine, on the bass"
     for_kind: str = ""  # a pickup or mic on one kind of instrument ("bass"); "": a mic for the room
+    record: bool = True  # the apps keep it in their takes
+    named: bool = True  # False: nothing says what is on it ("Input 2")
+    socket: str = ""  # the profile's words for the socket ("Front, mic, line or instrument")
+    since: str = ""  # when a page last changed it (ISO 8601)
 
 
 @dataclass(frozen=True)
@@ -89,8 +98,12 @@ class Config:
     peers: list[str] = field(default_factory=list)
     # The exercise app's exercises (exercises/store.py); None for the practice recorder.
     exercises_dir: Path | None = None
-    # What is plugged into each kept input, in the take's channel order (keep_channels).
+    # What the config itself says is plugged into each kept input, in its keep_channels order: what stands in for
+    # the room's inputs file (inputs_path, recorder/inputs.py) while there is none.
     inputs: tuple[Input, ...] = ()
+    # The room's inputs file, shared by every app ($ROOM_INPUTS_FILE, else the config's inputs_file, else
+    # ~/room-inputs.toml).
+    inputs_path: Path = Path("~/room-inputs.toml").expanduser()
 
 
 def _stream(raw: dict, where: str) -> Stream:
@@ -107,11 +120,15 @@ def _stream(raw: dict, where: str) -> Stream:
             remove_dc=bool(raw.get("remove_dc", False)),
             buffer_ms=int(raw.get("buffer_ms", 2000)),
             controls=controls,
+            inputs=int(raw.get("inputs", 0)),
+            sockets=tuple(str(x) for x in raw.get("sockets", ())),
         )
-    except (KeyError, TypeError) as e:
+    except (KeyError, TypeError, ValueError) as e:
         raise ConfigError(f"{where}: {e}") from e
     if any(c < 0 or c >= stream.channels for c in stream.keep_channels):
         raise ConfigError(f"{where}: keep_channels outside 0-{stream.channels - 1}")
+    if not 0 <= stream.inputs <= stream.channels:
+        raise ConfigError(f"{where}: inputs: 0-{stream.channels} (input N on channel N - 1)")
     return stream
 
 
@@ -178,7 +195,7 @@ def load_config(path: Path | None = None) -> Config:
         if not isinstance(entry, dict):
             raise ConfigError(f"{path}: [inputs.{n}] is not a table")
         inputs.append(Input(number=n, name=str(entry.get("name") or f"Input {n}"), details=str(entry.get("details", "")),
-                            for_kind=str(entry.get("for", ""))))
+                            for_kind=str(entry.get("for", "")), named=bool(entry.get("name"))))
 
     takes_dir = place(raw["takes_dir"])
     backing_dir = place(raw.get("backing_dir", "~/backing"))
@@ -201,4 +218,5 @@ def load_config(path: Path | None = None) -> Config:
         peers=[str(u) for u in raw.get("peers", [])],
         exercises_dir=place(raw["exercises_dir"]) if "exercises_dir" in raw else None,
         inputs=tuple(inputs),
+        inputs_path=place(os.environ.get("ROOM_INPUTS_FILE") or raw.get("inputs_file") or "~/room-inputs.toml"),
     )

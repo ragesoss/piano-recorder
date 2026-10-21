@@ -302,6 +302,7 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
 <div id="scoreHost" hidden></div>
 <audio id="player" preload="auto"></audio>
 <script src="/alphatab/alphaTab.min.js"></script>
+<script src="/inputs.js"></script>
 <script>
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -353,7 +354,15 @@ function plural(n, one, many) { return `${n} ${n === 1 ? one : many || one + "s"
 
 // the instruments and inputs (GET /api/setup)
 function inst(kind) { return (S.setup ? S.setup.instruments : []).find((i) => i.kind === kind) || null; }
-function inputOf(n) { return (S.setup ? S.setup.inputs : []).find((i) => i.input === Number(n)) || null; }
+// the inputs a take records (the room's: recorder/inputs.py; S.setup.inputs has every input of the device), by
+// number or by name
+function recordedInputs() { return (S.setup ? S.setup.inputs : []).filter((i) => i.record).sort((a, b) => a.channel - b.channel); }
+function inputOf(n) {
+  if (n == null || n === "") return null;
+  const all = recordedInputs();
+  if (typeof n === "string" && !/^\d+$/.test(n)) return all.find((i) => i.name.toLowerCase() === n.toLowerCase()) || null;
+  return all.find((i) => i.input === Number(n)) || null;
+}
 function chosenInst() { return inst(C().instrument); }
 function kindName(k) { const i = inst("strings"), x = i && (i.kinds || []).find((y) => y.kind === k); return x ? x.name : ""; }
 function playingName() {  // what is played, as chosen: any stringed instrument's kind when one is
@@ -371,7 +380,8 @@ function writesText() {  // what the pipeline writes for the instrument chosen (
   const parts = ["tab", "grand", "one"].filter((k) => of(k).length).map((k) => `${WRITES[k]} for ${of(k).join(" or ")}`);
   return parts.length > 1 ? `The pipeline writes ${parts.join("; ")}.` : "The pipeline writes notation and tab for it.";
 }
-function chosenInput() {  // the input the chosen instrument is on: the page's choice, else the config's
+function chosenInput() {  // the input the chosen instrument is on: the page's choice (by the input's name; a number
+  // before 2026-10-20), else the config's, by its name (the server's `found`: wherever that mic is plugged in)
   const i = chosenInst();
   if (!i) return null;
   return inputOf((C().inputs || {})[i.kind]) || inputOf(i.input);
@@ -511,16 +521,21 @@ function renderOn() {
   const kinds = i && i.kind === "strings" ? `<section class="panel" aria-label="Kind"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><h2>Which kind?</h2><span class="muted" style="font-size:14px">if you know it</span></div>
       <div class="kindset" role="radiogroup" aria-label="Kind">${(i.kinds || []).map((k) => `<button type="button" role="radio" aria-pressed="${c.kind === k.kind}" data-act="kind" data-kind="${esc(k.kind)}">${esc(k.name)}</button>`).join("")}<button type="button" role="radio" aria-pressed="${!c.kind}" data-act="kind" data-kind="">Not sure</button></div>
       <p class="muted" style="font-size:13px">It only says where the notes may lie (a mandolin's are high, a bass's low). Not sure: the range is read from the take.</p></section>` : "";
-  const opts = i ? S.setup.inputs.slice().sort((a, b) => a.input - b.input).map((x) => {
+  const opts = i ? recordedInputs().slice().sort((a, b) => a.input - b.input).map((x) => {
     const sel = inp && x.input === inp.input;
     return `<button type="button" class="opt${sel ? " sel" : ""}" role="radio" aria-checked="${!!sel}" data-act="input" data-n="${x.input}">
       <span class="radio"></span><span class="m"><b>In ${x.input} · ${esc(x.name)}${x.input === i.input ? ' <span class="badge dim">usual</span>' : ""}</b>${x.details ? `<span>${esc(x.details)}</span>` : ""}</span>
-      <span class="meter" data-meter="${x.channel}" style="max-width:90px"><i></i><b></b></span></button>`;
+      <span class="meter" data-meter="${x.input}" style="max-width:90px"><i></i><b></b></span></button>`;
   }).join("") : "";
+  // the usual input is found by its name; when no recorded input has that name, say what stands in
+  const stand = { kind: "the one for this instrument", room: "the room's", first: "the first recorded", number: "the input it was on" };
+  const usual = i && i.input_name && i.found && i.found !== "name"
+    ? `<p class="muted" style="font-size:14px">No recorded input is called ${esc(i.input_name)}${inputOf(i.input) ? `: the usual is ${esc(stand[i.found] || "another")}, In ${i.input} · ${esc(inputOf(i.input).name)}` : ""}.</p>` : "";
   return `<div class="body"><div class="q"><h1>What are you playing?</h1><p>${esc(writesText())}</p></div>
     <div class="kinds" role="radiogroup" aria-label="Instrument">${cards}</div>${kinds}
     ${i ? `<section class="panel" aria-label="Input"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><h2>Heard on</h2><span class="muted" style="font-size:14px">the take is this input alone</span></div>
-      <div class="opts" role="radiogroup" aria-label="Input">${opts}</div><p class="muted" id="monNote" style="font-size:13px"></p></section>` : ""}</div>
+      <div class="opts" role="radiogroup" aria-label="Input">${opts}</div>${usual}<p class="muted" id="monNote" style="font-size:13px"></p>
+      ${RoomInputs.extras()}</section>` : ""}</div>
     <div class="foot">${leftButton()}${nextButton("on")}</div>`;
 }
 
@@ -556,7 +571,7 @@ function renderReady() {
     <p class="sentence" style="margin-top:-6px">${sentenceHtml()}</p>
     <div class="rows">
       <div><span class="k">What</span><span class="v"><span class="big">${esc(playingName())}</span><span class="sm">${i.kind === "strings" && !C().kind ? "Kind not sure · " : ""}In ${inp.input} · ${esc(inp.name)}</span>
-        <span class="meter" data-meter="${inp.channel}" style="max-width:220px;margin-top:6px"><i></i><b></b></span></span><button type="button" class="change" data-act="step" data-step="on">Change</button></div>
+        <span class="meter" data-meter="${inp.input}" style="max-width:220px;margin-top:6px"><i></i><b></b></span>${alsoText(inp)}${RoomInputs.extras()}</span><button type="button" class="change" data-act="step" data-step="on">Change</button></div>
       <div><span class="k">Timing</span><span class="v"><span class="big">${esc(timingText(c))}</span><span class="sm">${esc(timingText(c, true).split(" · ").slice(2).join(""))}</span></span><button type="button" class="change" data-act="step" data-step="details">Change</button></div>
       <div><span class="k">Name</span><span class="v"><span class="big">${c.title ? esc(c.title) : '<span class="muted" style="font-weight:400">none</span>'}</span></span><button type="button" class="change" data-act="step" data-step="details">Change</button></div>
     </div>
@@ -565,6 +580,13 @@ function renderReady() {
   </div>
   <div class="foot"><button type="button" class="btn" data-act="start-over">${ICON.restart} From the top</button>
     <button type="button" class="btn go" data-act="go" data-to="record">${ICON.dot} Ready to record ${ICON.next}</button></div>`;
+}
+
+// the other inputs a take records (its raw/ copy keeps them all, each named)
+function others(inp) { return recordedInputs().filter((x) => !inp || x.input !== inp.input); }
+function alsoText(inp) {
+  const o = others(inp);
+  return o.length ? `<span class="sm" style="margin-top:4px">Also kept: ${esc(o.map((x) => `In ${x.input} · ${x.name}`).join(", "))}</span>` : "";
 }
 
 // --- recording: the record screen (the input, the speakers, Record)
@@ -584,8 +606,10 @@ function renderRecord() {
   const c = C(), inp = chosenInput(), s = S.status, level = s ? s.level_offset_db : 0, speakers = c.click || c.countIn;
   return `<div class="body rec-body"><p class="rec-sentence">${recSentence()}</p>
     <div class="box"><span class="label">Listening</span>
-      <div class="row"><span>In ${inp.input} · ${esc(inp.name)}</span><span class="tnum" data-meter-text="${inp.channel}">–</span></div>
-      <span class="meter big" data-meter="${inp.channel}"><i></i><b></b></span>
+      <div class="row"><span>In ${inp.input} · ${esc(inp.name)}</span><span class="tnum" data-meter-text="${inp.input}">–</span></div>
+      <span class="meter big" data-meter="${inp.input}"><i></i><b></b></span>
+      ${others(inp).map((x) => `<div class="row" style="font-size:15px;color:var(--ink3)"><span>Also kept: In ${x.input} · ${esc(x.name)}</span><span class="tnum" data-meter-text="${x.input}">–</span></div><span class="meter" data-meter="${x.input}"><i></i><b></b></span>`).join("")}
+      ${RoomInputs.extras()}
       <span class="muted" id="monNote" style="font-size:13px"></span><span class="dev-line" data-dev-line>${devLine()}</span></div>
     ${speakers ? `<div class="box"><div class="row"><label for="recLevel" style="font-weight:700">The click on the speakers</label><span data-level-text class="tnum">${esc(dbText(level))}</span></div>
       <input id="recLevel" type="range" min="-30" max="12" step="1" value="${level}" data-level></div>` : ""}
@@ -608,7 +632,8 @@ function renderRecording() {
       <div class="live"><div class="where"><div class="v tnum" data-where>…</div><div class="s" data-where-s></div></div>
         <div class="beats" data-beats hidden></div><div class="clock tnum" data-clock>0:00</div></div></div>
     <div class="rec-bar"><div class="meters" style="display:flex;flex-direction:column;gap:6px">
-        <div class="mrow"><span>${esc(inp ? inp.name : "")}</span><span class="meter big" data-meter="${inp ? inp.channel : 0}"><i></i><b></b></span></div>
+        <div class="mrow"><span>${esc(inp ? inp.name : "")}</span><span class="meter big" data-meter="${inp ? inp.input : 0}"><i></i><b></b></span></div>
+        ${others(inp).map((x) => `<div class="mrow" style="font-size:14px;color:var(--ink3)"><span>${esc(x.name)}</span><span class="meter" data-meter="${x.input}"><i></i><b></b></span></div>`).join("")}
         <span class="peak" data-peak>No clipping</span></div>
       <button type="button" class="stopbtn" data-act="stop-rec"><i></i>Stop</button></div>`;
 }
@@ -1046,14 +1071,16 @@ function live() {
   const rec = s.recording, mon = s.monitor;
   $$("[data-dev-line]").forEach((el) => { const h = devLine(); if (el.innerHTML !== h) el.innerHTML = h; });
   $$("[data-act=record]").forEach((b) => { b.disabled = !s.devices.capture; });
-  const meters = rec ? rec.meters_dbfs : mon ? mon.meters_dbfs : null, peaks = rec ? rec.peaks_dbfs : mon ? mon.peaks_dbfs : null;
+  // each meter by its input's number: every input's level, recorded or not (input N at N - 1)
+  const meters = s.input_levels, peaks = s.input_peaks;
   $$("[data-meter]").forEach((el) => {
-    const ch = Number(el.dataset.meter), v = meters ? meters[ch] : null, i = el.firstElementChild, b = el.lastElementChild;
+    const n = Number(el.dataset.meter) - 1, v = meters ? meters[n] : null, i = el.firstElementChild, b = el.lastElementChild;
     i.style.width = v == null ? "0" : meterPct(v) + "%";
     i.style.background = v > -6 ? "var(--red-dot)" : v > -12 ? "var(--amber)" : "var(--ink2)";
-    if (peaks && peaks[ch] != null && rec) { b.style.display = "block"; b.style.left = `calc(${meterPct(peaks[ch])}% - 2px)`; } else b.style.display = "none";
+    if (peaks && peaks[n] != null && rec) { b.style.display = "block"; b.style.left = `calc(${meterPct(peaks[n])}% - 2px)`; } else b.style.display = "none";
   });
-  $$("[data-meter-text]").forEach((el) => { const v = meters ? meters[Number(el.dataset.meterText)] : null; el.textContent = v == null ? "–" : dbText(v); });
+  $$("[data-meter-text]").forEach((el) => { const v = meters ? meters[Number(el.dataset.meterText) - 1] : null; el.textContent = v == null ? "–" : dbText(v); });
+  RoomInputs.update(s);
   const note = $("#monNote");
   if (note) note.textContent = rec ? "" : s.monitor_error ? `Not listening: ${s.monitor_error}.` : !mon && listening() ? "Listening…" : !listening() ? "Not listening (idle a while): tap anywhere to listen again." : "";
   if (S.screen === "recording" && rec) {
@@ -1158,7 +1185,10 @@ document.addEventListener("click", (ev) => {
     // (any stringed instrument stays, for its kind)
     const other = d.kind !== c.instrument; set({ instrument: d.kind }); if (other && !S.walk && d.kind !== "strings") answered("on"); }
   else if (a === "kind") set({ kind: d.kind || null });
-  else if (a === "input") { const i = chosenInst(); if (i) { set({ inputs: { ...(c.inputs || {}), [i.kind]: Number(d.n) } }); if (!S.walk) answered("on"); } }
+  else if (a === "input") {  // kept by the input's name: the same mic wherever it is plugged in next time
+    const i = chosenInst(), x = inputOf(Number(d.n));
+    if (i && x) { set({ inputs: { ...(c.inputs || {}), [i.kind]: x.name } }); if (!S.walk) answered("on"); }
+  }
   else if (a === "bpm") { readDetails(); set({ bpm: Math.max(20, Math.min(300, Math.round(c.bpm) + Number(d.d))) }); }
   else if (a === "bpb") { readDetails(); set({ bpb: Number(d.v) }); }
   else if (a === "toggle") { readDetails(); set({ [d.k]: !c[d.k] }); }
@@ -1230,12 +1260,19 @@ function fromHash() {
 }
 window.addEventListener("hashchange", fromHash);
 
+// the room's inputs (recorder/static/inputs.js): a mic named, or recorded or not, on any app's page: the setup again
+// (each instrument's usual input is found by its name among them)
+RoomInputs.onChange(async () => {
+  try { S.setup = await api("GET", "/api/setup"); } catch (e) { return; }
+  if (S.screen !== "recording") render();
+});
 (async function startUp() {
   try { await loadAll(); } catch (e) { showError(`Could not load: ${e.message}`); S.setup = S.setup || { instruments: [], inputs: [], meters: [2, 3, 4], review: {} }; S.choices = S.choices || { ...DEFAULTS }; }
   S.screen = readyOk() ? "ready" : "on";
   S.walk = !readyOk();
   if (STEPS.includes(S.screen)) S.snapshot = null;
   if (!fromHash()) render();
+  RoomInputs.init({ monitor: () => { lastTouch = Date.now(); api("POST", "/api/monitor").catch(() => {}); } });
   poll(true);
 })();
 </script>

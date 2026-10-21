@@ -52,6 +52,15 @@ if [ ! -f /etc/room-board.toml ]; then
 fi
 mkdir -p "$(ROOM_BOARD_CONFIG=/etc/room-board.toml PYTHONPATH="$app" "$app/.venv/bin/python" -m board.store datadir)"
 
+# The room's inputs (recorder/inputs.py): one file for every app, what is on each of the interface's inputs and
+# whether it is recorded. Installed once from config/inputs.toml, in the home of the user the apps run as; after
+# that the apps' pages keep it (a mic named from a page).
+inputs=$(PYTHONPATH="$app" "$app/.venv/bin/python" -c "from recorder.config import load_config; print(load_config('/etc/exercise-recorder.toml').inputs_path)")
+if [ ! -f "$inputs" ]; then
+    install -m 644 "$app/config/inputs.toml" "$inputs"
+    echo "installed $inputs"
+fi
+
 # The services: (re)installed and restarted on every run. room-home is the
 # home page on port 80, linking this and the other apps (home/server.py).
 if [ ! -f /etc/room-home.toml ]; then
@@ -95,3 +104,8 @@ grep -q 'port = 8006' /etc/room-home.toml || echo "note: /etc/room-home.toml doe
 grep -q '^\[instruments.piano\]' /etc/take-transcriber.toml || echo "note: /etc/take-transcriber.toml has no [instruments.piano] (config/transcribe.toml: the piano on input 4)"
 grep -q 'port = 8007' /etc/room-home.toml || echo "note: /etc/room-home.toml does not list the board (port 8007): config/home.toml's [[apps]] id = \"board\""
 grep -q '^\[instruments.strings\]' /etc/take-transcriber.toml || echo "note: /etc/take-transcriber.toml has no [instruments.strings] (config/transcribe.toml: any stringed instrument on input 4)"
+for f in /etc/exercise-recorder.toml /etc/take-transcriber.toml /etc/chord-listener.toml; do
+    grep -q '^keep_channels\|^\[inputs\.' "$f" && echo "note: $f's keep_channels and [inputs.N] are not read while $inputs exists: the inputs are named on the apps' pages now"
+done
+grep -q '^input = [0-9]' /etc/take-transcriber.toml && echo "note: /etc/take-transcriber.toml names its instruments' inputs by number: read as the names its [inputs.N] gave them (config/transcribe.toml: input = \"Room mic\")"
+true

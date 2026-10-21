@@ -182,9 +182,10 @@ li.empty { color: var(--ink3); padding: 14px 16px; }
         </div>
         <button type="button" class="recbtn" id="recBtn"><i></i><span id="recText">Record</span></button>
         <div>
-          <div class="level-head"><span class="label">Level</span></div>
-          <div class="meter" role="img" aria-label="Input level"><i id="meterBar"></i><b id="peakMark"></b></div>
-          <div class="legend tnum"><span>−60</span><span>−40</span><span>−20</span><span>0 dB</span></div>
+          <div class="level-head"><span class="label" id="inputsLabel">Records</span></div>
+          <!-- each input a take records, named, with its level while recording (or while Inputs is open); an
+               input not recorded that hears something; Inputs… names a mic (recorder/static/inputs.js) -->
+          <div id="inputsStrip"></div>
         </div>
         <div class="clip" id="clip"></div>
         <div class="backing-now" id="backingNow"></div>
@@ -216,6 +217,7 @@ li.empty { color: var(--ink3); padding: 14px 16px; }
   </div>
 </div>
 
+<script src="/inputs.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -315,10 +317,8 @@ function render(s) {
   $("recState").hidden = !!rec;
   $("recState").textContent = s.devices.capture ? "Ready to record" : "Mixer not found";
   $("timer").textContent = rec ? fmt(rec.seconds) : "";
-  $("meterBar").style.width = rec ? meterPct(rec.meter_dbfs) + "%" : "0";
-  $("meterBar").style.background = rec && rec.meter_dbfs > -6 ? "var(--red-dot)" : rec && rec.meter_dbfs > -12 ? "var(--amber)" : "var(--ink2)";
-  $("peakMark").style.left = rec ? `calc(${meterPct(rec.peak_dbfs)}% - 2px)` : "0";
-  $("peakMark").style.display = rec ? "block" : "none";
+  $("inputsLabel").textContent = rec ? "Recording" : "Records";
+  RoomInputs.update(s);  // each input's meter, by its number
   $("clip").textContent = rec && rec.clipped ? "Clipping: turn the mic channels' gain down a little." : "";
   const bk = rec && rec.backing;
   $("backingNow").textContent = bk ? (bk.position < bk.count_in_s ? `Count-in… ${bk.title}`
@@ -360,7 +360,7 @@ async function poll(once) {
     $("free").textContent = "";
   }
   const busy = status && status.state !== "idle";
-  pollTimer = setTimeout(poll, busy ? 250 : 1500);
+  pollTimer = setTimeout(poll, busy || RoomInputs.isOpen ? 250 : 1500);
 }
 
 $("recBtn").onclick = () => act(() =>
@@ -403,6 +403,9 @@ $("levelDown").onclick = () => setLevel(Number($("level").value) - 1);
 $("levelUp").onclick = () => setLevel(Number($("level").value) + 1);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(true); });
 
+// the inputs: their names and levels here, a sheet to name a mic (listening to them while it is open)
+$("inputsStrip").innerHTML = RoomInputs.strip();
+RoomInputs.init({ monitor: () => { api("POST", "/api/monitor").catch(() => {}); poll(true); } });
 poll(true);
 </script>
 </body>

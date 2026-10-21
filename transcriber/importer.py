@@ -2,11 +2,13 @@
 elsewhere (a phone, the exercise app, the corpus), or one to try the app with.
 
     tools/import-take FILE --instrument dobro|bass|piano|strings [--kind mandolin] --bpm 100 [--beats-per-bar 4]
-                      [--click] [--downbeat S] [--channel N] [--title T]
+                      [--click] [--downbeat S] [--input NAME | --channel N] [--title T]
 
 Runs where the app runs, with its config ($TAKE_TRANSCRIBER_CONFIG, else /etc/take-transcriber.toml):
 the take's folder is made in its takes_dir as a recorded take's is (store.py), `take-01.flac` from
-FILE's channel N (default: all channels mixed to one) at FILE's own rate, 24-bit; then the app is
+FILE's channel that carried input NAME (`--input "Room mic"`, or its number: the sidecar beside FILE, an app take's
+`<take>.json`, says which channel each input is: recorder/sidecar.py), or FILE's channel N by its place (`--channel`;
+default: all channels mixed to one), at FILE's own rate, 24-bit; meta.json names the input. Then the app is
 asked to transcribe it (POST /api/takes/ID/transcribe). `--click`: it was played to a click at
 --bpm; `--downbeat`: bar 1's first beat in FILE (s), as a click's line-up would give it. A piano exercise take
 (dobro-transcription `exercises/piano/*/take-01.flac`, the room mic alone; its click's beat 0, bar 1's downbeat, is
@@ -25,6 +27,8 @@ from datetime import datetime
 from pathlib import Path
 
 from recorder.config import load_config
+from recorder.sidecar import channels as sidecar_channels
+from recorder.sidecar import find_channel
 from recorder.takes import ID_FORMAT
 
 from . import VERSION
@@ -62,7 +66,11 @@ def main(argv=None) -> None:
     ap.add_argument("--beats-per-bar", type=int, default=4, choices=METERS)
     ap.add_argument("--click", action="store_true", help="played to a click at --bpm")
     ap.add_argument("--downbeat", type=float, metavar="S", help="bar 1's first beat in the file (s)")
-    ap.add_argument("--channel", type=int, help="the file's channel with the instrument (default: all, mixed)")
+    pick = ap.add_mutually_exclusive_group()
+    pick.add_argument("--input", metavar="NAME", help="the input that carried the instrument, by its name (or number) "
+                                                      "in the sidecar beside the file")
+    pick.add_argument("--channel", type=int, help="the file's channel with the instrument, by its place "
+                                                  "(default: all, mixed)")
     ap.add_argument("--title", default="")
     ap.add_argument("--no-transcribe", action="store_true", help="make the folder only")
     a = ap.parse_args(argv)
@@ -74,8 +82,26 @@ def main(argv=None) -> None:
     if a.kind and (inst.kind != "strings" or a.kind not in KINDS):
         sys.exit(f"--kind: with --instrument strings, one of {', '.join(KINDS)}")
     seconds, rate, channels = probe(a.file)
+    side_path = a.file.with_suffix(".json")
+    side = {}
+    if side_path.exists():
+        try:
+            side = json.loads(side_path.read_text())
+        except ValueError:
+            side = {}
+    named = None  # the sidecar's word for the channel taken: {"input", "input_name", ...}
+    if a.input is not None:
+        if not side:
+            sys.exit(f"--input: no sidecar beside the file ({side_path.name}) to say which channel is which: "
+                     "give --channel")
+        try:
+            a.channel = find_channel(side, a.input)
+        except LookupError as e:
+            sys.exit(f"--input: {e}")
     if a.channel is not None and not 0 <= a.channel < channels:
         sys.exit(f"--channel: the file has channels 0-{channels - 1}")
+    if a.channel is not None:
+        named = next((c for c in sidecar_channels(side) if c["channel"] == a.channel), None)
     folders = Folders(cfg.takes_dir)
     take_id = new_id(folders, datetime.now())
     d = folders.create(take_id)
@@ -85,7 +111,8 @@ def main(argv=None) -> None:
     except JobError as e:
         folders.delete(take_id)
         sys.exit(str(e))
-    meta = {"instrument": inst.kind, "instrument_name": inst.name, "input": None, "input_name": "",
+    meta = {"instrument": inst.kind, "instrument_name": inst.name, "input": named["input"] if named else None,
+            "input_name": named["input_name"] if named else "",
             "channel": a.channel, "bpm": a.bpm, "beats_per_bar": a.beats_per_bar,
             "count_in_bars": 0, "click": a.click, "title": " ".join(a.title.split())[:120],
             "recorded_at": datetime.fromtimestamp(a.file.stat().st_mtime).isoformat(timespec="seconds"),
@@ -94,6 +121,8 @@ def main(argv=None) -> None:
             "app_version": VERSION, "transcription": {"state": "queued" if not a.no_transcribe else "none"}}
     if inst.kind == "strings":
         meta.update(kind=a.kind or None, kind_name=KINDS.get(a.kind, "") if a.kind else "")
+    if sidecar_channels(side):  # what each channel of the file it came from carried, by name (it has no raw/)
+        meta["imported_channels"] = sidecar_channels(side)
     folders.write_meta(take_id, meta)
     folders.write_takes_csv(take_id, beat0_s=a.downbeat or 0.0, bpm=a.bpm, metronome=a.click, pickup_beats=0.0,
                             beats_per_bar=a.beats_per_bar)

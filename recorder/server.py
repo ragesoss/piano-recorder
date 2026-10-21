@@ -16,6 +16,7 @@ from . import audio
 from .backing import BackingNotFound, Backings
 from .config import Config, load_config
 from .engine import Busy, Engine, LowSpace
+from .inputs import Inputs, add_routes
 from .takes import TakeNotFound, Takes
 
 STATIC = Path(__file__).parent / "static"
@@ -37,9 +38,11 @@ class SettingsIn(BaseModel):
 def create_app(cfg: Config) -> FastAPI:
     takes = Takes(cfg.takes_dir)
     backings = Backings(cfg.backing_dir)
-    engine = Engine(cfg, takes, backings)
+    inputs = Inputs(cfg)
+    engine = Engine(cfg, takes, backings, inputs=inputs)
     app = FastAPI(title="Practice recorder", docs_url=None, redoc_url=None)
     app.state.engine = engine
+    add_routes(app, inputs)  # the room's inputs: GET /api/inputs, PUT /api/inputs/N, /inputs.js
 
     def guard(fn, *args):
         try:
@@ -77,6 +80,13 @@ def create_app(cfg: Config) -> FastAPI:
     @app.get("/api/status")
     def status():
         return engine.status()
+
+    @app.post("/api/monitor")
+    def monitor():
+        """Keep every input's level coming in the status for a few seconds (the page asks again while it shows
+        them)."""
+        engine.monitor()
+        return {"ok": True}
 
     @app.post("/api/record/start")
     def record_start():

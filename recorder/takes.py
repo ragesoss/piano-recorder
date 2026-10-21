@@ -4,6 +4,7 @@ with an optional JSON sidecar for the note."""
 import json
 import re
 import shutil
+import threading
 import wave
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -52,6 +53,7 @@ class Takes:
     def __init__(self, directory: Path):
         self.dir = Path(directory)
         self.dir.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.RLock()  # a sidecar's read and write, one at a time (the engine and a request)
 
     def path(self, take_id: str) -> Path:
         if not ID_RE.match(take_id):
@@ -114,24 +116,27 @@ class Takes:
 
     def set_note(self, take_id: str, note: str) -> Take:
         self.path(take_id)
-        meta = self._meta(take_id)
-        meta["note"] = note[:500]
-        self._write_meta(take_id, meta)
+        with self._lock:
+            meta = self._meta(take_id)
+            meta["note"] = note[:500]
+            self._write_meta(take_id, meta)
         return self.get(take_id)
 
     def finish(self, take_id: str, peak_dbfs: float) -> None:
-        meta = self._meta(take_id)
-        meta["peak_dbfs"] = round(peak_dbfs, 1)
-        self._write_meta(take_id, meta)
+        with self._lock:
+            meta = self._meta(take_id)
+            meta["peak_dbfs"] = round(peak_dbfs, 1)
+            self._write_meta(take_id, meta)
 
     def meta(self, take_id: str) -> dict:
         self.path(take_id)
         return self._meta(take_id)
 
     def update_meta(self, take_id: str, values: dict) -> None:
-        meta = self._meta(take_id)
-        meta.update(values)
-        self._write_meta(take_id, meta)
+        with self._lock:
+            meta = self._meta(take_id)
+            meta.update(values)
+            self._write_meta(take_id, meta)
 
     def clean_path(self, take_id: str) -> Path:
         """A play-along take with its backing subtracted (it is not a take of its own)."""

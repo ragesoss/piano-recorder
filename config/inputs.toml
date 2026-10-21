@@ -1,0 +1,34 @@
+# The music room's inputs: what is plugged into each of the interface's inputs, by its number, and whether the apps
+# record it (recorder/inputs.py). Every app on the control unit reads this file; their pages write it (naming a mic,
+# recording an input or not), so comments added here are not kept. An input with no table is not recorded.
+#
+# setup/install.sh installs this copy once, as ~/room-inputs.toml (the home of the user the apps run as); after that
+# the pages keep it. As wired on 2026-10-17 (config/exercises.toml's inputs then): input 3 the Nadine, input 4 the MXL
+# 990, rear line input 7 the bass's piezo; rear inputs 5 and 6 the record player's line, for the speakers only.
+
+[inputs.3]
+name = "Nadine"
+details = "Ear Trumpet Labs Nadine, on the bass"
+for = "bass"
+record = true
+
+[inputs.4]
+name = "Room mic"
+details = "MXL 990 (cardioid large-diaphragm condenser, phantom power), gain about halfway (2026-10-17)"
+record = true
+
+[inputs.5]
+name = "Records, left"
+details = "The record player, for the speakers (the 18i8's Mix A): not recorded"
+record = false
+
+[inputs.6]
+name = "Records, right"
+details = "The record player, for the speakers (the 18i8's Mix B): not recorded"
+record = false
+
+[inputs.7]
+name = "Piezo"
+details = "Fishman Full Circle, through the Fishman Pro-EQ Platinum DI, into rear line input 7"
+for = "bass"
+record = true

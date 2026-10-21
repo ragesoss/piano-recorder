@@ -2,6 +2,8 @@
 
 capture = "fake"
 playback = "fake"
+# The room's inputs on the desktop, shared by the dev configs; until a page names one, these stand in.
+inputs_file = "inputs-dev.toml"
 keep_channels = [2, 3, 0]
 takes_dir = "chord-checks-dev"
 

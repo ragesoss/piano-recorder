@@ -5,6 +5,8 @@
 # The Scarlett 18i8 3rd Gen from 2026-10-14 (the BMG-04F before: hardware/bmg-04f.toml).
 capture = "scarlett-18i8-gen3"
 playback = "scarlett-18i8-gen3"
+# The inputs it records, and what is on each: the room's, ~/room-inputs.toml (recorder/inputs.py), shared by
+# every app and named from their pages. Each app's config may say another file (inputs_file).
 # "~" is the home of the user the service runs as.
 # Backing tracks for play-along takes (tools/push-backing puts them here).
 backing_dir = "~/backing"

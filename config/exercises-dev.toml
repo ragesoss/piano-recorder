@@ -5,12 +5,14 @@ playback = "fake"
 takes_dir = "exercise-takes-dev"
 exercises_dir = "exercises-dev"
 backing_dir = "backing-dev"
-# As on the control unit (config/exercises.toml): the fake device's four channels stand in.
+# The room's inputs on the desktop, shared by the dev configs (recorder/inputs.py; not in git). Until a page
+# names one, this config's own stand in for it: the fake device's four inputs as the unit's were before
+# 2026-10-20 (inputs 3, 4 and 1 kept, in that order, each named below).
+inputs_file = "inputs-dev.toml"
 keep_channels = [2, 3, 0]
 
-# What is plugged into each kept input, by the interface's input number: the app's input panel
-# shows them, and each take's sidecar says what each channel carried. "for": a pickup or mic on
-# one kind of instrument; none: a mic for the room.
+# What is plugged into each kept input, by the interface's input number (until inputs-dev.toml exists).
+# "for": a pickup or mic on one kind of instrument; none: a mic for the room.
 [inputs.1]
 name = "Piezo"
 details = "Fishman Full Circle, through the Fishman Pro-EQ Platinum DI"

@@ -57,6 +57,7 @@ import numpy as np
 
 from recorder import audio, dsp
 from recorder.config import Config
+from recorder.inputs import Inputs, channels_meta, input_levels
 
 from . import livechords as L
 
@@ -339,15 +340,17 @@ class Check:
 
 
 class Listener:
-    def __init__(self, cfg: Config, directory: Path, source=None):
+    def __init__(self, cfg: Config, directory: Path, source=None, inputs: Inputs | None = None):
         self.cfg = cfg
         self.dir = Path(directory)
         self.dir.mkdir(parents=True, exist_ok=True)
         self.source = source  # None: the capture device; else a factory of a Capture-like source
         self.rate = cfg.capture.capture.rate
-        self.inputs = list(cfg.inputs)  # in the capture's kept order
-        room = [c for c, i in enumerate(self.inputs) if not i.for_kind]
-        self.mix = room or list(range(len(self.inputs)))  # channels heard (indices into the kept ones)
+        self.registry = inputs or Inputs(cfg)  # the room's inputs (recorder/inputs.py)
+        self.inputs = list(self.registry.kept())  # the recorded inputs, in the capture's kept order (each listen's)
+        self.asked: list[int] | None = None  # the input numbers a page asked to hear (None: the room's)
+        self.mix = self._mix()  # channels heard (indices into the kept ones)
+        self.input_levels: list[float] | None = None  # every device input's level, while listening
         self.instrument = "piano"
         self.lock = threading.Lock()
         self.until = 0.0
@@ -386,13 +389,28 @@ class Listener:
 
     # --- asking, and letting go
 
+    def _mix(self) -> list[int]:
+        """The channels heard: the inputs a page asked for that are recorded, else the room's (the inputs not for
+        one instrument), else all of them."""
+        asked = [c for c, i in enumerate(self.inputs) if self.asked and i.number in self.asked]
+        room = [c for c, i in enumerate(self.inputs) if not i.for_kind]
+        return asked or room or list(range(len(self.inputs)))
+
+    def _follow_inputs(self) -> None:
+        """Before each listen: the room's recorded inputs as they are now (a mic named or recorded since)."""
+        kept = list(self.registry.kept())
+        with self.lock:
+            if [i.number for i in kept] != [i.number for i in self.inputs]:
+                self.raw.clear()  # the clips' blocks had the old channels
+            self.inputs = kept
+            self.mix = self._mix()
+
     def listen(self, inputs: list[int] | None = None, instrument: str | None = None) -> None:
         """Keep listening for LISTEN_S more (start if need be), to these inputs (numbers) if given."""
         with self.lock:
-            if inputs is not None:
-                chans = [c for c, i in enumerate(self.inputs) if i.number in set(inputs)]
-                if chans:
-                    self.mix = chans
+            if inputs is not None and any(i.number in set(inputs) for i in self.inputs):
+                self.asked = list(inputs)
+                self.mix = self._mix()
             if instrument:
                 self.instrument = instrument
             if time.monotonic() < self.wait_until:
@@ -421,7 +439,9 @@ class Listener:
         self.yield_inputs(wait=0.0)
 
     def _run(self, stop: threading.Event) -> None:
-        cap = self.source() if self.source is not None else audio.Capture(self.cfg.capture)
+        self._follow_inputs()
+        keep = tuple(i.number - 1 for i in self.inputs) or None
+        cap = self.source() if self.source is not None else audio.Capture(self.cfg.capture, keep=keep)
         try:
             cap.start()
             fs = dsp.full_scale(cap.dtype)
@@ -437,6 +457,11 @@ class Listener:
                             f": {said}" if said else "")
                         self.wait_until = time.monotonic() + YIELD_S
                     break
+                peaks = getattr(cap, "input_peaks", None)  # every device input's (a stand-in source has none)
+                if peaks is not None:
+                    every = input_levels(peaks, fs, getattr(cap, "n_inputs", len(peaks)))
+                    with self.lock:
+                        self.input_levels = every
                 self._hear(block, fs)
         except Exception as e:
             with self.lock:
@@ -453,6 +478,7 @@ class Listener:
             with self.lock:
                 self.thread = None
                 self.now = {**self.now, "chord": None, "level_dbfs": None}
+                self.input_levels = None
 
     # --- hearing
 
@@ -462,7 +488,8 @@ class Listener:
 
     def _hear(self, block: np.ndarray, fs: float) -> None:
         x = block.astype(np.float32) / fs
-        mono = x[:, self.mix].mean(axis=1) if x.ndim > 1 else x
+        mix = [c for c in self.mix if x.ndim > 1 and c < x.shape[1]] or [0]  # a stand-in source may have fewer
+        mono = x[:, mix].mean(axis=1) if x.ndim > 1 else x
         n = len(mono)
         with self.lock:
             self.buf[np.arange(self.pos, self.pos + n) % self.K] = mono
@@ -692,8 +719,9 @@ class Listener:
             w.writeframes(x.tobytes())
         side = {"id": sid, "kind": kind, "time": datetime.now().isoformat(timespec="seconds"), **meta,
                 "instrument": instrument, "detector": detector(), "seconds": round(len(x) / self.rate, 3),
-                "mixed": [self.inputs[c].number for c in mix],
-                "channels": [{"channel": c, "input": i.number, "name": i.name} for c, i in enumerate(self.inputs)]}
+                "mixed": [self.inputs[c].number for c in mix if c < len(self.inputs)],
+                # which input each channel is, by name ("name" as before 2026-10-20, "input_name" as the other apps')
+                "channels": [{**c, "name": c["input_name"]} for c in channels_meta(tuple(self.inputs), self.registry)]}
         (self.dir / f"{sid}.json").write_text(json.dumps(side, indent=1))
         return sid
 
@@ -769,7 +797,10 @@ class Listener:
                                  "chord_right": ck.chord_right, "bass_right": ck.bass_right,
                                  "bass": NAMES[ck.heard.bass] if ck.heard and ck.heard.bass is not None else None,
                                  "scores": ck.scores, "id": ck.id},
-                "mix": [self.inputs[c].number for c in self.mix],
+                "mix": [self.inputs[c].number for c in self.mix if c < len(self.inputs)],
+                "inputs": [i.number for i in self.inputs],  # what it hears, by input number (the recorded ones)
+                "input_levels": self.input_levels if on else None,  # every device input's, while listening
+                "inputs_version": self.registry.version,
                 "instrument": self.instrument,
                 "error": self.error,
                 "device": self.cfg.capture.description or self.cfg.capture.name,

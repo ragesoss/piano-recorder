@@ -1,10 +1,17 @@
 """The transcribe app's own settings, from the same file as the recorder's (recorder/config.py reads the
 devices, the kept inputs, takes_dir, peers, web and loudness there):
 
-    [instruments.dobro]   name = "Dobro", input = 4    the pipeline's instrument, and the input that carries it
-    [instruments.bass]    name = "Bass", input = 3     (the page can choose another of the kept inputs)
-    [instruments.piano]   name = "Piano", input = 4    (the piano: a grand staff, no tab)
-    [instruments.strings] name = "Any stringed instrument", input = 4
+    [instruments.dobro]   name = "Dobro", input = "Room mic"
+                                                       the pipeline's instrument, and the input that carries it,
+                                                       by its name in the room's inputs (recorder/inputs.py; the
+                                                       page can choose another of the recorded inputs). With no
+                                                       input of that name: one `for` its kind, else the room's
+                                                       (`Inputs.pick`). A number (configs of before 2026-10-20):
+                                                       the name the config's own [inputs.N] gave that input
+    [instruments.bass]    name = "Bass", input = "Nadine"
+    [instruments.piano]   name = "Piano", input = "Room mic"
+                                                       (the piano: a grand staff, no tab)
+    [instruments.strings] name = "Any stringed instrument", input = "Room mic"
                                                        (the generic path: one staff, no tab; its kind chosen on
                                                        the page, `KINDS`, or "not sure")
     [pipeline]            python, src, threads, nice    the transcription project's package, and how to run it (its
@@ -49,7 +56,8 @@ def chart_instrument(instrument: str, kind: str | None = None) -> str:
 class Instrument:
     kind: str  # the pipeline's --instrument: "dobro", "bass", "piano", "strings"
     name: str  # "Dobro"
-    input: int  # the interface's input number that carries it unless the page says otherwise
+    input: str  # the name of the input that carries it unless the page says otherwise ("Room mic"; "": none)
+    input_number: int | None = None  # a config of before 2026-10-20 named it by number: that input, if no name fits
 
 
 @dataclass(frozen=True)
@@ -101,14 +109,20 @@ def _command(value: str) -> str:
 def load_settings(cfg: Config) -> Settings:
     with open(cfg.path, "rb") as f:
         raw = tomllib.load(f)
-    kept = {i.number for i in cfg.inputs}
+    legacy = {i.number: i.name for i in cfg.inputs if i.named}  # the config's own [inputs.N], before the inputs file
     insts = []
     for kind, entry in (raw.get("instruments") or {}).items():
         if kind not in PIPELINE_INSTRUMENTS:
             raise ConfigError(f"{cfg.path}: [instruments.{kind}]: the pipeline transcribes {', '.join(PIPELINE_INSTRUMENTS)}")
-        if not isinstance(entry, dict) or int(entry.get("input", 0)) not in kept:
-            raise ConfigError(f"{cfg.path}: [instruments.{kind}] needs an input this app keeps ({sorted(kept)})")
-        insts.append(Instrument(kind=kind, name=str(entry.get("name") or kind.capitalize()), input=int(entry["input"])))
+        value = entry.get("input") if isinstance(entry, dict) else None
+        if isinstance(value, bool) or not isinstance(value, (str, int)) or (isinstance(value, str) and not value.strip()):
+            raise ConfigError(f"{cfg.path}: [instruments.{kind}] needs an input: its name (\"Room mic\")")
+        if isinstance(value, int):  # a config of before 2026-10-20: the input by number, named as the config named it
+            name, number = legacy.get(value, ""), value
+        else:
+            name, number = " ".join(value.split()), None
+        insts.append(Instrument(kind=kind, name=str(entry.get("name") or kind.capitalize()), input=name,
+                                input_number=number))
     if not insts:
         raise ConfigError(f"{cfg.path}: no [instruments.*]: what is recorded, and on which input")
     p = raw.get("pipeline") or {}

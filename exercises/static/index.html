@@ -494,6 +494,7 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
   </div>
 </div>
 
+<script src="/inputs.js"></script>
 <script>
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -791,10 +792,12 @@ function saveNow() {  // the page going away (a reload, a tab dropped): the chan
 }
 function set(changes) { Object.assign(S.choices, changes); save(); render(); }
 
+function recordedOf(listing) { return ((listing && listing.inputs) || []).filter((i) => i.record).sort((a, b) => a.channel - b.channel); }
 async function loadAll() {
   const [ex, inst, bk, inputs, choices, takes] = await Promise.all([api("GET", "/api/exercises"), api("GET", "/api/instruments"),
     api("GET", "/api/backings"), api("GET", "/api/inputs"), S.choices ? null : api("GET", "/api/choices"), api("GET", "/api/takes")]);
-  S.exercises = ex; S.instruments = inst; S.backings = bk; S.inputs = inputs; S.takes = takes;
+  // the inputs a take records, in its channel order (the room's: recorder/inputs.py); the sheet has them all
+  S.exercises = ex; S.instruments = inst; S.backings = bk; S.inputs = recordedOf(inputs); S.takes = takes;
   if (choices) {
     S.choices = { ...DEFAULTS, ...choices, tempo: { ...(choices.tempo || {}) } };
     if (!S.choices.instruments.length) fromLastTake();
@@ -982,7 +985,7 @@ function renderOn() {
     const opts = chosen().map((i) => [i.id, i.short])
       .concat([[inp.for ? "none" : "room", inp.for ? "Not used" : "The room"]]);
     return `<div class="input" role="radiogroup" aria-label="${esc(inputLabel(inp))} carries">
-      <div class="row"><span class="name">${esc(inputLabel(inp))}</span><span class="meter" data-meter="${inp.channel}"><i></i><b></b></span></div>
+      <div class="row"><span class="name">${esc(inputLabel(inp))}</span><span class="meter" data-meter="${inp.input}"><i></i><b></b></span></div>
       ${inp.details ? `<span class="det">${esc(inp.details)}</span>` : ""}
       ${chosen().length ? `<div class="seg">${opts.map(([v, l]) => `<button type="button" aria-pressed="${car[inp.input] === v}" data-act="carry" data-input="${inp.input}" data-v="${esc(v)}">${esc(l)}</button>`).join("")}</div>` : ""}
     </div>`;
@@ -1009,7 +1012,8 @@ function renderOn() {
   return `<div class="body"><div class="q">${ask}</div>
     <div class="on-grid"><div class="kinds">${instrumentKinds().map(col).join("")}${`<div class="kind"><span class="label">${unknownKinds.length > 2 ? "Not listed" : unknownKinds.length ? esc(unknownKinds.map(kindName).join(", ")) + ", other" : "Other"}</span>${other}</div>`}</div>
       <aside class="panel" aria-label="Inputs"><div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px"><h2>Inputs</h2><span class="muted" style="font-size:15px">what each one carries</span></div>
-        <div class="inputs">${inputsHtml || '<span class="muted">No inputs named in the config.</span>'}</div><p class="muted" id="monNote" style="font-size:14px;margin-top:10px"></p></aside></div></div>
+        <div class="inputs">${inputsHtml || '<span class="muted">No input is recorded.</span>'}</div><p class="muted" id="monNote" style="font-size:14px;margin-top:10px"></p>
+        <div style="margin-top:10px">${RoomInputs.extras()}</div></aside></div></div>
     <div class="foot">${leftButton()}${foot}</div>`;
 }
 function instCard(id, label, ids, unlisted = false) {
@@ -1233,8 +1237,8 @@ function renderReady() {
   }
   const car = carries(), used = S.inputs.slice().sort((a, x) => a.input - x.input);
   const unused = used.filter((i) => car[i.input] === "none");
-  const onLines = chosen().map((i) => `<span class="ins-line"><b>${esc(i.short)}</b>${inputsOf(i.id).map((x) => `<span>In ${x.input} ${esc(x.name)}</span><span class="meter" data-meter="${x.channel}"><i></i><b></b></span>`).join("") || '<span class="red-ink">no input carries it</span>'}</span>`).join("");
-  const room = used.filter((i) => car[i.input] === "room").map((x) => `<span class="ins-line"><span>In ${x.input} ${esc(x.name)}: the room</span><span class="meter" data-meter="${x.channel}"><i></i><b></b></span></span>`).join("");
+  const onLines = chosen().map((i) => `<span class="ins-line"><b>${esc(i.short)}</b>${inputsOf(i.id).map((x) => `<span>In ${x.input} ${esc(x.name)}</span><span class="meter" data-meter="${x.input}"><i></i><b></b></span>`).join("") || '<span class="red-ink">no input carries it</span>'}</span>`).join("");
+  const room = used.filter((i) => car[i.input] === "room").map((x) => `<span class="ins-line"><span>In ${x.input} ${esc(x.name)}: the room</span><span class="meter" data-meter="${x.input}"><i></i><b></b></span></span>`).join("");
   const level = S.status ? S.status.level_offset_db : 0;
   return `<div class="body ready-body">
     <span class="label">Next take${c.saved ? ` · as you left it, ${esc(when(c.saved))}` : ""}</span>
@@ -1245,7 +1249,7 @@ function renderReady() {
     <div class="rows">
       <div><span class="k">What</span><span class="v">${what}</span>${c.kind === "exercise" ? `<span class="hear-box">${hearChart(e)}</span>` : ""}<button type="button" class="change" data-act="step" data-step="${c.kind === "free" ? "board" : "which"}">Change</button></div>
       ${guide}
-      <div><span class="k">On</span><span class="v" style="gap:6px">${onLines}${room}${unused.length ? `<span class="muted" style="font-size:15px">${esc(andList(unused.map((x) => `In ${x.input} ${x.name}`)))} not used</span>` : ""}</span><button type="button" class="change" data-act="step" data-step="on">Change</button></div>
+      <div><span class="k">On</span><span class="v" style="gap:6px">${onLines}${room}${unused.length ? `<span class="muted" style="font-size:15px">${esc(andList(unused.map((x) => `In ${x.input} ${x.name}`)))} not used</span>` : ""}${RoomInputs.extras()}</span><button type="button" class="change" data-act="step" data-step="on">Change</button></div>
       <div style="min-height:76px"><label class="k" for="readyLevel">Speakers</label><input id="readyLevel" type="range" min="-30" max="12" step="1" value="${level}" data-level style="flex:1;min-width:200px"><span data-level-text class="tnum" style="font-size:19px;font-weight:700;width:76px;text-align:right">${esc(dbText(level))}</span></div>
     </div>
     <p class="muted" id="monNote" style="font-size:14px"></p>
@@ -1329,7 +1333,8 @@ function renderRecord() {
   const level = s ? s.level_offset_db : 0;
   return `<div class="rec-head"><p class="sentence display">${recSentence(true)}</p><div class="meta">${meta}</div></div>
     <div class="rec-grid">${main}
-      <div class="side"><div class="side-scroll"><div class="box"><span class="label">Listening</span>${used.map((i) => `<div class="row"><span>${esc(i.name)}${carries()[i.input] === "room" ? " (room)" : ""}</span><span class="tnum" data-meter-text="${i.channel}">–</span></div><span class="meter" data-meter="${i.channel}"><i></i><b></b></span>`).join("")}<span class="muted" id="monNote" style="font-size:14px"></span>
+      <div class="side"><div class="side-scroll"><div class="box"><span class="label">Listening</span>${used.map((i) => `<div class="row"><span>${esc(i.name)}${carries()[i.input] === "room" ? " (room)" : ""}</span><span class="tnum" data-meter-text="${i.input}">–</span></div><span class="meter" data-meter="${i.input}"><i></i><b></b></span>`).join("")}<span class="muted" id="monNote" style="font-size:14px"></span>
+          ${RoomInputs.extras()}
           <span class="dev-line" data-dev-line>${devLine()}</span></div>
         <div class="box"><div class="row"><label for="recLevel" style="font-weight:700">Speakers</label><span data-level-text class="tnum">${esc(dbText(level))}</span></div><input id="recLevel" type="range" min="-30" max="12" step="1" value="${level}" data-level></div>
         <button type="button" class="btn small" data-act="sheet" style="justify-content:center">Takes of this ${c.kind === "exercise" ? "exercise" : c.kind === "playalong" ? "backing" : "kind"} (${mine.length})</button></div>
@@ -1367,7 +1372,7 @@ function renderRecording() {
       <div class="where"><span class="v" data-where>${rec && rec.backing ? "" : "Recording"}</span><span class="of" data-where-of>${e ? `of ${e.bars}` : ""}</span></div>
       <div class="beats" data-beats hidden><span class="dots"></span><span data-beat-text></span></div>
       <div class="clock"><span class="v tnum" data-clock>0:00</span><span data-clock-of></span></div>
-      <div class="meters">${used.map((i) => `<div class="row"><span>${esc(i.name)}</span><span class="meter big" data-meter="${i.channel}"><i></i><b></b></span></div>`).join("")}
+      <div class="meters">${used.map((i) => `<div class="row"><span>${esc(i.name)}</span><span class="meter big" data-meter="${i.input}"><i></i><b></b></span></div>`).join("")}
         <span class="peak" data-peak>No clipping</span></div>
       <button type="button" class="stopbtn" data-act="stop-rec"><i></i>Stop</button></div>`;
 }
@@ -1736,10 +1741,18 @@ function fromAddress() {
 }
 window.addEventListener("hashchange", () => { const a = fromAddress(); go(a.screen, { kind: a.kind }); });
 
+// the room's inputs (recorder/static/inputs.js): a mic named on any app's page, or recorded or not, shows here at
+// once; the sheet listens to the inputs while it is open
+RoomInputs.onChange((listing) => {
+  if (!listing) return;
+  S.inputs = recordedOf(listing);
+  if (S.screen !== "recording") render();
+});
 (async function startUp() {
   try { await loadAll(); } catch (e) { showError(`Could not load: ${e.message}`); S.choices = S.choices || { ...DEFAULTS }; }
   const a = fromAddress();
   go(a.screen, { kind: a.kind });
+  RoomInputs.init({ monitor: () => { lastTouch = Date.now(); api("POST", "/api/monitor").catch(() => {}); } });
   poll(true);
 })();
 </script>

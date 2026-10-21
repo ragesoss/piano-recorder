@@ -2,7 +2,9 @@
 
 capture = "fake"
 playback = "fake"
-# As on the control unit (config/transcribe.toml): the fake device's four channels stand in.
+# The room's inputs on the desktop, shared by the dev configs (recorder/inputs.py; not in git); until a page
+# names one, these stand in (config/exercises-dev.toml).
+inputs_file = "inputs-dev.toml"
 keep_channels = [2, 3, 0]
 takes_dir = "transcribe-takes-dev"
 
@@ -22,19 +24,19 @@ details = "The condenser, pointed at the player"
 
 [instruments.dobro]
 name = "Dobro"
-input = 4
+input = "Room mic"
 
 [instruments.bass]
 name = "Bass"
-input = 3
+input = "Nadine"
 
 [instruments.piano]
 name = "Piano"
-input = 4
+input = "Room mic"
 
 [instruments.strings]
 name = "Any stringed instrument"
-input = 4
+input = "Room mic"
 
 [pipeline]
 python = "python3"
