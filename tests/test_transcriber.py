@@ -1,7 +1,8 @@
 """The transcribe app (transcriber/): a take recorded on the fake device becomes a folder of the
 transcription project's corpus, is transcribed (by a stand-in for the pipeline, run as the real one is,
 in its own interpreter), drawn and heard on the page, and handed to the review app. The dobro and the
-bass as notation and tab, the piano as a grand staff."""
+bass as notation and tab, the piano as a grand staff. A take's chord chart drafted (by a stand-in for the
+drafter) and handed to the review app's chart check."""
 
 import csv
 import importlib.util
@@ -82,7 +83,8 @@ def write_transcription(t, path, title):
 ''',
 }
 
-# A stand-in for the review app's generator, with or without the take-check kind.
+# A stand-in for the review app's generator, with or without the take-check kind (and the chart-check kind). It prints
+# the review's id first and last, as the real one does.
 MAKE_REVIEW = '''"""Stand-in for review/make_review.py."""
 import argparse, json, os, sys
 from pathlib import Path
@@ -92,14 +94,58 @@ def main():
     ap.add_argument("kind", choices=("disagree", "grid", "free", {kinds}))
     ap.add_argument("paths", nargs="*")
     ap.add_argument("--install")
+    ap.add_argument("--id", dest="rid")
+    ap.add_argument("--title")
     a = ap.parse_args()
     folder = Path(a.paths[0])
     Path(os.environ["CALLED"]).write_text(json.dumps({{"argv": sys.argv[1:], "cwd": os.getcwd(),
-        "pythonpath": os.environ.get("PYTHONPATH"), "review_data": os.environ.get("REVIEW_DATA")}}))
-    rid = "take-check-" + folder.name.replace("_", "-")
+        "pythonpath": os.environ.get("PYTHONPATH"), "review_data": os.environ.get("REVIEW_DATA"),
+        "files": sorted(p.name for p in folder.iterdir())}}))
+    if os.environ.get("FAKE_REVIEW_FAIL"):
+        sys.exit("make_review: the draft has no bars")
+    rid = a.rid or "take-check-" + folder.name.replace("_", "-")
     print(f"{{rid}}: 3 questions, 120 KB in /somewhere")
     print("  q1  Bars 1-2 (2 clips)")
     print("installed in /review-data/reviews/" + rid)
+    print("review-id: " + rid)
+
+if __name__ == "__main__":
+    main()
+'''
+
+
+# A stand-in for dobro-transcription's chord-chart drafter (`transcribe.chart_draft`, run as `python -m` in the pipeline's
+# folder): it writes what it was asked into draft.json, with chords.txt and takes.csv. FAKE_CHART_FAIL: it reads no
+# chart and says why on stderr; FAKE_CHART_WAIT: a file it waits for before it writes anything.
+CHART_DRAFT = '''"""Stand-in for transcribe/chart_draft.py."""
+import argparse, json, os, sys, time
+from pathlib import Path
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("recording")
+    ap.add_argument("outdir")
+    ap.add_argument("--instrument", default="auto", choices=("auto", "bass", "guitar", "dobro", "piano", "voice", "band"))
+    ap.add_argument("--channel", type=int)
+    ap.add_argument("--bpm", type=float)
+    ap.add_argument("--meter", type=int)
+    ap.add_argument("--title")
+    a = ap.parse_args()
+    Path(os.environ["DRAFTED"]).write_text(json.dumps({"argv": sys.argv[1:], "cwd": os.getcwd(), "pid": os.getpid(),
+        "pythonpath": os.environ.get("PYTHONPATH"), "threads": os.environ.get("OMP_NUM_THREADS")}))
+    assert Path(a.recording).is_file()
+    if os.environ.get("FAKE_CHART_FAIL"):
+        print("reading the chords", file=sys.stderr)
+        sys.exit("no chart: the recording is too quiet to read chords from")
+    wait = os.environ.get("FAKE_CHART_WAIT")
+    while wait and not Path(wait).exists():
+        time.sleep(0.02)
+    out = Path(a.outdir)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "draft.json").write_text(json.dumps({"title": a.title, "instrument": a.instrument, "bpm": a.bpm,
+                                                "meter": a.meter}))
+    (out / "chords.txt").write_text("G . . . | C . G . | D . . . | G . . .\\n")
+    (out / "takes.csv").write_text("take,beat0_s,bpm\\n")
 
 if __name__ == "__main__":
     main()
@@ -462,6 +508,203 @@ def test_the_review_id_is_read_from_make_reviews_output():
     assert review_id(out) == "take-check-2026-10-19-143012"
     assert review_id("installed in /x\ntake-check-2026-10-19-143012\n") == "take-check-2026-10-19-143012"
     assert review_id("Traceback (most recent call last):\n") is None
+    # its last line, since dobro-transcription's 2026-10-20 change: read first (a chart check's too)
+    out = ("chart-check-2026-10-20-101500: 1 question, 90 KB in /x (pipeline)\n  q1 The chart\n/review-data/x\n"
+           "review-id: chart-check-2026-10-20-101500\n")
+    assert review_id(out) == "chart-check-2026-10-20-101500"
+    assert review_id("2026-10-20-free-x: 2 questions, 1 KB in /x\nreview-id: take-check-a-b\n") == "take-check-a-b"
+
+
+# "Draft a chord chart"
+
+def with_charts(tmp: Path, drafter: bool = True, kind: bool = True) -> None:
+    """The transcription project with the drafter, and its review app with the chart-check kind (as deployed)."""
+    if drafter:
+        (tmp / "pipeline" / "src" / "transcribe" / "chart_draft.py").write_text(CHART_DRAFT)
+    kinds = '"take-check", "chart-check"' if kind else '"take-check"'
+    (tmp / "dt" / "review" / "make_review.py").write_text(MAKE_REVIEW.format(kinds=kinds))
+
+
+def wait_for_chart(client, limit=20):
+    end = time.monotonic() + limit
+    while client.get("/api/status").json()["chart"] and time.monotonic() < end:
+        time.sleep(0.05)
+    assert client.get("/api/status").json()["chart"] is None, "the chart is still being drafted"
+
+
+@pytest.fixture
+def drafted(setup, monkeypatch):
+    cfg, tmp = setup
+    with_charts(tmp)
+    monkeypatch.setenv("DRAFTED", str(tmp / "drafted.json"))
+    return cfg, tmp
+
+
+def test_draft_a_chord_chart_runs_the_drafter_then_the_chart_check_and_links_to_it(client, drafted):
+    cfg, tmp = drafted
+    ch = client.get("/api/setup").json()["chart"]
+    assert ch["available"] is True and ch["why"] == ""
+    assert [i["kind"] for i in ch["instruments"]] == ["auto", "bass", "guitar", "dobro", "piano", "voice", "band"]
+    take = record(client, 0.5, click=False, count_in=False)
+    t = wait_for(client, take)
+    assert t["chart"] is None and t["chart_instrument"] == "dobro"
+    r = client.post(f"/api/takes/{take}/chart", json={"title": "  Everybody Wants to   Go to Heaven "})
+    assert r.status_code == 200
+    st = client.get("/api/status").json()["chart"]
+    assert st["take"] == take and st["stage"] in ("drafting", "review") and st["estimate_s"] is None  # none drafted yet
+    wait_for_chart(client)
+    d = cfg.takes_dir / take
+    c = client.get(f"/api/takes/{take}").json()["chart"]
+    rid = "chart-check-" + take.replace("_", "-")
+    assert c["id"] == rid and c["kind"] == "chart-check" and c["instrument"] == "dobro"
+    assert c["title"] == "Everybody Wants to Go to Heaven" and c["seconds"] >= 0 and "error" not in c
+    # the drafter: in the pipeline's folder with its package on the path, on the take's recording, told the take's
+    # instrument, the tempo it was transcribed at (the tracker's, from 240 given), its meter and the title typed
+    drafter = json.loads((tmp / "drafted.json").read_text())
+    src = tmp / "pipeline" / "src"
+    assert drafter["argv"] == [str(d / "take-01.flac"), str(d / "chart-draft"), "--instrument", "dobro",
+                               "--bpm", f"{t['transcription']['bpm']:g}", "--meter", "4",
+                               "--title", "Everybody Wants to Go to Heaven"]
+    assert drafter["cwd"] == str(src.parent) and drafter["pythonpath"] == str(src) and drafter["threads"] == "1"
+    assert sorted(p.name for p in (d / "chart-draft").iterdir()) == ["chords.txt", "draft.json", "takes.csv"]
+    # then the chart check, on what the drafter wrote, made as a take check is, its id the same each time (the title
+    # is the draft's: the chart check names the review from it)
+    called = json.loads((tmp / "called.json").read_text())
+    root = tmp / "dt"
+    assert called["argv"] == ["chart-check", str(d / "chart-draft"), "--install", "local", "--id", rid]
+    assert called["files"] == ["chords.txt", "draft.json", "takes.csv"]
+    assert called["cwd"] == str(root) and called["pythonpath"] == f"{root}:{root / 'pipeline' / 'src'}"
+    assert called["review_data"] == str(tmp / "review-data")
+    assert "transcribe.chart_draft" in (d / "chart.log").read_text()
+    # drafted again: the same review, and now an estimate from the first
+    assert client.post(f"/api/takes/{take}/chart", json={}).status_code == 200
+    assert client.get("/api/status").json()["chart"]["estimate_s"] is not None
+    wait_for_chart(client)
+    assert client.get(f"/api/takes/{take}").json()["chart"]["id"] == rid
+    assert "--title" not in json.loads((tmp / "drafted.json").read_text())["argv"]  # none typed: none passed
+    assert not (d / "chart-draft.old").exists()
+
+
+def test_a_chord_chart_waits_for_the_drafter_and_the_chart_check(setup, monkeypatch):
+    cfg, tmp = setup
+    monkeypatch.setenv("DRAFTED", str(tmp / "drafted.json"))
+    with TestClient(create_app(cfg)) as c:
+        ch = c.get("/api/setup").json()["chart"]
+        assert ch["available"] is False and "chart_draft.py" in ch["why"]
+        take = record(c, 0.5, click=False, count_in=False)
+        wait_for(c, take)
+        r = c.post(f"/api/takes/{take}/chart", json={})
+        assert r.status_code == 409 and "no chord-chart drafter" in r.json()["detail"]
+        with_charts(tmp, kind=False)  # the drafter deployed, the review app not yet
+        ch = c.get("/api/setup").json()["chart"]
+        assert ch["available"] is False and "chart-check" in ch["why"]
+        assert c.post(f"/api/takes/{take}/chart", json={}).status_code == 409
+        assert c.get("/api/setup").json()["review"]["available"] is True  # the take check is as it was
+        with_charts(tmp)  # both: no restart needed
+        assert c.get("/api/setup").json()["chart"] == {**ch, "available": True, "why": ""}
+        assert c.post(f"/api/takes/{take}/chart", json={}).status_code == 200
+        wait_for_chart(c)
+        assert c.get(f"/api/takes/{take}").json()["chart"]["id"]
+
+
+def test_a_chord_chart_of_a_recording_brought_in_read_as_chosen(client, drafted, monkeypatch, tmp_path, capsys):
+    cfg, tmp = drafted
+    t = np.arange(44100 * 2) / 44100
+    src = tmp_path / "band.wav"
+    write_wav(src, np.stack([0.3 * np.sin(2 * np.pi * 196 * t)] * 2, axis=1), 44100)
+    monkeypatch.setattr("transcriber.importer.load_config", lambda path: cfg)
+    from transcriber import importer
+    importer.main([str(src), "--instrument", "strings", "--bpm", "85", "--beats-per-bar", "2", "--no-transcribe"])
+    take = capsys.readouterr().out.split(":")[0]
+    t = client.get(f"/api/takes/{take}").json()
+    assert t["transcription"]["state"] == "none" and t["chart_instrument"] == "auto"  # any stringed, kind not sure
+    for bad in ({"instrument": "kazoo"}, {"instrument": "strings"}):
+        assert client.post(f"/api/takes/{take}/chart", json=bad).status_code == 400
+    assert client.post("/api/takes/2026-01-01_000000/chart", json={}).status_code == 404
+    assert client.post(f"/api/takes/{take}/chart", json={"instrument": "band"}).status_code == 200
+    wait_for_chart(client)
+    argv = json.loads((tmp / "drafted.json").read_text())["argv"]
+    assert argv[2:] == ["--instrument", "band", "--bpm", "85", "--meter", "2"]  # not transcribed: the tempo given
+    assert client.get(f"/api/takes/{take}").json()["chart"]["instrument"] == "band"
+
+
+def test_the_drafters_instrument_is_what_the_take_was_played_on():
+    from transcriber.settings import chart_instrument
+    assert [chart_instrument(i) for i in ("dobro", "bass", "piano", "strings")] == ["dobro", "bass", "piano", "auto"]
+    assert [chart_instrument("strings", k) for k in ("guitar", "bass", "dobro", "mandolin", None)] == \
+        ["guitar", "bass", "dobro", "auto", "auto"]
+
+
+def test_a_chart_that_could_not_be_drafted_says_why_and_keeps_the_one_there_was(client, drafted, monkeypatch):
+    cfg, tmp = drafted
+    take = record(client, 0.5, click=False, count_in=False)
+    wait_for(client, take)
+    monkeypatch.setenv("FAKE_CHART_FAIL", "1")
+    assert client.post(f"/api/takes/{take}/chart", json={}).status_code == 200
+    wait_for_chart(client)
+    c = client.get(f"/api/takes/{take}").json()["chart"]
+    assert c["error"] == "no chart: the recording is too quiet to read chords from" and "id" not in c
+    monkeypatch.delenv("FAKE_CHART_FAIL")
+    assert client.post(f"/api/takes/{take}/chart", json={"title": "First"}).status_code == 200
+    wait_for_chart(client)
+    first = client.get(f"/api/takes/{take}").json()["chart"]
+    assert first["id"] and "error" not in first
+    d = cfg.takes_dir / take
+    drafted_first = (d / "chart-draft" / "draft.json").read_text()
+    monkeypatch.setenv("FAKE_CHART_FAIL", "1")  # drafted again, and failing: the chart and its review stay
+    client.post(f"/api/takes/{take}/chart", json={"title": "Second"})
+    wait_for_chart(client)
+    c = client.get(f"/api/takes/{take}").json()["chart"]
+    assert c["id"] == first["id"] and c["title"] == "First" and "too quiet" in c["error"]
+    assert (d / "chart-draft" / "draft.json").read_text() == drafted_first and not (d / "chart-draft.old").exists()
+    monkeypatch.delenv("FAKE_CHART_FAIL")
+    monkeypatch.setenv("FAKE_REVIEW_FAIL", "1")  # drafted, but its review not made
+    client.post(f"/api/takes/{take}/chart", json={})
+    wait_for_chart(client)
+    c = client.get(f"/api/takes/{take}").json()["chart"]
+    assert c["error"] == "the chart was drafted, but its review was not made: make_review: the draft has no bars"
+
+
+def test_a_chart_is_drafted_one_at_a_time_held_while_this_app_records(client, drafted, monkeypatch):
+    cfg, tmp = drafted
+    first = record(client, 0.5, click=False, count_in=False)
+    time.sleep(1.1)
+    second = record(client, 0.5, click=False, count_in=False)
+    wait_for(client, first), wait_for(client, second)
+    go = tmp / "go"
+    monkeypatch.setenv("FAKE_CHART_WAIT", str(go))
+    assert client.post(f"/api/takes/{first}/chart", json={}).status_code == 200
+    end = time.monotonic() + 10
+    while not (tmp / "drafted.json").exists() and time.monotonic() < end:
+        time.sleep(0.02)
+    pid = json.loads((tmp / "drafted.json").read_text())["pid"]
+    r = client.post(f"/api/takes/{second}/chart", json={})
+    assert r.status_code == 409 and r.json()["detail"] == "a chord chart is being drafted: wait for it"
+    r = client.delete(f"/api/takes/{first}")
+    assert r.status_code == 409 and "being drafted" in r.json()["detail"]
+    # a take recorded meanwhile: the drafter is held still (SIGSTOP), its time not counted, and goes on after
+    take = client.post("/api/record/start", json={"instrument": "dobro", "bpm": 240, "click": False,
+                                                  "count_in": False}).json()["take"]
+    time.sleep(0.3)
+    st = client.get("/api/status").json()["chart"]
+    assert st["paused"] is True and st["stage"] == "drafting"
+    assert proc_state(pid) == "T"
+    time.sleep(0.3)
+    assert client.get("/api/status").json()["chart"]["elapsed_s"] == pytest.approx(st["elapsed_s"], abs=0.05)
+    client.post("/api/record/stop")
+    end = time.monotonic() + 10
+    while client.get("/api/status").json()["chart"]["paused"] and time.monotonic() < end:
+        time.sleep(0.05)
+    assert proc_state(pid) in ("S", "R")
+    go.write_text("")
+    wait_for_chart(client)
+    assert client.get(f"/api/takes/{first}").json()["chart"]["id"] == "chart-check-" + first.replace("_", "-")
+    wait_for(client, take)
+
+
+def proc_state(pid: int) -> str:
+    """A process's state (Linux): "T" stopped, "S" sleeping, "R" running."""
+    return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
 
 
 def test_a_transcription_waits_while_this_app_records(setup):
@@ -574,6 +817,13 @@ def test_the_transcription_plays_through_alphatabs_synthesizer_with_its_own_soun
     assert sf.status_code == 200 and sf.headers["content-type"] == "application/octet-stream"
     assert sf.content[:4] == b"RIFF" and sf.content[8:12] == b"sfbk" and len(sf.content) == 1351896
     assert "Apache License, Version 2.0" in client.get("/alphatab/soundfont/LICENSE").text
+
+
+def test_the_page_offers_a_chord_chart_beside_the_review(client):
+    page = client.get("/").text
+    assert 'data-act="chart"' in page and 'data-act="chart-go"' in page and 'data-act="chart-inst"' in page
+    assert "Draft a chord chart" in page and "Open the chart check" in page and "/chart`" in page
+    assert 'id="chartTitleIn"' in page and "[data-chart-time]" in page
 
 
 def test_the_choices_come_back_as_left(client):

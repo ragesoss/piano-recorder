@@ -4,11 +4,13 @@ draft (transcription.musicxml) into the take's answer key. The generator is dobr
 
     cd <root> && PYTHONPATH=.:pipeline/src <its venv>/python -m review.make_review take-check FOLDER --install local
 
-It prints the review's id first ("ID: N questions, ..."); the page links to the review app
-(`http://<host>:8005/#/r/ID`, its own links: `review/static/index.html`). Until the review app has that
+It prints the review's id first ("ID: N questions, ...") and as its last line ("review-id: ID", read first where
+there is one); the page links to the review app (`http://<host>:8005/#/r/ID`, its own links:
+`review/static/index.html`). Until the review app has that
 kind (looked for in make_review.py's choices each time it is asked), the page says so. The same for an
 instrument the take check does not read yet: its `review/take_check.py` names those it reads
-(`INSTRUMENTS = (...)`); one that names none reads the dobro and the bass (as it was first deployed).
+(`INSTRUMENTS = (...)`); one that names none reads the dobro and the bass (as it was first deployed). "Draft a chord
+chart" (chart.py) makes its review the same way, of the kind `chart-check`.
 """
 
 import os
@@ -27,17 +29,40 @@ KIND = "take-check"
 FIRST_READ = ("dobro", "bass")  # what take_check.py read before it named its instruments (dobro-transcription 43943b6)
 INSTRUMENTS = re.compile(r"^INSTRUMENTS\s*=\s*\(([^)]*)\)", re.M)
 ID_LINE = re.compile(r"^([a-z0-9][a-z0-9-]*[a-z0-9]):\s+\d+\s+questions?\b")
+SAID_ID = re.compile(r"^review-id:\s*([a-z0-9][a-z0-9-]*[a-z0-9])$")
 BARE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,120}$")
 
 
 def review_id(stdout: str) -> str | None:
-    """The review's id from make_review's output: its "ID: N questions" line (else a line that is an id alone)."""
+    """The review's id from make_review's output: its "review-id: ID" line, else its "ID: N questions" line, else a
+    line that is an id alone."""
     lines = [l.strip() for l in stdout.splitlines() if l.strip()]
+    said = next((m.group(1) for m in map(SAID_ID.match, lines) if m), None)
+    if said:
+        return said
     for l in lines:
         m = ID_LINE.match(l)
         if m:
             return m.group(1)
     return next((l for l in lines if BARE_ID.match(l)), None)
+
+
+def has_kind(make_review: str, kind: str) -> bool:
+    """Whether make_review.py (its text) makes reviews of this kind: among its `kind` argument's choices (else named
+    anywhere in it)."""
+    m = re.search(r'add_argument\(\s*["\']kind["\']\s*,\s*choices\s*=\s*[\(\[]([^\)\]]*)[\)\]]', make_review)
+    quoted = re.compile(r'["\']' + re.escape(kind) + r'["\']')
+    return bool(quoted.search(m.group(1))) if m else bool(quoted.search(make_review))
+
+
+def environment(settings: Settings) -> dict:
+    """make_review's environment: the project and its pipeline on the path, and where `--install local` puts it."""
+    r = settings.review
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
+    env["PYTHONPATH"] = f"{r.root}:{r.root / 'pipeline' / 'src'}"
+    if r.data is not None:
+        env["REVIEW_DATA"] = str(r.data)
+    return env
 
 
 class Reviews:
@@ -77,10 +102,7 @@ class Reviews:
             return False, f"the review app's generator was not found ({path})"
         if self._seen and self._seen[0] == mtime:
             return self._seen[1], self._seen[2]
-        text = path.read_text(errors="replace")
-        m = re.search(r'add_argument\(\s*["\']kind["\']\s*,\s*choices\s*=\s*[\(\[]([^\)\]]*)[\)\]]', text)
-        quoted = re.compile(r'["\']' + re.escape(KIND) + r'["\']')
-        ok = bool(quoted.search(m.group(1))) if m else bool(quoted.search(text))
+        ok = has_kind(path.read_text(errors="replace"), KIND)
         why = "" if ok else "the review app doesn't check takes yet (no take-check in its make_review.py)"
         if ok and not which(self.settings.review.python):
             ok, why = False, f"the review app's python was not found ({self.settings.review.python})"
@@ -92,12 +114,7 @@ class Reviews:
                 "--install", "local"]
 
     def environment(self) -> dict:
-        r = self.settings.review
-        env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
-        env["PYTHONPATH"] = f"{r.root}:{r.root / 'pipeline' / 'src'}"
-        if r.data is not None:
-            env["REVIEW_DATA"] = str(r.data)
-        return env
+        return environment(self.settings)
 
     def status(self) -> dict | None:
         with self.lock:

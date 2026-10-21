@@ -1,7 +1,8 @@
 """The transcribe app: the player records a take on the phone and sees the transcription pipeline's
 notation and tab for it there (the piano's as a grand staff, any stringed instrument's as one staff), with the
 take's own sound and a cursor;
-"Review it" sends the take to the review app to be checked and corrected (review.py).
+"Review it" sends the take to the review app to be checked and corrected (review.py); "Draft a chord chart" reads a
+chord chart from its recording and sends that to the review app to be corrected and confirmed (chart.py).
 
 A separate app on its own port (8006), with its own takes (store.py: one folder each, laid out as
 a folder of the transcription project's corpus). It uses the recorder's engine, devices, click and
@@ -32,9 +33,10 @@ from recorder.engine import Busy, Engine, LowSpace
 from recorder.takes import TakeNotFound, Takes
 
 from . import VERSION
+from .chart import Charts
 from .jobs import Jobs
 from .review import Reviews
-from .settings import KINDS, load_settings, staves
+from .settings import CHART_INSTRUMENTS, KINDS, load_settings, staves
 from .store import TAKE, Folders
 
 STATIC = Path(__file__).parent / "static"
@@ -66,6 +68,11 @@ class SettingsIn(BaseModel):
     level_offset_db: float
 
 
+class ChartIn(BaseModel):
+    instrument: str | None = None  # the drafter's (`settings.CHART_INSTRUMENTS`); None: the take's own, else "auto"
+    title: str = ""  # the song's title, if typed
+
+
 def create_app(cfg: Config) -> FastAPI:
     settings = load_settings(cfg)
     folders = Folders(cfg.takes_dir)
@@ -73,12 +80,19 @@ def create_app(cfg: Config) -> FastAPI:
     engine = Engine(cfg, work, Backings(work.dir / "backing"), name="the transcribe app")
     jobs = Jobs(cfg, settings, folders, work, busy=lambda: engine.rec is not None)
     reviews = Reviews(settings, folders)
+    charts = Charts(settings, folders)
     app = FastAPI(title="Transcribe", docs_url=None, redoc_url=None)
     app.state.engine, app.state.jobs, app.state.reviews, app.state.folders = engine, jobs, reviews, folders
+    app.state.charts = charts
     choices_path = cfg.takes_dir / "choices.json"
     inputs = {i.number: (c, i) for c, i in enumerate(cfg.inputs)}
     for t in work.list():  # takes the app stopped before saving (a restart mid-take): save them now
         jobs.submit(t.id, build=True)
+
+    def hold(paused: bool) -> None:
+        """The transcription and the chord chart hold still while this app records, and go on after."""
+        jobs.pause(paused)
+        charts.pause(paused)
 
     def guard(fn, *args, **kw):
         try:
@@ -101,7 +115,7 @@ def create_app(cfg: Config) -> FastAPI:
             while engine.rec is not None and engine.rec.take_id == take_id:
                 time.sleep(0.1)
         if engine.rec is None:  # not if the next take started while this one was lined up: its own end lets go
-            jobs.pause(False)
+            hold(False)
         try:
             work.path(take_id)
         except TakeNotFound:  # it never started (the device busy or gone): no take
@@ -150,6 +164,7 @@ def create_app(cfg: Config) -> FastAPI:
         s["job"] = jobs.status()
         s["queue"] = jobs.queued()
         s["review"] = reviews.status()
+        s["chart"] = charts.status()
         s["takes_version"] = f"{s['takes_version']}.{folders.version}"
         if s["state"] == "idle" and (s["job"] or s["queue"]):
             s["state"] = "transcribing"
@@ -159,8 +174,10 @@ def create_app(cfg: Config) -> FastAPI:
     def setup():
         """What can be recorded, on which inputs (`staves`: "tab" written as notation and tab, "grand" as a grand
         staff, "one" as one staff with no tab; `tab` true for the first; `kinds`, any stringed instrument's kinds to
-        choose from), and whether the review app can check a take, and of which instruments."""
+        choose from), whether the review app can check a take, and of which instruments, and whether a chord chart
+        can be drafted (and reviewed) yet, read as which instrument."""
         ok, why = reviews.available()
+        chart_ok, chart_why = charts.available()
         return {
             "instruments": [{"kind": i.kind, "name": i.name, "input": i.input, "tab": staves(i.kind) == "tab",
                              "staves": staves(i.kind),
@@ -170,6 +187,8 @@ def create_app(cfg: Config) -> FastAPI:
                        for c, i in enumerate(cfg.inputs)],
             "review": {"available": ok, "why": why, "port": settings.review.port,
                        "instruments": list(reviews.instruments())},
+            "chart": {"available": chart_ok, "why": chart_why,
+                      "instruments": [{"kind": k, "name": n} for k, n in CHART_INSTRUMENTS.items()]},
             "meters": list(METERS),
             "version": VERSION,
         }
@@ -222,7 +241,7 @@ def create_app(cfg: Config) -> FastAPI:
         if inst.kind == "strings":  # its kind as chosen (None: not sure, the range read from the take)
             info.update(kind=kind, kind_name=KINDS.get(kind, "") if kind else "")
         tempo = {"bpm": float(body.bpm), "pickup_beats": 0.0, "beats_per_bar": body.beats_per_bar}
-        jobs.pause(True)  # the pipeline holds still while the take records
+        hold(True)  # the pipeline holds still while the take records
         try:
             if body.click or body.count_in:
                 take = guard(engine.start_click, tempo, None, count_in=body.count_in, through=body.click,
@@ -230,7 +249,7 @@ def create_app(cfg: Config) -> FastAPI:
             else:
                 take = guard(engine.start_recording, meta={"transcribe": info})
         except HTTPException:
-            jobs.pause(False)
+            hold(False)
             raise
         try:
             work.update_meta(take, {"transcribe": info})  # now, not only at its end: a restart mid-take keeps it
@@ -324,12 +343,26 @@ def create_app(cfg: Config) -> FastAPI:
         guard(reviews.start, take_id)
         return {"ok": True}
 
+    @app.post("/api/takes/{take_id}/chart")
+    def draft_chart(take_id: str, body: ChartIn | None = None):
+        """Draft its chord chart from its recording and make the review of it (the review app's chart-check), in the
+        background (chart.py). The instrument as the page says, else the take's own where the drafter knows it."""
+        body = body or ChartIn()
+        instrument = body.instrument or guard(folders.summary, take_id)["chart_instrument"]
+        if instrument not in CHART_INSTRUMENTS:
+            raise HTTPException(400, f"the drafter reads {', '.join(CHART_INSTRUMENTS)}")
+        guard(charts.start, take_id, instrument, body.title)
+        return {"ok": True}
+
     @app.delete("/api/takes/{take_id}")
     def delete(take_id: str):
         guard(folders.path, take_id)
         r = reviews.status()
         if r and r["take"] == take_id:
             raise HTTPException(409, "its review is being made: wait for it")
+        c = charts.status()
+        if c and c["take"] == take_id:
+            raise HTTPException(409, "its chord chart is being drafted: wait for it")
         jobs.cancel(take_id)
         end = time.monotonic() + 5
         while jobs.state_of(take_id) == "running" and time.monotonic() < end:

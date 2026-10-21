@@ -11,6 +11,8 @@ project's corpus (dobro-transcription `tunes/<instrument>/<name>/`), so its revi
         raw/<id>.flac, .json     every kept input as recorded (24-bit FLAC) and the engine's sidecar
         play/full.mp3, half.mp3  for the page: the take, and at half speed with its pitch kept
         transcribe.log           what the pipeline said on stderr
+        chart-draft/             its chord chart as drafted (chart.py: draft.json, ...), once asked
+        chart.log                what the drafter and the chart's review said
 
     <takes_dir>/.work/           the engine's own takes while they record and line up (recorder/takes.py),
                                  its speakers' level (settings.json)
@@ -26,7 +28,7 @@ from pathlib import Path
 
 from recorder.takes import ID_RE, TakeNotFound
 
-from .settings import staves
+from .settings import chart_instrument, staves
 
 TAKE = "take-01.flac"
 COLUMNS = ("take", "beat0_s", "bpm", "metronome", "session", "pickup_beats", "beats_per_bar")
@@ -139,6 +141,8 @@ class Folders:
             "imported_from": m.get("imported_from"),
             "transcription": tr,
             "review": m.get("review"),
+            "chart": m.get("chart"),  # its chord chart's review (chart.py): {"id", "made", ...} or {"error", ...}
+            "chart_instrument": chart_instrument(m.get("instrument", ""), m.get("kind")),  # the drafter's, as played
             "playable": (d / "play" / "full.mp3").is_file() and (d / "play" / "half.mp3").is_file(),
             "has_take": (d / TAKE).is_file(),
         }

@@ -272,13 +272,7 @@ class Jobs:
         return _niced(p.nice) + args
 
     def environment(self) -> dict:
-        p = self.settings.pipeline
-        env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
-        env["PYTHONPATH"] = str(p.src)
-        n = str(max(1, p.threads))
-        for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMBA_NUM_THREADS"):
-            env[k] = n
-        return env
+        return pipeline_environment(self.settings)
 
     def transcribe(self, take_id: str) -> dict:
         d = self.folders.path(take_id)
@@ -353,6 +347,17 @@ class Jobs:
 
 
 FLAC24 = ["-c:a", "flac", "-sample_fmt", "s32", "-bits_per_raw_sample", "24"]
+
+
+def pipeline_environment(settings: Settings) -> dict:
+    """A pipeline run's environment: its package on the path, and its few threads."""
+    p = settings.pipeline
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
+    env["PYTHONPATH"] = str(p.src)
+    n = str(max(1, p.threads))
+    for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMBA_NUM_THREADS"):
+        env[k] = n
+    return env
 
 
 def _niced(level: int) -> list[str]:
