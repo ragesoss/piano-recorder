@@ -990,6 +990,42 @@ it right there, with playback; "Review it" sends the take to the review app (dob
     42 tests passed, the whole suite 249); the page in headless Chromium (muted) at 390x844, 820x1180 and 1180x820 against the stand-ins:
     the dialog, drafting, another take's button waiting, the link; no sideways scroll. Not with the real drafter
     (being written beside this). Not deployed.
+- **The score inside its card at a phone's width** (2026-10-20, branch `phone-width`; dobro-transcription's card
+  `transcribe-phone-width`, from the note of 2026-10-19 above: "the first system's third bar runs past the card's
+  edge at 390 wide").
+  - **Why:** the page kept the take's cursor (`.at-bar`, `.at-cursor`) inside alphaTab's `.at-surface`, and alphaTab
+    puts each row of a render into the surface's children by their order. A render with more rows than the one the
+    cursor was added after (the window narrower: a phone or an iPad turned upright) put two rows into the cursor's
+    elements, drawn where the cursor was, on the bar last played: past the card's edge. Not seen on a page drawn once
+    at 390 wide, only after a turn or another render.
+  - **Also:** alphaTab's own resize lays its bars out again with the margin and bar widths of its last full render,
+    and skips a render while the score is hidden. The page set the new scale even with the score put away (another
+    screen), which the next resize would have laid out with the old bars. Not seen on its own in these runs.
+  - **The fix,** in `transcriber/static/index.html`: the cursor beside alphaTab's drawing in the score's host, placed
+    by the surface's offset. The score drawn again in full whenever the card's width or the scale for it is not what
+    it was drawn at, and only while it is shown (on a resize, a `ResizeObserver` on the score, and when the take's
+    screen is drawn again). After each render every bar and every drawn row is checked against the card: a bar too
+    wide for the card on its own row makes the score smaller, down to 0.4 (not reached on these takes); a row drawn
+    past the edge is drawn again in full, at most four times. Under 600 px wide, alphaTab's margin is 12 px at the
+    sides and 24 at the top and bottom (its default 35 all round): the music has 332 px of a 390-wide phone's card,
+    not 286. The iPad's scale and margin are as before.
+  - **Measured** in headless Chromium (Playwright, muted, the fake device) on six takes brought in by
+    `tools/import-take` and transcribed: Red Wing (the dobro, notation and tab, and tab alone), Tennessee Waltz (the
+    bass, both views), piano exercises 011 and 015 (grand staves), the guitar's Cherokee Shuffle and its G major
+    scale (any stringed instrument). Drawn, a bar tapped, then turned from 844x390 to 390x844: 2 of the 8 drew past
+    the card's edge before (222 and 292 px), none after; the same drawn at 1180x820, the takes list, 390x844 and the
+    take again: 2 of 8 before (222, 292), none after; an iPad turned from 1180x820 to 820x1180: 5 of 8 before (33 to
+    331 px), none after. Drawn once at 390x844: none before or after, the bars 36 px inside the card's edge before and
+    13 after, so fewer rows: Red Wing 23 to 18 (notation and tab) and 21 to 17 (tab), Tennessee Waltz 22 to 19 and 21
+    to 17, Cherokee Shuffle 46 to 36, the G scale 4 to 3, exercise 015 3 to 2, 011 2 as before. 1180x820 and
+    820x1180: the same rows before and after. Playwright's WebKit at 390x844 (media muted), drawn once and turned:
+    none past the edge. No sideways scroll, no console errors; every tap (the 8 cases in each of 7 runs) played the
+    take from its bar within 0.12 s, with the cursor in that bar.
+  - **The test:** `tests/test_transcribe_page.py` (`tests/transcribe_page.cjs`) on a made-up score (24 bars of eighth
+    notes on one staff, silent sound): a phone turned both ways and an iPad turned upright. Against the page before
+    it fails (124 and 152 px past the edge, the score drawn in the cursor); it passes after. Skipped without node's
+    Playwright and ffmpeg. `tests/test_transcriber.py` 42 passed, the whole suite 258 (Playwright found). Not
+    deployed.
 
 ### 9. The board (started 2026-10-19)
 
