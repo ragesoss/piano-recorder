@@ -1,4 +1,4 @@
-# Copied from dobro-transcription pipeline/src/transcribe/livechords.py (61470b1) by tools/sync-livechords.
+# Copied from dobro-transcription pipeline/src/transcribe/livechords.py (2eb5ec0) by tools/sync-livechords.
 # Change it there and copy it again; do not edit this copy.
 """Chords in the moment, for a band that follows: per beat, what the audio heard so far says the chord
 is, where in a chart the player is, and the key. Causal: every answer at a time t uses only audio
@@ -28,6 +28,10 @@ before t. The pieces and settings are the ones `tools/realtime_chords_study.py` 
   in place of the chroma's scores, which hear a low note's partials as its own chord.
 - The key (`KeyGuess`): the pitch classes heard so far against the Krumhansl-Kessler profiles; with
   the key, its bluegrass chords (I IV V V7 ii vi iii II II7 VI7 III7 I7 bVII) are favoured.
+- The chord app's piano listener (piano-recorder `chords/`, which keeps a copy of this file, made by its
+  `tools/sync-livechords`): `piano_notes`, the notes A0-C8 that best explain a window's spectral peaks, each
+  note's partials where the player's piano puts them (`PianoModel`: its stretched tuning and partials), and
+  `chord_of_notes`, the chord they make and its bass.
 """
 
 from __future__ import annotations
