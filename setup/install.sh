@@ -107,5 +107,5 @@ grep -q '^\[instruments.strings\]' /etc/take-transcriber.toml || echo "note: /et
 for f in /etc/exercise-recorder.toml /etc/take-transcriber.toml /etc/chord-listener.toml; do
     grep -q '^keep_channels\|^\[inputs\.' "$f" && echo "note: $f's keep_channels and [inputs.N] are not read while $inputs exists: the inputs are named on the apps' pages now"
 done
-grep -q '^input = [0-9]' /etc/take-transcriber.toml && echo "note: /etc/take-transcriber.toml names its instruments' inputs by number: read as the names its [inputs.N] gave them (config/transcribe.toml: input = \"Room mic\")"
+grep -q '^input = [0-9]' /etc/take-transcriber.toml && echo "note: /etc/take-transcriber.toml names its instruments' inputs by number: read as the names its [inputs.N] gave them (config/transcribe.toml names them by mic: input = \"MXL 990\")"
 true

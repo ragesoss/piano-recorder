@@ -1,17 +1,18 @@
 """The transcribe app's own settings, from the same file as the recorder's (recorder/config.py reads the
 devices, the kept inputs, takes_dir, peers, web and loudness there):
 
-    [instruments.dobro]   name = "Dobro", input = "Room mic"
+    [instruments.dobro]   name = "Dobro", input = "MXL 990"
                                                        the pipeline's instrument, and the input that carries it,
-                                                       by its name in the room's inputs (recorder/inputs.py; the
-                                                       page can choose another of the recorded inputs). With no
-                                                       input of that name: one `for` its kind, else the room's
-                                                       (`Inputs.pick`). A number (configs of before 2026-10-20):
-                                                       the name the config's own [inputs.N] gave that input
+                                                       by its mic's name in the room's inputs (recorder/inputs.py;
+                                                       or a name it went by, "Room mic"; the page can choose
+                                                       another of the recorded inputs). With no input of that
+                                                       name: one `for` its kind, else the room's (`Inputs.pick`).
+                                                       A number (configs of before 2026-10-20): the name the
+                                                       config's own [inputs.N] gave that input
     [instruments.bass]    name = "Bass", input = "Nadine"
-    [instruments.piano]   name = "Piano", input = "Room mic"
+    [instruments.piano]   name = "Piano", input = "MXL 990"
                                                        (the piano: a grand staff, no tab)
-    [instruments.strings] name = "Any stringed instrument", input = "Room mic"
+    [instruments.strings] name = "Any stringed instrument", input = "MXL 990"
                                                        (the generic path: one staff, no tab; its kind chosen on
                                                        the page, `KINDS`, or "not sure")
     [pipeline]            python, src, threads, nice    the transcription project's package, and how to run it (its
@@ -56,7 +57,7 @@ def chart_instrument(instrument: str, kind: str | None = None) -> str:
 class Instrument:
     kind: str  # the pipeline's --instrument: "dobro", "bass", "piano", "strings"
     name: str  # "Dobro"
-    input: str  # the name of the input that carries it unless the page says otherwise ("Room mic"; "": none)
+    input: str  # the name of the input that carries it unless the page says otherwise ("MXL 990"; "": none)
     input_number: int | None = None  # a config of before 2026-10-20 named it by number: that input, if no name fits
 
 
@@ -116,7 +117,7 @@ def load_settings(cfg: Config) -> Settings:
             raise ConfigError(f"{cfg.path}: [instruments.{kind}]: the pipeline transcribes {', '.join(PIPELINE_INSTRUMENTS)}")
         value = entry.get("input") if isinstance(entry, dict) else None
         if isinstance(value, bool) or not isinstance(value, (str, int)) or (isinstance(value, str) and not value.strip()):
-            raise ConfigError(f"{cfg.path}: [instruments.{kind}] needs an input: its name (\"Room mic\")")
+            raise ConfigError(f"{cfg.path}: [instruments.{kind}] needs an input: its mic's name (\"MXL 990\")")
         if isinstance(value, int):  # a config of before 2026-10-20: the input by number, named as the config named it
             name, number = legacy.get(value, ""), value
         else:
