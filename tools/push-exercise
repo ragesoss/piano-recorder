@@ -4,10 +4,14 @@
     tools/push-exercise SCORE.musicxml [--id bass-001-walks] [--title TEXT] [--instrument bass]
         [--readme README.md | --no-readme] [--no-audio] [--mscore PATH] [--host practice | --to exercises-dev]
     tools/push-exercise --audio-only [ID ...] [--host practice | --to exercises-dev]
+    tools/push-exercise --pages-only [ID ...] [--host practice | --to exercises-dev]
 
 The score is rendered to SVG pages by MuseScore here on the desktop (landscape, larger
-staves, trimmed: tools/exercise-page.mss), and its tempo, meter, pickup and length are read
-from the MusicXML (repeats played out), for the click. Its notes are rendered to audio here
+staves, trimmed: tools/exercise-page.mss), with where each bar and note is on them in the
+same run (positions.json, exercises/layout.py: the app's cursor, which moves across the
+score with the click; without it, a warning and no cursor), and its tempo, meter, pickup
+and length are read from the MusicXML (repeats played out), for the click. Its notes are
+rendered to audio here
 too (exercises/chart.py: FluidSynth, with the instrument's SoundFont), for the app to play
 with the click before a take; without FluidSynth or the SoundFont it goes without (a warning),
 and --no-audio skips it. The pages, the audio (chart.wav), the score, the exercise's README
@@ -17,7 +21,9 @@ control unit.
 
 --audio-only renders the audio again for exercises already there (the IDs given, or all of
 them), from the score that was pushed with each, and puts it beside its pages: nothing else
-changes.
+changes. --pages-only renders their pages and positions again the same way (pages that are
+no longer made are removed): for exercises pushed before positions.json (2026-10-21), or
+after a change to the style.
 MuseScore: --mscore, else $MSCORE, else mscore4portable or mscore on the PATH.
 """
 
@@ -46,6 +52,9 @@ ANY_KIND = "generic"  # an exercise for any instrument (as exercises/server.py)
 sys.path.insert(0, str(HERE.parent))
 from exercises import chart  # noqa: E402  (the play order the click counts, and the audio)
 from exercises.chart import measure_lengths, play_order  # noqa: E402
+from exercises.layout import LayoutError, layout  # noqa: E402  (where the bars and notes are on the pages)
+
+LAYOUT = "positions.json"
 
 
 def read_score(path: Path) -> dict:
@@ -113,6 +122,28 @@ def source_name(path: Path) -> str:
         return str(path.resolve())
 
 
+def render_pages(mscore: str, score: Path, out: Path, bpm: float) -> tuple[list[str], bool]:
+    """The score's pages in `out` (page-N.svg), and where its bars and notes are on them (LAYOUT), from one
+    MuseScore run; the pages' names, and whether LAYOUT was made (if not, a warning: the app shows no cursor)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        job = Path(tmp) / "job.json"
+        job.write_text(json.dumps([{"in": str(score.resolve()), "out": [str(out / "page.svg"), str(Path(tmp) / "pos.mpos"),
+                                                                       str(Path(tmp) / "pos.spos")]}]))
+        r = subprocess.run([mscore, "-S", str(STYLE), "-T", "30", "-j", str(job)], capture_output=True, text=True,
+                           env={**os.environ, "QT_QPA_PLATFORM": "offscreen"}, timeout=300)
+        pages = sorted((p.name for p in out.glob("page-*.svg")), key=lambda n: int(n[5:-4]))
+        if not pages:
+            sys.exit(f"MuseScore rendered nothing for {score} ({r.returncode}): {r.stderr[-400:]}")
+        try:
+            positions = layout([out / p for p in pages], Path(tmp) / "pos.mpos", Path(tmp) / "pos.spos", bpm)
+        except (LayoutError, OSError, ValueError, KeyError, SyntaxError) as e:  # SyntaxError: XML's ParseError
+            print(f"warning: no positions for {out.name} (the app shows no cursor): {e}", file=sys.stderr)
+            (out / LAYOUT).unlink(missing_ok=True)
+            return pages, False
+    (out / LAYOUT).write_text(json.dumps(positions, separators=(",", ":")))
+    return pages, True
+
+
 def render_audio(score: Path, folder: Path, instrument: str) -> dict | None:
     """The chart's audio in `folder` (AUDIO), and what exercise.json says of it; None (with a
     warning) if it cannot be made: the exercise goes without."""
@@ -135,9 +166,10 @@ def remote_exercises_dir(host: str) -> str:
     return r.stdout.strip()
 
 
-def audio_only(ids: list[str], a) -> None:
-    """The audio again for exercises already pushed (`ids`, or all), from the score pushed with each;
-    the audio and exercise.json put back in place one file at a time (a rename each)."""
+def refresh(ids: list[str], a, what: str) -> None:
+    """The audio (`what` "audio") or the pages and positions ("pages") again for exercises already pushed (`ids`,
+    or all), from the score pushed with each; put back in place one file at a time (a rename each), exercise.json
+    last, then any page no longer made removed."""
     bad = [i for i in ids if not ID_RE.match(i)]
     if bad:
         sys.exit(f"bad id {bad[0]!r}: lower-case letters, digits and hyphens")
@@ -160,38 +192,59 @@ def audio_only(ids: list[str], a) -> None:
                 sys.exit(f"nothing to fetch from {a.host}:{remote_dir}: {r.stderr.decode()[-300:]}")
             with tarfile.open(fileobj=io.BytesIO(r.stdout)) as tf:
                 tf.extractall(work, filter="data")
-        done = []
+        done: dict[str, list[str]] = {}  # each exercise's files to put back, exercise.json last
+        mscore = find_mscore(a.mscore) if what == "pages" else None
         for d in sorted(work.iterdir()):
             if not ((d / "exercise.json").is_file() and (d / "score.musicxml").is_file()):
                 continue
             meta = json.loads((d / "exercise.json").read_text())
-            audio = render_audio(d / "score.musicxml", d, meta.get("instrument", ""))
-            if audio is None:
-                continue
-            meta["audio"] = audio
+            if what == "audio":
+                audio = render_audio(d / "score.musicxml", d, meta.get("instrument", ""))
+                if audio is None:
+                    continue
+                meta["audio"] = audio
+                files = [AUDIO]
+                print(f"{d.name}: {audio['seconds']:g} s, {audio['sound']}")
+            else:
+                pages, placed = render_pages(mscore, d / "score.musicxml", d, float(meta["tempo"]["bpm"]))
+                meta["pages"] = pages
+                meta.pop("positions", None)
+                if placed:
+                    meta["positions"] = LAYOUT
+                files = pages + ([LAYOUT] if placed else [])
+                print(f"{d.name}: {len(pages)} page{'s' if len(pages) > 1 else ''}{', positions' if placed else ', no positions'}")
             (d / "exercise.json").write_text(json.dumps(meta, indent=1))
-            done.append(d.name)
-            print(f"{d.name}: {audio['seconds']:g} s, {audio['sound']}")
+            done[d.name] = files + ["exercise.json"]
         missing = sorted(set(ids) - {d.name for d in work.iterdir()})
         if missing:
             print(f"not there (push them first): {', '.join(missing)}", file=sys.stderr)
         if a.dry_run or not done:
             return
         if a.to:
-            for n in done:  # the audio first, then the exercise.json that names it
-                for f in (AUDIO, "exercise.json"):
+            for n, files in done.items():  # the new files first, then the exercise.json that names them
+                stale = [p for p in (a.to / n).glob("page-*.svg") if what == "pages" and p.name not in files]
+                if what == "pages" and LAYOUT not in files:
+                    stale.append(a.to / n / LAYOUT)
+                for f in files:
                     shutil.copy(work / n / f, a.to / n / f"{f}.new")
                     os.replace(a.to / n / f"{f}.new", a.to / n / f)
+                for p in stale:
+                    p.unlink(missing_ok=True)
             print(f"{len(done)} in {a.to}")
             return
         buf = io.BytesIO()
         with tarfile.open(fileobj=buf, mode="w") as tf:
-            for n in done:
-                for f in (AUDIO, "exercise.json"):
+            for n, files in done.items():
+                for f in files:
                     tf.add(work / n / f, arcname=f"{n}/{f}")
-        put = (f"cd {remote_dir} && rm -rf .audio-new && mkdir .audio-new && tar xf - -C .audio-new && "
-               f"for d in .audio-new/*/; do n=$(basename $d); if [ -d $n ]; then "
-               f"mv ${{d}}{AUDIO} $n/{AUDIO} && mv ${{d}}exercise.json $n/exercise.json; fi; done; rm -rf .audio-new")
+        # each folder: what is no longer made noted (pages, and positions.json when none was made), the new files
+        # moved in, exercise.json last, then the stale ones removed
+        drop = "page-*.svg " + LAYOUT if what == "pages" else ""
+        put = (f"cd {remote_dir} && rm -rf .refresh-new && mkdir .refresh-new && tar xf - -C .refresh-new && "
+               f"for d in .refresh-new/*/; do n=$(basename $d); [ -d $n ] || continue; stale=''; "
+               f"for p in $(cd $n && ls {drop} 2>/dev/null); do [ -e $d$p ] || stale=\"$stale $n/$p\"; done; "
+               f"for f in $(ls $d); do [ $f = exercise.json ] || mv $d$f $n/$f; done; "
+               f"mv ${{d}}exercise.json $n/exercise.json; [ -z \"$stale\" ] || rm -f $stale; done; rm -rf .refresh-new")
         subprocess.run(["ssh", a.host, put], input=buf.getvalue(), check=True, timeout=600)
         print(f"{len(done)} on {a.host} in {remote_dir}")
 
@@ -208,13 +261,17 @@ def main() -> None:
     ap.add_argument("--no-readme", action="store_true", help="send no instructions (a tune's README is about its recording)")
     ap.add_argument("--no-audio", action="store_true", help="send no audio of the notes")
     ap.add_argument("--audio-only", action="store_true", help="render the audio again for exercises already pushed")
+    ap.add_argument("--pages-only", action="store_true",
+                    help="render the pages and their positions again for exercises already pushed")
     ap.add_argument("--mscore")
     ap.add_argument("--host", default="practice", help="the control unit's ssh host")
     ap.add_argument("--dry-run", action="store_true", help="render and print, copy nothing")
     ap.add_argument("--to", type=Path, help="put it in this local exercises folder instead (development)")
     a = ap.parse_args()
-    if a.audio_only:
-        audio_only(a.score, a)
+    if a.audio_only or a.pages_only:
+        if a.audio_only and a.pages_only:
+            ap.error("--audio-only or --pages-only, not both")
+        refresh(a.score, a, "audio" if a.audio_only else "pages")
         return
     if len(a.score) != 1:
         ap.error("one score")
@@ -235,23 +292,21 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / ex_id
         out.mkdir()
-        r = subprocess.run([mscore, "-S", str(STYLE), "-T", "30", "-o", str(out / "page.svg"), str(score)],
-                           capture_output=True, text=True, env={**os.environ, "QT_QPA_PLATFORM": "offscreen"}, timeout=300)
-        pages = sorted((p.name for p in out.glob("page-*.svg")), key=lambda n: int(n[5:-4]))
-        if not pages:
-            sys.exit(f"MuseScore rendered nothing ({r.returncode}): {r.stderr[-400:]}")
+        pages, placed = render_pages(mscore, score, out, info["tempo"]["bpm"])
         shutil.copy(score, out / "score.musicxml")
         if readme is not None:
             (out / "readme.md").write_text(readme.read_text(encoding="utf-8"), encoding="utf-8")
         audio = None if a.no_audio else render_audio(score, out, instrument)
         meta = {"title": a.title or info["title"], "instrument": instrument, **{k: info[k] for k in ("tempo", "beats", "bars")},
-                "pages": pages, "readme": "readme.md" if readme is not None else "", "note": a.note, "source": source_name(score),
+                "pages": pages, **({"positions": LAYOUT} if placed else {}),
+                "readme": "readme.md" if readme is not None else "", "note": a.note, "source": source_name(score),
                 "source_sha256": hashlib.sha256(score.read_bytes()).hexdigest(),
                 "added": datetime.now().isoformat(timespec="seconds")}
         if audio:
             meta["audio"] = audio
         (out / "exercise.json").write_text(json.dumps(meta, indent=1))
         print(json.dumps({k: meta[k] for k in ("title", "instrument", "tempo", "beats", "bars", "pages", "readme")}
+                         | {"positions": placed}
                          | {"audio": audio and f"{audio['seconds']:g} s, {audio['sound']}"}))
         if a.dry_run:
             return

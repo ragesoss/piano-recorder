@@ -17,7 +17,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import Body, FastAPI, HTTPException
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 
 from recorder import audio
@@ -234,6 +234,11 @@ def create_app(cfg: Config) -> FastAPI:
     def exercise_page(exercise_id: str, n: int):
         path = guard(exercises.page, exercise_id, n)
         return FileResponse(path, media_type="image/svg+xml", headers={"Cache-Control": "no-cache"})
+
+    @app.get("/api/exercises/{exercise_id}/positions")
+    def exercise_positions(exercise_id: str):
+        """Where its bars and notes are on its pages (exercises/layout.py): the page's cursor."""
+        return JSONResponse(guard(exercises.positions, exercise_id), headers={"Cache-Control": "no-cache"})
 
     @app.get("/api/exercises/{exercise_id}/readme")
     def exercise_readme(exercise_id: str):

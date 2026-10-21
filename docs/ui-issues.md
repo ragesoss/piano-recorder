@@ -11,6 +11,9 @@ choosing and recording as two tasks.
   during preview or recording. too much clutter not enough space for the score." Both places: the
   preview of an exercise while choosing, and the record screen (and the take in progress). The
   score should come first; the rest gives way to it. 2026-10-19: the record screen's sentence is smaller (32 px, from 44), and
-  the board opens straight onto the record screen; the rest of this is still open.
+  the board opens straight onto the record screen. 2026-10-21 (the player: "being able to see the whole exercise
+  while recording"): the take in progress gives the score the screen (no crumbs, no sentence, one slim bar; 743 of
+  820 px on an iPad), the pages packed, and a cursor that moves with the click and scrolls the score (`PLAN.md`,
+  step 6, "The score while recording"). Still open: the preview while choosing, and the record screen's side column.
 - Fixed 2026-10-19, with the board (`PLAN.md`, step 6): exercises sharing a number (the voice's 001s) are
   named by title in "Swap to" and the crumbs; the voice is "with your voice".

@@ -381,6 +381,36 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
 .stopbtn { min-height: 104px; min-width: 240px; border: 0; border-radius: 24px; background: var(--red); color: #fff; display: flex; align-items: center;
   justify-content: center; gap: 14px; font-family: var(--display); font-size: 40px; font-weight: 700; margin-left: auto; }
 .stopbtn i { width: 24px; height: 24px; border-radius: 4px; background: #fff; }
+/* recording an exercise: the score has the screen (no crumbs, no sentence), one slim bar under it, and a cursor
+   that moves across the score with the click (2026-10-21, the player: "the UI should maximize the amount of screen
+   available for the notation") */
+.app.rec-score .top { display: none; }
+.live.sc { padding: 6px 12px 8px; border-top: 0; }
+.live.sc .score img { margin-bottom: 4px; }
+.pg { position: relative; }
+.sc-bar { position: absolute; background: rgba(139, 92, 246, 0.2); border-radius: 6px; pointer-events: none; display: none; }
+.sc-cur { position: absolute; width: 3px; margin-left: -1px; background: var(--red-dot); border-radius: 2px; pointer-events: none; display: none; }
+.sc-cur.wait { opacity: .5; }
+.rec-bar.slim { min-height: 0; gap: 10px 20px; padding: 8px 16px; }
+.slim .rb-what { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 0 1 280px; }
+.slim .rb-what .recording-chip { min-height: 32px; padding: 0 12px; font-size: 15px; align-self: flex-start; }
+.slim .rb-what .t { font-size: 14px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slim .where { min-width: 130px; gap: 6px; }
+.slim .where .v { font-size: 38px; }
+.slim .where .v.count { font-size: 46px; }
+.slim .where .of { font-size: 16px; }
+.slim .beats { gap: 4px; }
+.slim .beats .dots { gap: 6px; }
+.slim .beats .dots i { width: 18px; height: 18px; border-width: 2px; }
+.slim .beats span, .slim .clock span { font-size: 13px; }
+.slim .clock .v { font-size: 26px; }
+.slim .meters { min-width: 170px; gap: 4px; font-size: 14px; }
+.slim .meters .row { gap: 8px; }
+.slim .meters .row span { width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slim .meters .peak { font-size: 13px; }
+.slim .meter.big { height: 10px; }
+.slim .stopbtn { min-height: 60px; min-width: 150px; border-radius: 18px; font-size: 26px; gap: 10px; }
+.slim .stopbtn i { width: 18px; height: 18px; }
 
 .done-head { flex: none; padding: 6px 40px 0; display: flex; flex-direction: column; gap: 10px; }
 .done-head h1 { font-family: var(--display); font-size: 46px; font-weight: 500; line-height: 1.15; letter-spacing: -0.015em; }
@@ -464,6 +494,11 @@ input[type=range] { width: 100%; height: 44px; margin: 0; accent-color: var(--pu
   .rec-head, .done-head, .live { padding-left: 16px; padding-right: 16px; }
   .rec-grid, .done-grid { padding: 12px 16px 16px; }
   .rec-bar { padding: 12px 16px; gap: 16px; }
+  .rec-bar.slim { padding: 8px 12px; gap: 8px 14px; }
+  .slim .rb-what { flex-basis: 100%; flex-direction: row; align-items: center; gap: 10px; }
+  .slim .meters { display: none; }
+  .slim .stopbtn { width: auto; min-width: 120px; min-height: 52px; margin-left: auto; }
+  .live.sc { padding: 4px 6px 6px; }
   .q h1 { font-size: 34px; }
   .sentence { font-size: 24px; }
   .rec-head .sentence, .done-head h1 { font-size: 30px; }
@@ -827,6 +862,9 @@ function render() {
   else if (scr === "record") screenEl().innerHTML = renderRecord();
   else if (scr === "recording") screenEl().innerHTML = renderRecording();
   else if (scr === "recorded") screenEl().innerHTML = renderRecorded();
+  const ex = C() && C().kind === "exercise" ? exById(C().exercise) : null;
+  $(".app").classList.toggle("rec-score", scr === "recording" && !!ex && ex.pages.length > 0);
+  if (ex && ["record", "recording"].includes(scr)) loadPositions(ex);
   $$(".body, .score, .takes, .take-card, .live, .pick-list, .bcol-list, .board").forEach((el, i) => { if (keep[i]) el.scrollTop = keep[i]; });
   if (scr === "record" && S.showReadme) loadReadme();
   if (scr === "recorded" && S.take) loadPeaks(S.take);
@@ -1310,7 +1348,7 @@ function takesFor() {  // the takes like the next one: of its exercise, with its
 }
 function scoreHtml(e, controls) {
   if (!e.pages.length) return `<div class="none">This exercise has no pages.</div>`;
-  const pages = e.pages.map((_, i) => `<img src="/api/exercises/${encodeURIComponent(e.id)}/pages/${i + 1}" alt="${esc(e.title)}, page ${i + 1}">`).join("");
+  const pages = e.pages.map((_, i) => `<div class="pg" data-pg="${i}"><img src="/api/exercises/${encodeURIComponent(e.id)}/pages/${i + 1}" alt="${esc(e.title)}, page ${i + 1}"></div>`).join("");
   return (controls ? `<div class="bar"><span class="hear-box">${hearChart(e)}</span><span class="bar-r"><span>${e.pages.length > 1 ? `${e.pages.length} pages` : "1 page"}</span>${e.readme ? `<button type="button" data-act="readme">${S.showReadme ? "Hide the instructions" : "Instructions"}</button>` : ""}</span></div>
     <div class="readme" id="readme" ${S.showReadme ? "" : "hidden"}></div>` : "") + pages;
 }
@@ -1322,7 +1360,7 @@ function renderRecord() {
     const st = exState(e);
     meta = `<span class="pill ${st.key === "good" ? "purple" : "red"}">${esc(st.label)}</span>${st.key === "wanted" && e.status_note ? `<span>${esc(e.status_note)}</span>` : ""}
       <span class="muted">${e.tempo.beats_per_bar}/4 · ${e.bars} bars${e.last_take ? ` · last take ${esc(when(e.last_take))}` : ""}</span>${e.instrument === ANY ? anyPicker() : ""}`;
-    main = `<div class="score">${scoreHtml(e, true)}</div>`;
+    main = `<div class="score" data-cursor="${esc(e.id)}">${scoreHtml(e, true)}</div>`;
   } else if (c.kind === "playalong") {
     meta = `<span class="muted">${esc(fmt(b.seconds))}${b.tempo ? ` · ${Math.round(b.tempo.bpm)} bpm` : ""}${b.note ? ` · ${esc(b.note)}` : ""}</span>`;
     main = `<div class="score"><div class="bigtime"><span class="s">The backing plays from the speakers${b.tempo && c.backingCountIn ? ", after its count-in" : ""}; the take ends ${2} s after it.</span><div class="acts">${hearButton(b)}</div></div></div>`;
@@ -1362,6 +1400,18 @@ function position(rec) {  // where the player is: {big, of, beat, beats, countin
 function renderRecording() {
   const c = C(), rec = S.status && S.status.recording, e = c.kind === "exercise" ? exById(c.exercise) : null;
   const used = S.inputs.filter((i) => carries()[i.input] !== "none").sort((a, x) => a.input - x.input);
+  if (e && e.pages.length) {  // the score has the screen: what is recorded, where, the levels and Stop in one slim bar
+    const on = andList(chosen().map((i) => i.short));
+    return `<div class="live sc"><div class="score" data-cursor="${esc(e.id)}">${scoreHtml(e, false)}</div></div>
+    <div class="rec-bar slim">
+      <div class="rb-what"><span class="recording-chip"><i></i>Recording</span><span class="t">${esc(exName(e))} · click ${Math.round(tempoOf(e))}${on ? ` · ${esc(on)}` : ""}</span></div>
+      <div class="where"><span class="v" data-where>${rec && rec.backing ? "" : "Recording"}</span><span class="of" data-where-of>of ${e.bars}</span></div>
+      <div class="beats" data-beats hidden><span class="dots"></span><span data-beat-text></span></div>
+      <div class="clock"><span class="v tnum" data-clock>0:00</span><span data-clock-of></span></div>
+      <div class="meters">${used.map((i) => `<div class="row"><span>${esc(i.name)}</span><span class="meter big" data-meter="${i.input}"><i></i><b></b></span></div>`).join("")}
+        <span class="peak" data-peak>No clipping</span></div>
+      <button type="button" class="stopbtn" data-act="stop-rec"><i></i>Stop</button></div>`;
+  }
   const main = e ? `<div class="score">${scoreHtml(e, false)}</div>`
     : `<div class="bigtime"><span class="v tnum" data-rec-time>0:00</span><span class="s" data-rec-what>${c.kind === "playalong" ? "Along with the backing" : "Free play"}</span>
         ${c.kind === "playalong" ? `<span class="prog"><span class="bar"><i data-rec-prog></i></span></span>` : ""}</div>`;
@@ -1488,9 +1538,105 @@ function live() {
     const peak = $("[data-peak]");
     if (peak) { peak.textContent = rec.clipped ? "Clipping: turn that channel's gain down a little" : `Peak ${dbText(rec.peak_dbfs)} · no clipping`; peak.classList.toggle("clip", rec.clipped); }
   }
+  curStart();
   if (!dragging) $$("[data-level-text]").forEach((el) => {
     el.innerHTML = el.classList.contains("lv") ? `${esc(dbText(s.level_offset_db).replace(" dB", ""))} <small>dB</small>` : esc(dbText(s.level_offset_db)); });
   $$("[data-level]").forEach((el) => { if (document.activeElement !== el && !dragging) el.value = s.level_offset_db; });
+}
+
+// --- the cursor: a line that moves across the score with the click, the bar it is in lit (the transcribe page's
+// look), the score scrolled to keep the line played and the next in view. Where the bars and notes are on the pages
+// is the exercise's positions.json (exercises/layout.py, made at push time); an exercise without one has no cursor.
+// It follows a take being recorded on its click (the status's recording.backing), or the chart heard with its
+// click before a take (playing): their position, beat 0 and tempo, carried on between polls by the clock here.
+const CUR = { pos: {}, key: null, seen: null, off: null, raf: 0, sys: null };
+async function loadPositions(e) {
+  if (!e.positions || CUR.pos[e.id] !== undefined) return;
+  CUR.pos[e.id] = null;  // asked
+  try { CUR.pos[e.id] = await api("GET", `/api/exercises/${encodeURIComponent(e.id)}/positions`); curStart(); } catch (err) { /* no cursor */ }
+}
+function curSource() {  // what the cursor follows now: {key, ex, pos, beat0, bpm}, or null
+  const s = S.status;
+  if (!s) return null;
+  const bk = s.recording && s.recording.backing, pl = s.playing;
+  if (S.screen === "recording" && bk && bk.kind === "click" && bk.tempo && bk.beat0_s != null && C().kind === "exercise")
+    return { key: `rec:${s.recording.take}`, ex: C().exercise, pos: bk.position, beat0: bk.beat0_s, bpm: bk.tempo.bpm };
+  if (S.screen === "record" && pl && pl.exercise && pl.tempo && pl.beat0_s != null)
+    return { key: `hear:${pl.exercise}`, ex: pl.exercise, pos: pl.position, beat0: pl.beat0_s, bpm: pl.tempo.bpm };
+  return null;
+}
+function curClock(src) {  // the source's position now (s): the last polled, carried on by the clock, a little smoothed
+  const now = performance.now() / 1000;
+  if (CUR.key !== src.key || CUR.seen !== src.pos) {
+    const off = src.pos - now;
+    if (CUR.key !== src.key || CUR.off == null || Math.abs(off - CUR.off) > 0.25) CUR.off = off;
+    else CUR.off += (off - CUR.off) * 0.2;
+    if (CUR.key !== src.key) CUR.sys = null;
+    CUR.key = src.key; CUR.seen = src.pos;
+  }
+  return now + CUR.off;
+}
+function curStart() { if (!CUR.raf) CUR.raf = requestAnimationFrame(curTick); }
+function curHide() { $$(".sc-cur, .sc-bar").forEach((el) => { el.style.display = "none"; }); }
+function curTick() {
+  CUR.raf = 0;
+  const box = $("[data-cursor]"), src = curSource(), e = box && exById(box.dataset.cursor), P = e && CUR.pos[e.id];
+  if (!box || !P || !src || src.ex !== e.id || !P.notes.length) { curHide(); CUR.key = null; return; }
+  curDraw(box, P, (curClock(src) - src.beat0) * src.bpm / 60, e);
+  CUR.raf = requestAnimationFrame(curTick);
+}
+function curDraw(box, P, b, e) {
+  const notes = P.notes, waiting = b < 0;
+  if (b > e.beats + 0.05) { curHide(); return; }  // past the last bar
+  const at = Math.max(0, b);
+  let lo = 0, hi = notes.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (notes[mid][0] <= at) lo = mid; else hi = mid - 1; }
+  const [nb, bi, nx] = notes[lo], br = P.bars[bi], next = notes[lo + 1];
+  let x = nx;
+  if (!waiting && at > nb) {  // on towards the next note, or the bar's end where the system ends
+    const nbr = next && P.bars[next[1]], same = nbr && nbr.page === br.page && nbr.y === br.y;
+    const toX = same ? next[2] : br.x + br.w - 20, toB = next ? next[0] : e.beats;
+    x = nx + (toX - nx) * Math.min(1, (at - nb) / Math.max(1e-3, toB - nb));
+  }
+  const pg = box.querySelector(`.pg[data-pg="${br.page}"]`), size = P.pages[br.page];
+  if (!pg || !size) return;
+  let cur = box.querySelector(".sc-cur"), hl = box.querySelector(".sc-bar");
+  if (!cur) { cur = document.createElement("div"); cur.className = "sc-cur"; hl = document.createElement("div"); hl.className = "sc-bar"; }
+  if (cur.parentElement !== pg) pg.append(hl, cur);
+  const pct = (v, of) => `${(100 * v / of).toFixed(3)}%`, pad = br.h * 0.08;
+  Object.assign(hl.style, { display: "block", left: pct(br.x, size.w), width: pct(br.w, size.w), top: pct(br.y - pad, size.h), height: pct(br.h + 2 * pad, size.h) });
+  Object.assign(cur.style, { display: "block", left: pct(x, size.w), top: pct(br.y - pad, size.h), height: pct(br.h + 2 * pad, size.h) });
+  cur.classList.toggle("wait", waiting);
+  hl.dataset.bar = bi;
+  curFollow(box, P, bi, pg, size);
+}
+function scroller(el) {  // the element that scrolls the score
+  for (let x = el; x && x !== document.body; x = x.parentElement) {
+    const oy = getComputedStyle(x).overflowY;
+    if ((oy === "auto" || oy === "scroll") && x.scrollHeight > x.clientHeight + 1) return x;
+  }
+  return null;
+}
+function curFollow(box, P, bi, pg, size) {  // a new system: scrolled to its top if it, or the next, is not all in view
+  const br = P.bars[bi], key = `${br.page}:${br.y}`;
+  if (CUR.sys === key) return;
+  CUR.sys = key;
+  const sc = scroller(box);
+  if (!sc) return;
+  const top = (b) => {  // a bar's system's top in the scroller's content (px), and its height
+    const p = box.querySelector(`.pg[data-pg="${b.page}"]`);
+    if (!p) return null;
+    const r = p.getBoundingClientRect(), s = P.pages[b.page], k = r.height / s.h;
+    return { y: r.top - sc.getBoundingClientRect().top + sc.scrollTop + b.y * k, h: b.h * k };
+  };
+  const here = top(br), nxt = P.bars.find((b, i) => i > bi && (b.page !== br.page || b.y !== br.y));
+  const after = nxt ? top(nxt) : null;
+  if (!here) return;
+  const above = here.h * 0.35, below = here.h * 0.3, view = [sc.scrollTop, sc.scrollTop + sc.clientHeight];
+  const out = here.y - above < view[0] || here.y + here.h + below > view[1] || (after && after.y + after.h + below > view[1]);
+  if (!out) return;
+  const first = bi === 0 || P.bars.findIndex((b) => b.page === br.page && b.y === br.y) === 0;
+  sc.scrollTo({ top: first ? 0 : Math.max(0, here.y - above), behavior: "smooth" });
 }
 
 // --- the waveform and the instructions, fetched when shown

@@ -3,6 +3,9 @@ by tools/push-exercise.
 
     <exercises_dir>/<id>/exercise.json   what it is, its tempo and length, its pages
     <exercises_dir>/<id>/page-1.svg ...  the score, rendered by MuseScore on the desktop
+    <exercises_dir>/<id>/positions.json  where its bars and notes are on those pages (exercises/layout.py),
+                                         for the page's cursor; optional (exercises pushed before
+                                         2026-10-21 have none until tools/push-exercise --pages-only)
     <exercises_dir>/<id>/score.musicxml  the score itself
     <exercises_dir>/<id>/readme.md       how to play it (the exercise's README.md in the project),
                                          shown above the score; optional
@@ -45,6 +48,7 @@ class Exercise:
     # an exercise for any instrument (instrument "generic"): the kinds the project has takes of it on, and how
     # many (status.json's played_on: {"mandolin": 2}); {} for the others
     played_on: dict = field(default_factory=dict)
+    positions: bool = False  # where its bars and notes are on its pages is known (positions.json): the cursor
 
 
 class ExerciseNotFound(Exception):
@@ -95,6 +99,7 @@ class Exercises:
                        "beats_per_bar": int(tempo.get("beats_per_bar", 4))},
                 beats=float(raw["beats"]), bars=int(raw.get("bars", 0)),
                 pages=[p for p in raw.get("pages", []) if (d / p).exists()],
+                positions=self._positions_path(d, raw) is not None,
                 readme=self._readme_path(d, raw) is not None,
                 audio={k: v for k, v in (raw.get("audio") or {}).items() if k in ("seconds", "sound")}
                 if self._audio_path(d, raw) is not None else {},
@@ -125,6 +130,29 @@ class Exercises:
         if not isinstance(name, str) or not name or name != Path(name).name or not (d / name).is_file():
             return None
         return d / name
+
+    @staticmethod
+    def _positions_path(d: Path, raw: dict) -> Path | None:
+        """Where its bars and notes are on its pages, named in exercise.json: in its own folder only."""
+        name = raw.get("positions")
+        if not isinstance(name, str) or not name or name != Path(name).name or not (d / name).is_file():
+            return None
+        return d / name
+
+    def positions(self, exercise_id: str) -> dict:
+        """positions.json (exercises/layout.py), if it fits the pages there are."""
+        d = self._folder(exercise_id)
+        try:
+            raw = json.loads((d / "exercise.json").read_text())
+            path = self._positions_path(d, raw)
+            if path is None:
+                raise ExerciseNotFound(f"{exercise_id} has no positions")
+            pos = json.loads(path.read_text())
+            if len(pos.get("pages", [])) != len(raw.get("pages", [])):
+                raise ExerciseNotFound(f"{exercise_id}: its positions are for other pages")
+            return pos
+        except (OSError, ValueError, AttributeError, TypeError) as e:
+            raise ExerciseNotFound(f"{exercise_id} positions: {e}")
 
     @staticmethod
     def _audio_path(d: Path, raw: dict) -> Path | None:

@@ -589,6 +589,42 @@ on the same screen as the controls, so a take needs little preparation.
     to be brought in), the next one straight to its record screen, a kind typed in and back, the list on the
     mandolin; a dobro exercise, a free take's steps with a kind typed (and one refused), `#dobro`. No console
     errors, no sideways scroll. The tests pass (147). Not deployed.
+- **The score while recording** (2026-10-21, the player: "i've been having trouble with the exercise recording UI
+  lately, in particular, being able to see the whole exercise while recording. the UI should maximize the amount of
+  screen available for the notation. for exericses that have a click, it would be ideal to have automatic scrolling
+  and a marker to show where in the exercise you're supposed to be (ie, a line that moves over each beat as it
+  passes, like we use elsewhere)"). Before, on an iPad at 1180x820 the crumbs, the sentence and the take's bar took
+  about 320 px, and the score showed one system of dobro 002.
+  - **The screen:** while a take of an exercise records, the crumbs and the sentence go and one slim bar stays under
+    the score (Recording and what, the bar and beat, the clock, the levels, Stop: 60 px tall; it wraps on a phone,
+    the levels left out there). The score is 743 of 820 px on the iPad; on an iPad upright, dobro 002's 33 bars all
+    show at once. Play-along and free takes are as before.
+  - **The pages packed:** `tools/exercise-page.mss` no longer spreads the systems down a page
+    (`enableVerticalSpread` 0, `maxSystemDistance` 8.5 sp, the least): dobro 002's pages 8,910, 8,442 and 3,485
+    units tall become 7,203, 6,624 and 3,485, the gap between its first two systems gone.
+  - **Where each bar and note is:** `tools/push-exercise` renders the pages and MuseScore's measure and segment
+    positions in one run (`-j`, `.mpos` and `.spos`), and `exercises/layout.py` puts them in the trimmed pages'
+    own units (each page's trim offset from its first staff line, every other system checked: a page that does not
+    line up is refused, and the exercise goes without) as `positions.json`: each bar's box, and each note's beat
+    from the score's first (repeats played out) and its x. `GET /api/exercises/ID/positions`; `exercise.json`
+    names it. `--pages-only [ID ...]` renders the pages and positions again for exercises already pushed, from the
+    score pushed with each (a page no longer made is removed).
+  - **The cursor** (the transcribe page's look): a red line that moves across the notes in time with the click,
+    from note to note (to the bar's end at a system's end), and the bar it is in lit purple; in the count-in it
+    waits, faint, on the first note. It follows the take's click (the status's `recording.backing`: position,
+    `beat0_s`, tempo, at the take's own tempo), carried on between the 120 ms polls by the page's clock; before a
+    take it follows the chart heard with "Hear it" too. Entering a system, the score scrolls it to the top when it
+    or the next is not all in view.
+  - Tried on the desktop (fake device; the 71 exercises mirrored in `exercises-dev`, every one placed with
+    `--pages-only`, no page refused): `tests/test_exercise_layout.py` (the offset and a page that does not line up;
+    the store and route; dobro 002 and a pickup through MuseScore: each note in its bar, the pickup's beat 0, and
+    `--pages-only` in place) and `tests/test_exercise_record_page.py` (headless Chromium, muted, dobro 002 at 240:
+    the crumbs gone and the score 743 of 820 px; the cursor waiting on the first note in the count-in; its bar the
+    bar the page says in 49 of 50 samples over 14 s, the other one off at a bar line; in view in all 50; the score
+    scrolled 334 px; a phone with no sideways scroll and Stop on screen). The suite 283 passed. Not deployed.
+  - **To deploy** (the player's go-ahead, every app idle): `tools/deploy`, then `tools/push-exercise --pages-only`
+    for the exercises on the unit (their pages packed and their positions; until then an exercise shows as before,
+    with no cursor).
 - **Next:** take a play-along's backing out on the desktop instead of the Pi.
 
 ### 7. The chord app (started 2026-10-16)

@@ -12,5 +12,7 @@
     <pageOddBottomMargin>0.3</pageOddBottomMargin>
     <pageTwosided>0</pageTwosided>
     <Spatium>2.5</Spatium>
+    <enableVerticalSpread>0</enableVerticalSpread>
+    <maxSystemDistance>8.5</maxSystemDistance>
   </Style>
 </museScore>
