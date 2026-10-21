@@ -1,7 +1,7 @@
 /* The room's inputs on every app's page (recorder/inputs.py; each app serves this at /inputs.js): which of the
-   interface's inputs are recorded and what is on each, their live levels, and a sheet to name a mic that has just
-   been plugged in, or to say whether an input is recorded. One file for the room, so a mic named on one app's
-   page is named on every app's.
+   interface's inputs are recorded and what is on each, their live levels, and a sheet to choose the mic on an input
+   from the room's list (or a mic not on the list, or nothing), or to say whether an input is recorded. One file for
+   the room, so a mic chosen on one app's page is named on every app's.
 
    A page calls RoomInputs.init({ monitor }) once (monitor: what keeps the levels coming while the sheet is open,
    e.g. a POST to /api/monitor), RoomInputs.update(status) with every status it polls (its input_levels,
@@ -60,10 +60,23 @@
   font: inherit; font-size: 17px; font-weight: 400; width: 100%; box-sizing: border-box; }
 .ri-form input[type=text]:focus { outline: 2px solid var(--purple); outline-offset: 1px; }
 .ri-form .ri-acts { justify-content: flex-end; }
+.ri-ask { font-size: 16px; font-weight: 700; color: var(--ink); margin: 0; }
+.ri-opts { display: flex; flex-direction: column; gap: 6px; }
+.ri-opt { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 8px 12px; border-radius: 14px; border: 1.5px solid var(--line);
+  background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; box-sizing: border-box; }
+.ri-opt[aria-checked="true"] { border-color: var(--purple); }
+.ri-dot { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--ink3); box-sizing: border-box; }
+.ri-opt[aria-checked="true"] .ri-dot { border-color: var(--purple); background: var(--purple-fill); box-shadow: inset 0 0 0 3px var(--surf2); }
+.ri-m { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ri-m b { font-size: 17px; font-weight: 700; }
+.ri-m span { font-size: 14px; color: var(--ink3); overflow-wrap: anywhere; }
+.ri-m span em { font-style: normal; color: var(--amber); }
+.ri-gap { height: 4px; }
 `;
   const R = { data: null, version: null, levels: null, peaks: null, recording: false, monError: null, monitor: null,
               listeners: [], open: false, editing: null, form: null, error: "", busy: false, timer: null, stripKey: "" };
 
+  const OTHER = "Another mic";  // a mic not on the list, its name not given
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const pct = (db) => Math.max(0, Math.min(100, (db + 60) / 60 * 100));
   const dbText = (v) => v == null ? "–" : `${v < -0.5 ? "−" : ""}${Math.abs(Math.round(v))} dB`;
@@ -161,29 +174,42 @@
   // --- the sheet: every input, named or not, recorded or not
 
   function itemHtml(i) {
-    const editing = R.editing === i.input, f = R.form || {};
-    const kindRow = `<div class="ri-seg" role="radiogroup" aria-label="What it hears">
-        <button type="button" role="radio" aria-pressed="${!f.forOne}" data-ri="for-room">The room</button>
-        <button type="button" role="radio" aria-pressed="${!!f.forOne}" data-ri="for-one">One instrument</button></div>`;
-    const form = !editing ? "" : `<div class="ri-form">
-        <label>Name<input type="text" id="riName" maxlength="40" value="${esc(f.name)}" placeholder="Bluebird SL" autocomplete="off"></label>
-        <label>What it is, where it is<input type="text" id="riDetails" maxlength="200" value="${esc(f.details)}" placeholder="Blue Bluebird SL, large-diaphragm condenser, beside the MXL" autocomplete="off"></label>
-        <label>What it hears ${kindRow}</label>
-        ${f.forOne ? `<label>Which instrument<input type="text" id="riKind" maxlength="30" value="${esc(f.kind)}" placeholder="bass" autocomplete="off"></label>` : ""}
-        <div class="ri-acts"><button type="button" class="ri-btn plain" data-ri="cancel">Cancel</button><button type="button" class="ri-btn fill" data-ri="save"${R.busy ? " disabled" : ""}>Save</button></div></div>`;
+    const editing = R.editing === i.input;
+    const form = editing ? pickHtml(i) : "";
     const acts = editing ? "" : `<div class="ri-acts">
         <div class="ri-seg" role="radiogroup" aria-label="${esc(label(i))}: recorded or not">
           <button type="button" role="radio" aria-pressed="${i.record}" data-ri="record" data-n="${i.input}" data-v="1"${R.busy ? " disabled" : ""}>Recorded</button>
           <button type="button" role="radio" aria-pressed="${!i.record}" data-ri="record" data-n="${i.input}" data-v="0"${R.busy ? " disabled" : ""}>Not recorded</button></div>
-        ${i.named ? `<button type="button" class="ri-btn" data-ri="edit" data-n="${i.input}">Edit</button>
-          <button type="button" class="ri-btn plain" data-ri="new" data-n="${i.input}">A new mic here</button>`
-        : `<button type="button" class="ri-btn" data-ri="new" data-n="${i.input}">Name it</button>`}</div>`;
+        <button type="button" class="ri-btn" data-ri="pick" data-n="${i.input}">${i.named ? "Change the mic" : "Choose the mic"}</button>
+        ${i.named && !i.mic && i.name !== OTHER ? `<button type="button" class="ri-btn plain" data-ri="list" data-n="${i.input}"${R.busy ? " disabled" : ""}>Add it to the list</button>` : ""}</div>`;
     const what = i.for ? `on the ${esc(i.for)}` : i.named ? "the room" : "";
+    const about = [esc(i.details), what, i.named && !i.mic ? "not on the list" : "", i.named && !i.record ? "not recorded" : ""].filter(Boolean).join(" · ");
     return `<div class="ri-item${i.record ? "" : " off"}" data-n="${i.input}">
-      <div class="ri-top"><span class="ri-num">In ${i.input}</span><span class="ri-title">${i.named ? esc(i.name) : "Nothing named"}</span>${i.socket ? `<span class="ri-socket">${esc(i.socket)}</span>` : ""}</div>
-      ${i.details || what ? `<div class="ri-details">${esc(i.details)}${i.details && what ? " · " : ""}${what}${i.record ? "" : " · not recorded"}</div>` : ""}
+      <div class="ri-top"><span class="ri-num">In ${i.input}</span><span class="ri-title">${i.named ? esc(i.name) : "No mic chosen"}</span>${i.socket ? `<span class="ri-socket">${esc(i.socket)}</span>` : ""}</div>
+      ${about ? `<div class="ri-details">${about}</div>` : ""}
       <div class="ri-level">${meter(i.input)}<span class="ri-db" data-inp-db="${i.input}">–</span></div>
       ${acts}${form}</div>`;
+  }
+
+  // the pick: the room's mics by name, each with where it is now (its details are on the input's card once chosen);
+  // a mic not on the list (its name, if known); nothing
+  function pickHtml(i) {
+    const f = R.form || {}, n = i.input;
+    const opt = (v, name, note) => `<button type="button" class="ri-opt" role="radio" aria-checked="${f.choice === v}" data-ri="choose" data-v="${esc(v)}">
+        <span class="ri-dot"></span><span class="ri-m"><b>${name}</b>${note ? `<span>${note}</span>` : ""}</span></button>`;
+    const mics = (R.data && R.data.mics) || [];
+    const rows = mics.map((m) => {
+      const where = m.input === n ? "on this input now" : m.input ? `<em>on input ${m.input} now: it moves here</em>` : "";
+      return opt(m.id, esc(m.name), where);
+    }).join("");
+    const other = f.choice === "other" ? `<label>Its name, if you know it<input type="text" id="riName" maxlength="40" value="${esc(f.name)}" placeholder="Shure SM57" autocomplete="off"></label>` : "";
+    return `<div class="ri-form">
+        <p class="ri-ask">Which mic is on input ${n}?</p>
+        <div class="ri-opts" role="radiogroup" aria-label="The mic on input ${n}">${rows}
+          <div class="ri-gap"></div>
+          ${opt("other", "A mic not on the list", "")}${other}
+          ${opt("none", "Nothing plugged in", "")}</div>
+        <div class="ri-acts"><button type="button" class="ri-btn plain" data-ri="cancel">Cancel</button><button type="button" class="ri-btn fill" data-ri="save"${R.busy ? " disabled" : ""}>Save</button></div></div>`;
   }
 
   function renderSheet() {
@@ -198,11 +224,11 @@
       document.body.appendChild(el);
     }
     const focus = document.activeElement && document.activeElement.id;
-    const keep = focus && ["riName", "riDetails", "riKind"].includes(focus) ? focus : null;
+    const keep = focus === "riName" ? focus : null;
     readForm();
     const probs = (R.data && R.data.problems) || [];
     document.getElementById("riBody").innerHTML = `
-      <p class="ri-intro">What is plugged into each of the interface's inputs, for every app in the room. A take records the ones marked Recorded, each named in its sidecar.</p>
+      <p class="ri-intro">The mic on each of the interface's inputs, chosen from the room's list, for every app in the room. A take records the inputs marked Recorded, each named by its mic.</p>
       <p class="ri-note" id="riListen">${esc(listenNote())}</p>
       ${R.error ? `<p class="ri-err" role="alert">${esc(R.error)}</p>` : ""}
       ${probs.map((p) => `<p class="ri-err">${esc(p)}</p>`).join("")}
@@ -213,24 +239,19 @@
 
   function readForm() {
     if (R.editing == null || !R.form) return;
-    const v = (id) => { const f = document.getElementById(id); return f ? f.value : null; };
-    if (v("riName") != null) R.form.name = v("riName");
-    if (v("riDetails") != null) R.form.details = v("riDetails");
-    if (v("riKind") != null) R.form.kind = v("riKind");
+    const f = document.getElementById("riName");
+    if (f) R.form.name = f.value;
   }
 
-  function startEdit(n, fresh) {
+  function startEdit(n) {
     const i = inputs().find((x) => x.input === n);
     if (!i) return;
     R.editing = n;
     R.error = "";
-    R.form = fresh ? { name: "", details: "", forOne: false, kind: "" }
-      : { name: i.named ? i.name : "", details: i.details, forOne: !!i.for, kind: i.for };
+    R.form = { choice: i.mic || (i.named ? "other" : null), name: i.named && !i.mic && i.name !== OTHER ? i.name : "" };
     renderSheet();
     const item = document.querySelector(`.ri-item[data-n="${n}"]`);
     if (item) item.scrollIntoView({ block: "nearest" });
-    const f = document.getElementById("riName");
-    if (f) f.focus({ preventScroll: true });
   }
 
   async function put(n, body) {
@@ -255,11 +276,11 @@
     readForm();
     const f = R.form, i = inputs().find((x) => x.input === R.editing);
     if (!f || !i) return;
-    if (!f.name.trim()) { R.error = "A name is needed: what the takes will call it."; renderSheet(); return; }
-    const body = { name: f.name.trim(), details: f.details.trim(), for: f.forOne ? f.kind.trim().toLowerCase() : "" };
-    if (f.forOne && !body.for) { R.error = "Which instrument does it hear? (bass, dobro, guitar...)"; renderSheet(); return; }
-    if (!i.named) body.record = true;  // naming a mic plugged in: it is recorded from the next take
-    put(i.input, body);
+    if (!f.choice) { R.error = `Choose the mic on input ${i.input}, or Nothing plugged in.`; renderSheet(); return; }
+    // a mic on an input that had none is recorded from the next take (the server's default)
+    if (f.choice === "none") put(i.input, { clear: true });
+    else if (f.choice === "other") put(i.input, { name: f.name.trim() || OTHER });
+    else put(i.input, { mic: f.choice });
   }
 
   function tick() {
@@ -275,7 +296,7 @@
     renderSheet();
     clearTimeout(R.timer);
     tick();
-    if (n) startEdit(Number(n), !(inputs().find((x) => x.input === Number(n)) || {}).named);
+    if (n) startEdit(Number(n));
   }
 
   function close() {
@@ -297,22 +318,28 @@
     if (!el) return;
     const a = el.dataset.ri, n = Number(el.dataset.n);
     if (a === "close") close();
-    else if (a === "edit") startEdit(n, false);
-    else if (a === "new") startEdit(n, true);
+    else if (a === "pick") startEdit(n);
+    else if (a === "list") put(n, { add_to_list: true });
     else if (a === "cancel") { R.editing = null; R.form = null; R.error = ""; renderSheet(); }
     else if (a === "save") save();
-    else if (a === "for-room" || a === "for-one") { readForm(); R.form.forOne = a === "for-one"; renderSheet(); }
+    else if (a === "choose") {
+      readForm();
+      R.form.choice = el.dataset.v;
+      renderSheet();
+      const f = R.form.choice === "other" && document.getElementById("riName");
+      if (f) f.focus({ preventScroll: true });
+    }
     else if (a === "record") {
       const i = inputs().find((x) => x.input === n), want = el.dataset.v === "1";
       if (!i || i.record === want) return;
-      if (want && !i.named) { startEdit(n, true); return; }  // a mic is named before it is recorded
+      if (want && !i.named) { startEdit(n); return; }  // a mic is chosen before it is recorded
       put(n, { record: want });
     }
   });
   document.addEventListener("keydown", (ev) => {
     if (!R.open) return;
     if (ev.key === "Escape") { if (R.editing != null) { R.editing = null; R.form = null; renderSheet(); } else close(); }
-    else if (ev.key === "Enter" && ev.target && ["riName", "riDetails", "riKind"].includes(ev.target.id)) { ev.preventDefault(); save(); }
+    else if (ev.key === "Enter" && ev.target && ev.target.id === "riName") { ev.preventDefault(); save(); }
   });
 
   function init(opts) {

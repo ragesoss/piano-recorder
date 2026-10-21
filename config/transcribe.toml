@@ -16,16 +16,18 @@ peers = ["http://127.0.0.1:8000", "http://127.0.0.1:8001", "http://127.0.0.1:800
          "http://127.0.0.1:8004"]
 
 # What this app records, as the pipeline names it (`transcribe --instrument`), and the input that carries it
-# unless the page says another, by its name in the room's inputs (wherever it is plugged in): the dobro on the room
-# mic; the bass on the Nadine, as the corpus's bass takes (dobro-transcription tunes/bass/*: "the Nadine's channel
-# alone"); the piano on the room mic, as the exercise app records it (every piano exercise take's sidecar: input 4,
-# "Room mic", carries the piano; the Nadine and the piezo nothing). The piano is written as a grand staff, no tab.
-# Any stringed instrument (the pipeline's generic path: a mandolin, a banjo, a guitar...; its kind chosen on the
-# page, or not) on the room mic, written as one staff, no tab. With no recorded input of that name: one for the
-# instrument's kind (the bass: the piezo), else the room's (recorder/inputs.py, `Inputs.pick`).
+# unless the page says another, by its mic's name in the room's list (wherever it is plugged in): the dobro on the
+# MXL 990, the room mic it has been recorded on since 2026-10-17 (whether the Bluebird SL takes its place is the
+# player's ear's, dobro-transcription's compare-the-new-bluebird-sl-with-the); the bass on the Nadine, as the
+# corpus's bass takes (dobro-transcription tunes/bass/*: "the Nadine's channel alone"); the piano on the room mic,
+# as the exercise app records it. The piano is written as a grand staff, no tab. Any stringed instrument (the
+# pipeline's generic path: a mandolin, a banjo, a guitar...; its kind chosen on the page, or not) on the room mic,
+# written as one staff, no tab. With no recorded input of that name (or one its mic went by, "Room mic" for the MXL
+# before 2026-10-21): one for the instrument's kind (the bass: the piezo), else the room's (recorder/inputs.py,
+# `Inputs.pick`).
 [instruments.dobro]
 name = "Dobro"
-input = "Room mic"
+input = "MXL 990"
 
 [instruments.bass]
 name = "Bass"
@@ -33,11 +35,11 @@ input = "Nadine"
 
 [instruments.piano]
 name = "Piano"
-input = "Room mic"
+input = "MXL 990"
 
 [instruments.strings]
 name = "Any stringed instrument"
-input = "Room mic"
+input = "MXL 990"
 
 # The transcription project's package as synced to the unit, and the venv that has its dependencies (numpy,
 # scipy, librosa, soundfile): the review app's. A run gets a few threads and nice 19.

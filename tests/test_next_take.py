@@ -59,7 +59,8 @@ def test_the_inputs_are_listed_with_their_place_in_a_take(client):
     assert [(i["input"], i["channel"], i["record"]) for i in got] == [(1, 2, True), (2, None, False), (3, 0, True),
                                                                       (4, 1, True)]
     assert {k: got[2][k] for k in ("name", "details", "for", "named")} == {
-        "name": "Nadine", "details": "Ear Trumpet Labs Nadine, on the bass", "for": "bass", "named": True}
+        "name": "Nadine", "details": "Ear Trumpet Labs Nadine, the upright bass's mic, phantom power", "for": "bass",
+        "named": True}  # the room's list's
     assert {k: got[1][k] for k in ("name", "named", "socket")} == {"name": "Input 2", "named": False,
                                                                    "socket": "Fake 2"}
 
@@ -81,8 +82,8 @@ def test_a_take_on_two_instruments_says_what_each_channel_carried(client, tmp_pa
     assert [i["instrument_id"] for i in t["instruments"]] == ["d1", "cleveland"]
     # by default: the bass's pickups carry the bass, the room mic the guitar (it has no pickup)
     assert [(c["input"], c["carries"]) for c in t["channels"]] == [(3, "cleveland"), (4, "d1"), (1, "cleveland")]
-    assert t["channels"][1] == {"channel": 1, "input": 4, "input_name": "Room mic", "carries": "d1",
-                                "carries_name": "Martin D-1", "input_details": "The condenser, pointed at the player"}
+    assert t["channels"][1] == {"channel": 1, "input": 4, "input_name": "MXL 990", "carries": "d1",
+                                "carries_name": "Martin D-1", "input_details": "MXL 990: cardioid large-diaphragm condenser, phantom power"}
     assert t["channels"][0]["input_for"] == "bass" and "input_for" not in t["channels"][1]
     side = json.loads((tmp_path / "takes" / f"{t['id']}.json").read_text())
     assert "instrument" not in side  # two kinds: no one kind for the take

@@ -181,9 +181,10 @@ def test_the_page_listens_while_it_asks_and_lets_the_inputs_go(cfg):
         # every input of the device (the room's inputs, recorder/inputs.py), the recorded ones with their channel
         listed = c.get("/api/inputs").json()["inputs"]
         assert [i["input"] for i in listed] == [1, 2, 3, 4] and [i["channel"] for i in listed] == [2, None, 0, 1]
-        assert listed[3] == {"input": 4, "channel": 1, "name": "Room mic", "named": True, "record": True,
-                             "details": "The condenser, pointed at the player", "for": "", "socket": "Fake 4",
-                             "since": ""}
+        # the config's "Room mic": the name the MXL 990 went by, so the MXL from the room's list
+        assert listed[3] == {"input": 4, "channel": 1, "name": "MXL 990", "named": True, "record": True,
+                             "mic": "mxl-990", "details": "MXL 990: cardioid large-diaphragm condenser, phantom power", "for": "",
+                             "socket": "Fake 4", "since": ""}
 
 
 def test_the_copied_listener_is_the_projects():

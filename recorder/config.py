@@ -64,11 +64,12 @@ class Profile:
 @dataclass(frozen=True)
 class Input:
     """What is plugged into one of the device's inputs: the room's inputs file's [inputs.N] (recorder/inputs.py),
-    or before it a program's own config's."""
+    or before it a program's own config's. A mic from the room's list (`mic`) brings its name, details and kind."""
     number: int  # the interface's input number: the capture channel's index plus one
     name: str  # "Nadine"
     details: str = ""  # "Ear Trumpet Labs Nadine, on the bass"
     for_kind: str = ""  # a pickup or mic on one kind of instrument ("bass"); "": a mic for the room
+    mic: str = ""  # the mic's id in the room's list ("nadine"); "": a mic not on the list, or nothing named
     record: bool = True  # the apps keep it in their takes
     named: bool = True  # False: nothing says what is on it ("Input 2")
     socket: str = ""  # the profile's words for the socket ("Front, mic, line or instrument")

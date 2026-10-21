@@ -1305,6 +1305,47 @@ dobro-transcription's card `the-music-room-apps-record-any-or`.
 - **Left:** phantom power is still the profile's (on for 3-4, off for 1-2): a condenser named on input 1 or 2 hears
   nothing until it is switched there (dobro-transcription's card `inputs-phantom-from-the-page`).
 
+**The room's mics, a list to pick from (2026-10-21).** Deployed the night before, the sheet's form was the trouble:
+the player went to mark input 3 as the Bluebird and "it was confusing and i couldn't figure out what to change. the
+system should have a known set of mics, and i should be able to pick which one is on a given input (or mark it as a
+mic that isn't on the known list)." Input 3 said "Nadine" with Edit and "A new mic here", each a blank name, a line
+of details and "the room or one instrument"; input 4's name, "Room mic", was a role, not a mic.
+
+- **The list:** `[mics.ID]` tables in the room's file (`name`, `details`, `for`, and `aka`: names it went by before
+  the list), in the order the pages show them. An input says which is on it, `mic = "bluebird-sl"`, and takes its
+  name, details and kind from the list, so the sidecars name it as before (`input_name` the mic's name). A mic not
+  on the list is an `[inputs.N]` with its own `name` (and `details`, `for`), as every table was before. A mic is in
+  one place: choosing it for an input takes it off the input it was on (that one is then not recorded).
+  `config/inputs.toml` has the room's mics (slot 1: the Bluebird SL, the MXL 990, the Nadine, the piezo, the two
+  small condensers, the record player's two channels) and the inputs as wired on 2026-10-21 (3 the Bluebird, 4 the
+  MXL, 7 the piezo recorded; 5 and 6 the record player's).
+- **Files of before:** a room file with no `[mics]` (the unit's, installed 2026-10-20) takes the list from
+  `config/inputs.toml`, and an `[inputs.N]` whose name is a mic's on the list, or one it went by, is that mic: the
+  unit's "Nadine", "Piezo" and "Records, left/right" read as theirs, and "Room mic" as the MXL 990 (its `aka`). The
+  first change from a page writes the list into the file. So the unit's file needs no edit at the deploy.
+- **The sheet:** each input's card has its mic's name, details and kind, "not on the list" for one that is not,
+  Recorded or Not recorded, and "Change the mic" ("Choose the mic" on an input with none). It opens "Which mic is on
+  input 3?": the list's mics by name, each saying where it is now ("on this input now", "on input 4 now: it moves
+  here"), then "A mic not on the list" (its name if known, else "Another mic") and "Nothing plugged in"; Cancel and
+  Save. A mic not on the list that has a name gets "Add it to the list". `PUT /api/inputs/N` takes `{"mic"}`,
+  `{"name", "details", "for"}` (a name the list has is that mic), `{"clear": true}`, `{"add_to_list": true}` and
+  `{"record"}`; `GET /api/inputs` lists `mics` too, each with the input it is on. A list's mic's details and kind are
+  changed in the file, not on the page; nor is a mic taken off the list there.
+- **The transcribe app's presets** name a mic on the list: the dobro, the piano and any stringed instrument the
+  MXL 990 (the dobro's room mic since 2026-10-17; whether the Bluebird takes its place is the player's ear's,
+  dobro-transcription's card `compare-the-new-bluebird-sl-with-the`), the bass the Nadine. The unit's
+  `/etc/take-transcriber.toml` (`input = 4`, named "Room mic" by its own `[inputs.4]`) finds the MXL by its `aka`.
+- **Tried on the desktop** (2026-10-21): `tests/test_inputs.py` 19 (a mic in one place, moved and cleared; a mic not
+  on the list, its details, onto the list, a name the list has; a room file of before read through the first copy's
+  list and written with it on the first change; bad mic tables; the rest as before, through the list) and
+  `tests/test_inputs_page.py` (headless Chromium, muted: on a phone, "Record it" on input 2 opens the pick, Save with
+  nothing chosen says to choose, a mic not on the list named, then added to the list; on an iPad, input 3's "Change
+  the mic", the MXL's row saying it would move, the Bluebird chosen, which the practice page shows by itself; a take's
+  four channels named; no sideways scroll); the suite 279 passed.
+- **To deploy** (the player's go-ahead, every app idle): `tools/deploy`. Then on any app's page: Inputs…, input 3,
+  "Change the mic", Bluebird SL, Save. The Nadine is then on no input, and the bass's usual is the piezo until the
+  Nadine is chosen for an input.
+
 ## Open questions
 
 - ~~Which instrument?~~ The piano (2026-10-10). The speakers are across
