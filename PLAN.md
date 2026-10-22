@@ -1239,6 +1239,30 @@ with the hardware".
     sheet closed, the page saying it), "Add a note", "History and notes", Add for the goal, "‹ All goals"; from a
     card's chip to another goal's page, the back and forward buttons, a card's goal in its sheet, a link and a reload on
     `#goal=…`, no goal filter there, All goals after a link, and a link to a goal not there.
+- **Card numbers and "Ready"** (2026-10-21, the player: "give each card an ID so it's easy for me to say which card i
+  mean. also, every card that is Claude-ready should have an easy way for me to mark it as 'ready to go', so when we
+  start a session, you can pull in all the ones i've marked as ready and offer to kick off however many agents i say
+  to work through them"; "a narrow, simple, unexplained UI"):
+  - **The number** is dobro-transcription's (`board.py` gives it; its `board/README.md`, `number`): `#42` on each
+    card beside its importance, on its sheet beside its id, and on its blockers. "Card #" under the top (a number, or
+    an id) opens that card's sheet; so does a link to `/#42`. A card made here has none until the desktop gives it the
+    next.
+  - **"Ready"**, the player's mark that Claude may start a card: one tap in a card's sheet (beside Done; under it on a
+    phone), another to clear it; a "✓ Ready" chip on a marked card; "2 ready" under the top shows the marked ones
+    alone (a filter, kept per device, and in Filters too). Offered only on a card Claude can take up now (Claude among
+    who, in Backlog or Next, every card it is blocked by done: `claude_ready` in `/api/board`, the rule of board.py's,
+    kept in `board/store.py`), and only when the pushed cards carry `ready` (a board.py that knows it). A move out of
+    Backlog or Next (Claude taking it up: Doing), or Claude out of who, clears it, here and in board.py alike. The log
+    gains `{"card", "set": {"ready": true|false}}`; the store refuses `true` on any other card (422).
+  - **Tests** (the suite 291 passed, 1 skipped: the round trip with dobro-transcription's board.py once it has the
+    numbers and ready): the numbers and `claude_ready` from the base, none from a base before them; a mark, a clear, a
+    move to Doing and Claude out of who clearing it, the refusals, a blocker done offering it; a logged mark for a card
+    taken up since shown off; push-board refusing two cards with one number, a number that is not one, a `ready` not
+    true or false. Headless Chrome (muted) at the three sizes: the numbers on the cards, none on a live card or one made
+    here; "Card #", a number not there, a hash change and a link; Ready offered or not (Doing, the player's alone,
+    Waiting, blocked), marked, in the log, the focus kept, the chip, "3 ready" alone and over a reload, cleared, a move
+    to Doing, a blocker done; on the cards from before them, nothing of them. With the branch's board.py, the round
+    trip marks one card, clears another, adds a card, pulls: the marks as made and the new card the next number.
 - **To deploy** (everything idle; the board takes nothing from the others): add the tile to `/etc/room-home.toml`
   by hand (`config/home.toml`'s `[[apps]] id = "board"`, a `.pre-board.bak` copy first), then `tools/deploy` (it
   installs `/etc/room-board.toml`, makes `~/board-data`, installs and starts `room-board`, and restarts every app
@@ -1257,6 +1281,16 @@ with the hardware".
      ignores a push's goals.
   6. `http://practice.local:8007/`: the Goals view and a card's stripes; `curl -s
      http://practice.local:8007/api/status` has `goals`; the home page's Board tile as before.
+- **To deploy the numbers and Ready** (not deployed; only when the player says): no new config, service or dependency.
+  1. dobro-transcription first: its board.py with `number` and `ready` on main, and `board.py fmt` run there once
+     (every card numbered, `next_number` set), committed. Then the skipped round trip here runs
+     (`tests/test_board_tools.py::test_the_real_board_py_takes_ready_and_numbers_the_app_s_new_card`): run the suite.
+  2. `tools/pull-board`, so no edit is left in the log across the change.
+  3. From dobro-transcription, `python3 board/board.py json | ~/play/piano-recorder/tools/push-board`: the numbers
+     and `ready` on the unit. The app there now (before this deploy) reads them and shows none of them.
+  4. The unit idle, then `tools/deploy` (it restarts every app here).
+  5. `http://practice.local:8007/`: `#N` on the cards, "Card #", and Ready in a Claude card's sheet. Until step 3 has
+     run the new app offers Ready on no card (the cards carry no `ready`), so the order of 3 and 4 is safe either way.
 
 ### 10. The room's inputs (started 2026-10-20)
 

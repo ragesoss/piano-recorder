@@ -7,7 +7,10 @@
 //     back button): the goal at the top, short enough on an iPad, the board under it with that goal's cards only in
 //     every column, the kinds of work counted within it, a card moved there, "Move to stage…", "Add a note",
 //     "History and notes", Add for the goal, "‹ All goals"; a card's goals chosen, the goal filter kept over a reload,
-//     the stages' labels from the JSON.
+//     the stages' labels from the JSON. Then the cards' numbers (on each card and its sheet; a card opened by its
+//     number in "Card #" and by a link, #33) and "Ready" (offered only on a card Claude can take up, one tap to mark
+//     and one to clear, in the log; "N ready" shows them alone, kept over a reload; a move to Doing clears the mark;
+//     a blocker done offers it). plain has none of them (a board.py before them).
 // Both: no console errors, no sideways scroll, 44 px targets.
 //   node tests/board_page.cjs URL WIDTHxHEIGHT SHOTS_DIR [plain|goals]      (tests/test_board_page.py runs it)
 const { chromium } = require("playwright");
@@ -70,6 +73,8 @@ const LANE = W <= 640 ? ".cell h3" : ".lane";  // lanes across the columns; on a
   check(!(await page.$(".gstripe, .gchip, .card.has-goals")), "no goal stripes or chips without goals");
   const hue = await page.$eval('.card[data-id="melodic-line-deploy"] .area i', (e) => getComputedStyle(e).backgroundColor);
   check(hue === "rgb(185, 160, 255)", `the area's colour as before: ${hue}`);
+  // pushed before the cards' numbers and "ready" too: none shown, no Card #, no ready count
+  check(!(await page.$(".card .cnum, .card .readypill, #sub [data-act=ready-filter]")) && await page.$eval("#find", (f) => f.hidden), "no numbers or ready before them");
 
   // the views: the five kinds of work and All, each with its count of open cards
   const names = await page.$$eval("#views button", (bs) => bs.map((b) => b.querySelector(".lbl").firstChild.textContent));
@@ -159,6 +164,7 @@ const LANE = W <= 640 ? ".cell h3" : ".lane";  // lanes across the columns; on a
   await openCard("retro-record");
   const order = await page.$$eval("#sheet .sh-body > *", (els) => els.map((e) => e.className));
   check(order.indexOf("qnext") === 2, `on the agent's card "Claude: do this next" follows Move to (${order})`);
+  check(!(await page.$("#sheet [data-act=ready]")), "no Ready offered on cards from a board.py without it");
   await page.click("#sheet [data-act=claude-next]");
   await page.waitForSelector("#sheet [data-act=claude-next]:disabled");
   await shot("claude-next");
@@ -536,6 +542,126 @@ const LANE = W <= 640 ? ".cell h3" : ".lane";  // lanes across the columns; on a
       S.data.stages = keep; return out;
     });
     check(JSON.stringify(labels) === '["6 · Fine","6 · Decent","10 · Released"]', `the stages' labels: ${labels}`);
+    await readyFlow();
     await finish();
+  }
+
+  // the cards' numbers (what the player says: "card 42") and the player's mark "ready to go" (2026-10-21)
+  async function readyFlow() {
+    await page.goto(url);
+    await page.waitForSelector(".card.live");
+    const sheetReady = () => page.$("#sheet[open] [data-act=ready]");
+    const last = async () => { const ch = await changes(); return ch[ch.length - 1]; };
+    const madeHere = (id) => /^ask-the-band-for-a-harmony-part-/.test(id);  // added on a goal's page above
+
+    // a number on every card the desktop has numbered, and on its sheet
+    const nums = await page.$$eval(".card", (cs) => cs.map((c) => ({ id: c.dataset.id, n: (c.querySelector(".cnum") || {}).textContent || "", live: c.classList.contains("live") })));
+    check((nums.find((c) => c.id === "guitalele-key") || {}).n === "#1", "the first card's number");
+    check(nums.some((c) => madeHere(c.id)) && nums.filter((c) => madeHere(c.id)).every((c) => c.n === ""), "a card made here has no number until synced");
+    check(nums.filter((c) => !c.live && !madeHere(c.id)).every((c) => /^#\d+$/.test(c.n)), "every other card shows its number");
+    check(nums.filter((c) => c.live).every((c) => c.n === ""), "a live card has none");
+    // the two the fixture marks ready wear it
+    const marked = await page.$$eval(".card .readypill", (ps) => ps.map((p) => p.closest(".card").dataset.id).sort());
+    check(JSON.stringify(marked) === '["lineup-separate-process","liva-t-tests"]', `the cards marked ready: ${marked}`);
+    check((await page.textContent("#sub [data-act=ready-filter]")).trim() === "2 ready", "the line under the top says how many are ready");
+    await jumpTo("next");
+    await shot("numbers");
+    await sideways("the numbers"); await targets("the numbers");
+
+    // a card by its number: typed, and from a link
+    await page.fill("#findIn", "7");
+    await page.press("#findIn", "Enter");
+    await page.waitForSelector("#sheet[open] .sh-body");
+    check((await page.textContent("#sheetTitle")).includes("mandolin") && (await page.textContent("#sheet .sh-head .cnum")) === "#7", "card 7 found by its number, its number on its sheet");
+    check((await page.textContent("#sheet .about")).includes("#7 · choose-mandolin-sound"), "its number beside its id");
+    await closeSheet();
+    check(await page.evaluate(() => document.activeElement && document.activeElement.id === "findIn") && await page.inputValue("#findIn") === "", "back to Card #, emptied");
+    await page.fill("#findIn", "#999");
+    await page.press("#findIn", "Enter");
+    await page.waitForSelector("#error:not([hidden])");
+    check((await page.textContent("#errorText")).includes("no card #999"), "a number not on the board: said");
+    await page.click("#errorOk");
+    // a link: the hash changed on the page, and the page opened from one
+    await page.evaluate(() => { location.hash = "#7"; });
+    await page.waitForSelector("#sheet[open] .sh-body");
+    check((await page.textContent("#sheetTitle")).includes("mandolin") && !page.url().includes("#7"), `#7 on the page opens card 7: ${page.url()}`);
+    await closeSheet();
+    await page.goto("about:blank");
+    await page.goto(url + "#33");
+    await page.waitForSelector("#sheet[open] .sh-body");
+    check((await page.textContent("#sheetTitle")).includes("slide") && !page.url().includes("#33"), `a link to card 33 opens it: ${page.url()}`);
+    check((await page.textContent("#sheet .rel .cnum")) === "#32", "its blocker's number");
+    check(!(await sheetReady()), "blocked by an open card: no Ready");
+    await closeSheet();
+
+    // "Ready": one tap on a card Claude can take up, and the log has it
+    await jumpTo("backlog");
+    await openCard("loop-section");
+    const btn = await sheetReady();
+    check(btn && (await btn.getAttribute("aria-pressed")) === "false" && (await btn.textContent()).trim() === "Ready", "Ready offered, not pressed");
+    await page.click("#sheet [data-act=ready]");
+    await page.waitForSelector('#sheet [data-act=ready][aria-pressed="true"]');
+    let ch = await last();
+    check(ch.card === "loop-section" && JSON.stringify(ch.set) === '{"ready":true}', `the mark in the log: ${JSON.stringify(ch)}`);
+    check((await page.textContent("#sheet .said")).includes("Marked ready"), "the sheet says so");
+    check(await page.evaluate(() => document.activeElement && document.activeElement.dataset.act === "ready"), "the focus kept on Ready");
+    await shot("ready-sheet");
+    await sideways("a card's Ready"); await targets("a card's Ready");
+    await closeSheet();
+    check(await page.$('.card[data-id="loop-section"] .readypill'), "the card wears it");
+    check((await page.textContent("#sub [data-act=ready-filter]")).trim() === "3 ready", "three ready now");
+    // not offered: Doing, the player's alone, waiting
+    for (const [id, col] of [["melodic-line-deploy", "doing"], ["guitalele-key", "doing"], ["mandolin-soundfont", "waiting"]]) {
+      await jumpTo(col);
+      await openCard(id);
+      check(!(await sheetReady()), `no Ready on ${id}`);
+      await closeSheet();
+    }
+
+    // the ready ones alone: a tap on "3 ready"; kept over a reload; in Filters too
+    await page.click("#sub [data-act=ready-filter]");
+    await page.waitForSelector('#sub [data-act=ready-filter][aria-pressed="true"]');
+    let shown = (await page.$$eval(".card", (cs) => cs.map((c) => c.dataset.id))).sort();
+    check(JSON.stringify(shown) === '["lineup-separate-process","liva-t-tests","loop-section"]', `only the ready ones: ${shown}`);
+    await shot("ready-filter");
+    await sideways("the ready ones"); await targets("the ready ones");
+    await page.reload();
+    await page.waitForSelector(".card");
+    shown = (await page.$$eval(".card", (cs) => cs.map((c) => c.dataset.id))).sort();
+    check(shown.length === 3 && (await page.textContent("#filtersBtn")).includes("1"), `the ready filter kept: ${shown}`);
+    await page.click("#filtersBtn"); await page.waitForSelector("#filters[open]");
+    check(await page.$('#filters [data-f="ready"][aria-pressed="true"]'), "Filters shows Ready on");
+    await page.click("#filters .sh-foot [data-act=close]");
+
+    // cleared by the player; and by a move to Doing (Claude taking it up)
+    await jumpTo("backlog");
+    await openCard("lineup-separate-process");
+    await page.click("#sheet [data-act=ready]");
+    await page.waitForSelector('#sheet [data-act=ready][aria-pressed="false"]');
+    ch = await last();
+    check(ch.card === "lineup-separate-process" && JSON.stringify(ch.set) === '{"ready":false}', `cleared in the log: ${JSON.stringify(ch)}`);
+    await closeSheet();
+    check(!(await page.$('.card[data-id="lineup-separate-process"]')), "cleared: gone from the ready ones");
+    await page.click("#sub [data-act=ready-filter]");
+    await page.waitForSelector('#sub [data-act=ready-filter][aria-pressed="false"]');
+    await jumpTo("next");
+    await openCard("liva-t-tests");
+    await page.click('#sheet [data-status="doing"]');
+    await page.waitForSelector('#sheet [data-status="doing"][aria-pressed="true"]');
+    check(!(await sheetReady()), "moved to Doing: no Ready, and the mark gone");
+    await closeSheet();
+    check(!(await page.$('.card[data-id="liva-t-tests"] .readypill')) && (await page.textContent("#sub [data-act=ready-filter]")).trim() === "1 ready", "one ready left");
+
+    // a blocker done: the card it blocked is offered Ready
+    await jumpTo("doing");
+    await openCard("melodic-line-deploy");
+    await page.click('#sheet [data-status="done"]');
+    await page.waitForSelector('#sheet [data-status="done"][aria-pressed="true"]');
+    await closeSheet();
+    await page.waitForFunction(() => S.data.cards.find((c) => c.id === "generic-transcriber-deploy").claude_ready);
+    await jumpTo("next");
+    await openCard("generic-transcriber-deploy");
+    check(await sheetReady(), "its blocker done: Ready offered");
+    await closeSheet();
   }
 })().catch((e) => { console.error(`${tag}: ${e.stack || e}`); process.exit(2); });

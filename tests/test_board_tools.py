@@ -160,6 +160,11 @@ def test_push_board_with_goals(tmp_path):
     shared["goals"][1]["color"] = shared["goals"][0]["color"]
     r = subprocess.run([str(PUSH), "--to", str(to)], input=json.dumps(shared), capture_output=True, text=True)
     assert r.returncode == 0 and "share the color gold" in r.stderr  # each is named, so allowed
+    unnumbered = json.loads(GOALS.read_text())
+    unnumbered["cards"][0]["number"] = None  # a card added by hand, not yet through board.py fmt
+    del unnumbered["cards"][1]["number"]
+    r = subprocess.run([str(PUSH), "--to", str(to)], input=json.dumps(unnumbered), capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
 
 
 @pytest.mark.parametrize("change", [
@@ -177,6 +182,12 @@ def test_push_board_with_goals(tmp_path):
     lambda b: b["cards"][0].update(goals=["solo-dobro", "solo-dobro"]),
     lambda b: b.update(stages=b["stages"][:9]),
     lambda b: b.update(goals={"solo-dobro": {}}),
+    # the cards' numbers and the mark "ready" (2026-10-21)
+    lambda b: b["cards"][1].update(number=b["cards"][0]["number"]),
+    lambda b: b["cards"][0].update(number=0),
+    lambda b: b["cards"][0].update(number="7"),
+    lambda b: b["cards"][0].update(number=True),
+    lambda b: b["cards"][0].update(ready="yes"),
 ])
 def test_push_board_refuses_goals_the_board_cannot_read(tmp_path, change):
     to = tmp_path / "data"
@@ -431,3 +442,55 @@ def test_the_real_board_py_takes_the_goals_edits(tmp_path):
     assert next(x for x in after["cards"] if x["id"] == card["id"])["goals"][0] == g["id"]
     st = Store(data)
     assert st.pending() == [] and st.goal(g["id"])["stage"] == to and st.goal(g["id"])["pending"] == 0
+
+
+def real_ready() -> bool:
+    src = real_board()
+    if src is None:
+        return False
+    made = subprocess.run([sys.executable, str(src / "board.py"), "json"], cwd=src.parent, capture_output=True, text=True)
+    try:
+        return all("ready" in c and "number" in c for c in json.loads(made.stdout)["cards"])
+    except (ValueError, KeyError):
+        return False
+
+
+@pytest.mark.skipif(not real_ready(), reason="needs dobro-transcription's board.py with numbers and ready (2026-10-21)")
+def test_the_real_board_py_takes_ready_and_numbers_the_app_s_new_card(tmp_path):
+    """dobro-transcription's own board.py, on a copy: a card the app offers "Ready" marked, another cleared, and a
+    new card; pulled, applied, pushed back: the marks as made, every card numbered, the new card the next number."""
+    from fastapi.testclient import TestClient
+    from board.server import create_app
+    src = real_board()
+    repo = tmp_path / "dobro-transcription"
+    (repo / "board").mkdir(parents=True)
+    for name in ("board.py", "cards.toml", "applied.txt"):
+        if (src / name).exists():
+            shutil.copy(src / name, repo / "board" / name)
+    data = tmp_path / "board-data"
+    made = subprocess.run([sys.executable, "board/board.py", "json"], cwd=repo, capture_output=True, text=True, check=True)
+    assert subprocess.run([str(PUSH), "--to", str(data)], input=made.stdout, capture_output=True, text=True).returncode == 0
+    with TestClient(create_app({"data_dir": data, "live": {}})) as c:
+        b = c.get("/api/board").json()
+        offered = [x for x in b["cards"] if x["claude_ready"] and not x["ready"]]
+        assert len(offered) >= 2
+        a = c.patch(f"/api/cards/{offered[0]['id']}", json={"ready": True}).json()["change"]["id"]
+        c.patch(f"/api/cards/{offered[1]['id']}", json={"ready": True})
+        cl = c.patch(f"/api/cards/{offered[1]['id']}", json={"ready": False}).json()["change"]["id"]
+        new = c.post("/api/cards", json={"title": "A card from the board's ready test", "area": b["areas"][0]["id"],
+                                         "who": ["claude"], "work": "agent"}).json()
+        assert new["card"]["number"] is None  # the desktop gives it one
+    r = run(PULL, "--from", data, "--repo", repo, "--python", sys.executable)
+    assert "brought in 4 edits" in r.stdout and "archived 4; 0 still pending" in r.stdout
+    after = json.loads((data / "cards.json").read_text())
+    assert set(after["applied"]) >= {a, cl, new["change"]["id"]}
+    by = {x["id"]: x for x in after["cards"]}
+    assert by[offered[0]["id"]]["ready"] is True and by[offered[1]["id"]]["ready"] is False
+    nums = [x["number"] for x in after["cards"]]
+    assert all(type(n) is int for n in nums) and len(set(nums)) == len(nums)
+    assert by[new["card"]["id"]]["number"] == max(nums)
+    with TestClient(create_app({"data_dir": data, "live": {}})) as c:
+        shown = {x["id"]: x for x in c.get("/api/board").json()["cards"]}
+        assert shown[offered[0]["id"]]["ready"] and shown[new["card"]["id"]]["number"] == max(nums)
+    ready = subprocess.run([sys.executable, "board/board.py", "ready"], cwd=repo, capture_output=True, text=True, check=True)
+    assert f"#{by[offered[0]['id']]['number']}" in ready.stdout and offered[0]["id"] in ready.stdout

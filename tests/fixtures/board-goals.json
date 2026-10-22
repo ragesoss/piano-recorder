@@ -269,9 +269,11 @@
  "cards": [
   {
    "id": "guitalele-key",
+   "number": 1,
    "title": "Write the key for the guitalele tune",
    "area": "strings",
    "status": "doing",
+   "ready": false,
    "importance": 1,
    "who": [
     "player"
@@ -304,9 +306,11 @@
   },
   {
    "id": "bass-line-octaves",
+   "number": 2,
    "title": "Check the bass line's octaves on Tennessee Waltz",
    "area": "bass",
    "status": "doing",
+   "ready": false,
    "importance": 2,
    "who": [
     "player",
@@ -336,9 +340,11 @@
   },
   {
    "id": "melodic-line-deploy",
+   "number": 3,
    "title": "Deploy the melodic line with the pipeline",
    "area": "dobro",
    "status": "doing",
+   "ready": false,
    "importance": 2,
    "who": [
     "claude"
@@ -360,9 +366,11 @@
   },
   {
    "id": "free-bluegrass-review",
+   "number": 4,
    "title": "Finish the free bluegrass review by ear",
    "area": "dobro",
    "status": "doing",
+   "ready": false,
    "importance": 2,
    "who": [
     "player"
@@ -391,9 +399,11 @@
   },
   {
    "id": "record-pi-bass-takes",
+   "number": 5,
    "title": "Record the 11 bass takes again on the LIVA",
    "area": "bass",
    "status": "next",
+   "ready": false,
    "importance": 1,
    "who": [
     "player"
@@ -415,9 +425,11 @@
   },
   {
    "id": "chart-audio-speakers",
+   "number": 6,
    "title": "Hear an exercise's chart over the speakers",
    "area": "room",
    "status": "next",
+   "ready": false,
    "importance": 2,
    "who": [
     "player"
@@ -445,9 +457,11 @@
   },
   {
    "id": "choose-mandolin-sound",
+   "number": 7,
    "title": "Choose the mandolin's sound for the charts",
    "area": "strings",
    "status": "next",
+   "ready": false,
    "importance": 2,
    "who": [
     "player"
@@ -471,9 +485,11 @@
   },
   {
    "id": "liva-t-tests",
+   "number": 8,
    "title": "Run T1-T4 and T11 on the LIVA",
    "area": "gear",
    "status": "next",
+   "ready": true,
    "importance": 2,
    "who": [
     "player",
@@ -496,9 +512,11 @@
   },
   {
    "id": "generic-transcriber-deploy",
+   "number": 9,
    "title": "Deploy the transcriber for any stringed instrument",
    "area": "room",
    "status": "next",
+   "ready": false,
    "importance": 1,
    "who": [
     "claude"
@@ -523,9 +541,11 @@
   },
   {
    "id": "piano-mic-placement",
+   "number": 10,
    "title": "Decide where the room mic goes for the piano",
    "area": "piano",
    "status": "next",
+   "ready": false,
    "importance": 2,
    "who": [
     "player"
@@ -547,9 +567,11 @@
   },
   {
    "id": "band-count-in",
+   "number": 11,
    "title": "Try the band's count-in with the voice",
    "area": "band",
    "status": "next",
+   "ready": false,
    "importance": 3,
    "who": [
     "player"
@@ -577,9 +599,11 @@
   },
   {
    "id": "scarlett-routing",
+   "number": 12,
    "title": "Route the 18i8's playback to a capture channel",
    "area": "gear",
    "status": "waiting",
+   "ready": false,
    "importance": 2,
    "who": [
     "claude",
@@ -602,9 +626,11 @@
   },
   {
    "id": "mandolin-soundfont",
+   "number": 13,
    "title": "A mandolin SoundFont with a free licence",
    "area": "strings",
    "status": "waiting",
+   "ready": false,
    "importance": 3,
    "who": [
     "claude"
@@ -627,9 +653,11 @@
   },
   {
    "id": "dulcimer-tuning",
+   "number": 14,
    "title": "Say how the mountain dulcimer is tuned",
    "area": "strings",
    "status": "waiting",
+   "ready": false,
    "importance": 2,
    "who": [
     "player"
@@ -651,9 +679,11 @@
   },
   {
    "id": "records-loudness",
+   "number": 15,
    "title": "Calibrate the loudness target against a record",
    "area": "room",
    "status": "waiting",
+   "ready": false,
    "importance": 3,
    "who": [
     "player",
@@ -674,9 +704,11 @@
   },
   {
    "id": "ethernet-room",
+   "number": 16,
    "title": "Is there Ethernet in the mixer's room?",
    "area": "gear",
    "status": "waiting",
+   "ready": false,
    "importance": 3,
    "who": [
     "others"
@@ -698,9 +730,11 @@
   },
   {
    "id": "retro-record",
+   "number": 17,
    "title": "Retroactive record: keep the last N minutes",
    "area": "room",
    "status": "backlog",
+   "ready": false,
    "importance": 2,
    "who": [
     "claude"
@@ -720,9 +754,11 @@
   },
   {
    "id": "loop-section",
+   "number": 18,
    "title": "Loop a section, and slow it down",
    "area": "room",
    "status": "backlog",
+   "ready": false,
    "importance": 3,
    "who": [
     "claude"
@@ -744,9 +780,11 @@
   },
   {
    "id": "ab-takes",
+   "number": 19,
    "title": "Compare two takes A/B",
    "area": "room",
    "status": "backlog",
+   "ready": false,
    "importance": 3,
    "who": [
     "claude"
@@ -766,9 +804,11 @@
   },
   {
    "id": "lineup-separate-process",
+   "number": 20,
    "title": "Line up a take in a low-priority process",
    "area": "room",
    "status": "backlog",
+   "ready": true,
    "importance": 2,
    "who": [
     "claude"
@@ -790,9 +830,11 @@
   },
   {
    "id": "backing-out-desktop",
+   "number": 21,
    "title": "Take a play-along's backing out on the desktop",
    "area": "room",
    "status": "backlog",
+   "ready": false,
    "importance": 2,
    "who": [
     "claude"
@@ -815,9 +857,11 @@
   },
   {
    "id": "banjo-exercises-record",
+   "number": 22,
    "title": "Record the eight banjo exercises",
    "area": "strings",
    "status": "backlog",
+   "ready": false,
    "importance": 2,
    "who": [
     "player"
@@ -845,9 +889,11 @@
   },
   {
    "id": "mandolin-scales",
+   "number": 23,
    "title": "Play the scales on the mandolin",
    "area": "strings",
    "status": "backlog",
+   "ready": false,
    "importance": 2,
    "who": [
     "player"
@@ -867,9 +913,11 @@
   },
   {
    "id": "piano-pedal-key",
+   "number": 24,
    "title": "The pedal in the piano's answer keys",
    "area": "piano",
    "status": "backlog",
+   "ready": false,
    "importance": 3,
    "who": [
     "claude"
@@ -891,9 +939,11 @@
   },
   {
    "id": "piano-exercises-record",
+   "number": 25,
    "title": "Record piano exercises 016-024",
    "area": "piano",
    "status": "backlog",
+   "ready": false,
    "importance": 2,
    "who": [
     "player"
@@ -915,9 +965,11 @@
   },
   {
    "id": "bass-arco",
+   "number": 26,
    "title": "Record arco takes for the bass",
    "area": "bass",
    "status": "backlog",
+   "ready": false,
    "importance": 3,
    "who": [
     "player"
@@ -937,9 +989,11 @@
   },
   {
    "id": "bass-new-strings",
+   "number": 27,
    "title": "Decide on new strings for the bass",
    "area": "bass",
    "status": "backlog",
+   "ready": false,
    "importance": 3,
    "who": [
     "player"
@@ -959,9 +1013,11 @@
   },
   {
    "id": "band-swing",
+   "number": 28,
    "title": "The band plays swing feel",
    "area": "band",
    "status": "backlog",
+   "ready": false,
    "importance": 2,
    "who": [
     "claude"
@@ -983,9 +1039,11 @@
   },
   {
    "id": "band-chart-voice",
+   "number": 29,
    "title": "Sing the chart's changes for the band",
    "area": "band",
    "status": "backlog",
+   "ready": false,
    "importance": 3,
    "who": [
     "player"
@@ -1007,9 +1065,11 @@
   },
   {
    "id": "scarlett-2i2",
+   "number": 30,
    "title": "A used Scarlett 2i2 for the Pi",
    "area": "gear",
    "status": "backlog",
+   "ready": false,
    "importance": 3,
    "who": [
     "player"
@@ -1029,9 +1089,11 @@
   },
   {
    "id": "dropbox-copy",
+   "number": 31,
    "title": "Copy takes to the desktop automatically",
    "area": "room",
    "status": "backlog",
+   "ready": false,
    "importance": 3,
    "who": [
     "claude"
@@ -1051,9 +1113,11 @@
   },
   {
    "id": "dobro-vibrato-key",
+   "number": 32,
    "title": "Mark the vibrato in Red Wing's key",
    "area": "dobro",
    "status": "backlog",
+   "ready": false,
    "importance": 2,
    "who": [
     "player"
@@ -1081,9 +1145,11 @@
   },
   {
    "id": "dobro-slides-study",
+   "number": 33,
    "title": "Study the slides the pipeline misses",
    "area": "dobro",
    "status": "backlog",
+   "ready": false,
    "importance": 2,
    "who": [
     "claude"
@@ -1108,9 +1174,11 @@
   },
   {
    "id": "tax-receipt",
+   "number": 34,
    "title": "Ask the shop about the 18i8's warranty",
    "area": "gear",
    "status": "backlog",
+   "ready": false,
    "importance": 3,
    "who": [
     "player"
@@ -1130,9 +1198,11 @@
   },
   {
    "id": "alphatab-voice-issue",
+   "number": 35,
    "title": "Write to alphaTab's maintainers about the empty voice",
    "area": "room",
    "status": "backlog",
+   "ready": false,
    "importance": 3,
    "who": [
     "player",
@@ -1162,9 +1232,11 @@
   },
   {
    "id": "saturday-jam",
+   "number": 36,
    "title": "Sign up for the Saturday jam",
    "area": "band",
    "status": "next",
+   "ready": false,
    "importance": 2,
    "who": [
     "player"
@@ -1186,9 +1258,11 @@
   },
   {
    "id": "dobro-player-takes",
+   "number": 37,
    "title": "Ask a dobro player for takes of Red Wing",
    "area": "dobro",
    "status": "waiting",
+   "ready": false,
    "importance": 2,
    "who": [
     "player",
@@ -1211,9 +1285,11 @@
   },
   {
    "id": "exercise-board",
+   "number": 38,
    "title": "The exercise app opens on a board",
    "area": "room",
    "status": "done",
+   "ready": false,
    "importance": 2,
    "who": [
     "claude"
@@ -1235,9 +1311,11 @@
   },
   {
    "id": "transcribe-app",
+   "number": 39,
    "title": "The transcribe app on port 8006",
    "area": "room",
    "status": "done",
+   "ready": false,
    "importance": 1,
    "who": [
     "claude"
@@ -1261,9 +1339,11 @@
   },
   {
    "id": "coyote-trail-answers",
+   "number": 40,
    "title": "Answer Coyote Trail's last two questions",
    "area": "dobro",
    "status": "done",
+   "ready": false,
    "importance": 2,
    "who": [
     "player"
@@ -1285,9 +1365,11 @@
   },
   {
    "id": "liva-swap",
+   "number": 41,
    "title": "The LIVA takes the Pi's place",
    "area": "gear",
    "status": "done",
+   "ready": false,
    "importance": 1,
    "who": [
     "player",
@@ -1310,9 +1392,11 @@
   },
   {
    "id": "chord-app",
+   "number": 42,
    "title": "The chord app (port 8003)",
    "area": "room",
    "status": "done",
+   "ready": false,
    "importance": 2,
    "who": [
     "claude"
@@ -1334,9 +1418,11 @@
   },
   {
    "id": "first-bass-takes",
+   "number": 43,
    "title": "The first bass exercise takes",
    "area": "bass",
    "status": "done",
+   "ready": false,
    "importance": 2,
    "who": [
     "player"
@@ -1358,9 +1444,11 @@
   },
   {
    "id": "pi-setup",
+   "number": 44,
    "title": "The Pi on the network",
    "area": "gear",
    "status": "done",
+   "ready": false,
    "importance": 2,
    "who": [
     "player",
@@ -1383,9 +1471,11 @@
   },
   {
    "id": "mixer-measured",
+   "number": 45,
    "title": "Measure the BMG-04F on the laptop",
    "area": "gear",
    "status": "done",
+   "ready": false,
    "importance": 3,
    "who": [
     "claude"
@@ -1407,9 +1497,11 @@
   },
   {
    "id": "first-dobro-keys",
+   "number": 46,
    "title": "The first dobro answer keys",
    "area": "dobro",
    "status": "done",
+   "ready": false,
    "importance": 2,
    "who": [
     "player"

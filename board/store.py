@@ -10,6 +10,12 @@
 The app shows the base with the pending edits applied in order, so an edit shows at once: the cards' and the
 goals' (a goal's stage moved, a note on a goal).
 
+Each card carries its number from the base (what the player says, "card 42"; none on a card made here until the
+desktop gives it one) and the player's mark "ready to go" (`ready`), which only a Claude-ready card may take (Claude
+among who, in Backlog or Next, every card it is blocked by done: `claude_ready`, the rule of dobro-transcription's
+board.py, kept the same here) and which a move out of Backlog or Next, or Claude out of who, clears. A base pushed
+by a board.py that does not know `ready` offers it on no card, so no mark is logged that board.py would refuse.
+
     python -m board.store datadir             print the data folder (what the tools write to)
     python -m board.store pending             print the pending changes (whole lines, read under the lock)
     python -m board.store archive < IDS       move the changes with these ids (one a line) to
@@ -46,7 +52,12 @@ WORK = ("listen", "play", "agent", "people", "hardware")
 EFFORT_PLAYER = ("", "5m", "15m", "30m", "1h", "2h", "half-day", "day+")
 EFFORT_CLAUDE = ("", "S", "M", "L", "XL")
 IMPORTANCE = (1, 2, 3)
-SETTABLE = ("status", "importance", "who", "work", "effort_player", "effort_claude", "waiting_on", "area", "goals")
+SETTABLE = ("status", "importance", "who", "work", "effort_player", "effort_claude", "waiting_on", "area", "goals",
+            "ready")
+# Claude-ready (2026-10-21): Claude among who, in one of these columns, every card it is blocked by done (board.py's
+# claude_ready). Only such a card may be marked ready; the mark goes when the card leaves these columns or Claude
+# leaves who.
+READY_STATUSES = ("backlog", "next")
 # the large-scale goals (2026-10-20): each at a stage of ten, from an idea (1) to released (10: put out into the
 # world, the repo cleaned up, open source, an app); a card serves any of them
 STAGE_NAMES = {1: "Idea", 2: "Idea with a plan", 3: "Testable prototype", 4: "Tested prototype", 5: "Rough but usable",
@@ -104,6 +115,9 @@ def normalize(card: dict) -> dict:
     """A card with every field of the contract (defaults where the base leaves one out)."""
     c = dict(card)
     c["id"] = str(c.get("id", ""))
+    n = c.get("number")
+    c["number"] = n if isinstance(n, int) and not isinstance(n, bool) and n >= 1 else None  # none until the desktop's
+    c["ready"] = c.get("ready") is True
     c["title"] = str(c.get("title", "")) or c["id"]
     c["area"] = str(c.get("area", ""))
     c["status"] = c.get("status") if c.get("status") in STATUSES else "backlog"
@@ -130,6 +144,17 @@ def normalize(card: dict) -> dict:
 
 def is_stage(v) -> bool:
     return isinstance(v, int) and not isinstance(v, bool) and v in STAGES
+
+
+def can_be_ready(card: dict) -> bool:
+    """A card's own fields allow the mark "ready": Claude among who, in Backlog or Next."""
+    return "claude" in card.get("who", []) and card.get("status") in READY_STATUSES
+
+
+def claude_ready(card: dict, cards: dict[str, dict]) -> bool:
+    """Claude can take the card up now: can_be_ready, and every card in blocked_by done (one not on the board counts
+    as open, as the page's "Blocked by" does)."""
+    return can_be_ready(card) and all((cards.get(b) or {}).get("status") == "done" for b in card.get("blocked_by", []))
 
 
 def stage_labels(base: dict) -> list[str] | None:
@@ -196,6 +221,8 @@ def check_set(fields: dict, areas: set[str], goals: set[str] = frozenset()) -> d
             if any(g not in goals for g in v):
                 raise Invalid("no such goal")
             v = list(v)
+        if k == "ready" and not isinstance(v, bool):
+            raise Invalid("ready must be true or false")
         out[k] = v
     return out
 
@@ -214,6 +241,8 @@ def _apply_set(card: dict, fields: dict, at: str) -> None:
             card["done"] = _date(at)
         elif fields["status"] != "done":
             card["done"] = None
+    if card.get("ready") and not can_be_ready(card):
+        card["ready"] = False  # taken up (Doing), waiting, done, or not Claude's: board.py clears the mark the same way
     card["updated"] = _date(at)
 
 
@@ -304,7 +333,19 @@ def merge(base: dict, changes: list[dict]) -> dict:
             continue
         c["pending"] += 1
         c["pending_changes"].append(ch.get("id"))
-    return {**base, "cards": list(cards.values()), "goals": list(goals.values()), "stages": stage_labels(base)}
+    # which cards Claude could take up now, as the cards stand with the edits: those offer "Ready" (none when the base
+    # came from a board.py that does not know it)
+    knows = knows_ready(base)
+    for c in cards.values():
+        c["claude_ready"] = knows and claude_ready(c, cards)
+    return {**base, "cards": list(cards.values()), "goals": list(goals.values()), "stages": stage_labels(base),
+            "ready_known": knows}
+
+
+def knows_ready(base: dict) -> bool:
+    """The base came from a board.py that knows the mark "ready" (its cards carry the field)."""
+    raw = base.get("cards") if isinstance(base.get("cards"), list) else []
+    return any(isinstance(c, dict) and "ready" in c for c in raw)
 
 
 class Store:
@@ -413,6 +454,11 @@ class Store:
         fields = {k: v for k, v in fields.items() if card.get(k) != v}
         if not fields:
             return card, None
+        if fields.get("ready") is True and not card.get("claude_ready"):
+            if not knows_ready(self.base() or {}):
+                raise Invalid("the cards on the unit are from a board.py without Ready: push them again from the desktop")
+            raise Invalid("only a card Claude can take up now is marked ready: Claude among who, in Backlog or Next, "
+                          "nothing open blocking it")
         change = self._change(card=card["id"], set=fields)
         self._append(change)
         return self.card(card["id"]), change

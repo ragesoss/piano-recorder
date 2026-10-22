@@ -10,7 +10,8 @@ cards.json.new and then renamed over it, so the app never reads half of one. The
 request: nothing restarts. The player's edits not yet brought in (changes.jsonl) stay, shown on top of it.
 
 The goals ("goals", and each card's "goals") are checked when there are any; a board pushed without them is shown
-as before they were added.
+as before they were added. So are the cards' numbers (each a whole number, no two cards the same) and the mark
+"ready" (true or false) when given; a board pushed without them shows no numbers and offers no "Ready".
 """
 
 import argparse
@@ -96,7 +97,7 @@ def check(raw) -> tuple[int, int]:
     st = raw.get("stages")
     if st is not None and (not isinstance(st, list) or len(st) != 10 or any(not isinstance(x, str) or not x.strip() for x in st)):
         problems.append('"stages" must be the ten stages\' labels, in order')
-    seen = set()
+    seen, numbers = set(), {}
     for n, c in enumerate(cards):
         cid = c.get("id") if isinstance(c, dict) else None
         name = cid or f"card {n + 1}"
@@ -125,6 +126,16 @@ def check(raw) -> tuple[int, int]:
             problems.append(f"{cid}: goals {goals!r} (a list of goal ids, each once)")
         elif any(g not in goal_ids for g in goals):
             problems.append(f"{cid}: goals {', '.join(str(g) for g in goals if g not in goal_ids)} not among the goals")
+        num = c.get("number")  # what the player says ("card 42"): absent or null before board.py gives one
+        if num is not None:
+            if not isinstance(num, int) or isinstance(num, bool) or num < 1:
+                problems.append(f"{cid}: number {num!r} (a whole number from 1)")
+            elif num in numbers:
+                problems.append(f"{cid}: number {num} is {numbers[num]}'s too")
+            else:
+                numbers[num] = cid
+        if "ready" in c and not isinstance(c["ready"], bool):
+            problems.append(f"{cid}: ready {c['ready']!r} (true or false)")
     if problems:
         more = f"\n  ... and {len(problems) - 12} more" if len(problems) > 12 else ""
         sys.exit("the cards are not as the board reads them:\n  " + "\n  ".join(problems[:12]) + more)

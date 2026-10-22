@@ -4,7 +4,8 @@
 
 The cards are dobro-transcription's `board/cards.toml`, pushed here as JSON by tools/push-board, with the
 project's large-scale goals (each at a stage from 1, an idea, to 10, released, with its history; a card
-serves any of them). The player's edits are kept as a log (board/store.py) that tools/pull-board brings to
+serves any of them). Each card has its number ("card 42"), and the player marks a card Claude can take up
+"ready to go". The player's edits are kept as a log (board/store.py) that tools/pull-board brings to
 the desktop; until then the board shows them applied. Live cards (board/live.py) come from the review app
 and the exercise app. The board holds no audio device, takes no turns with the recorders, and is in no
 peers list.
@@ -13,7 +14,8 @@ GET   /api/board                   the cards and the goals (the base with the pe
 GET   /api/status                  for the home page: "3 to listen · 2 to play", counts, each goal's stage
 POST  /api/cards                   {title, area, who, work}: a new card (into Backlog)
 PATCH /api/cards/{id}              {status, importance, who, work, effort_player, effort_claude,
-                                    waiting_on, area, goals}: any of them
+                                    waiting_on, area, goals, ready}: any of them (ready true only on a card
+                                    Claude can take up now: its "claude_ready")
 POST  /api/cards/{id}/claude-next  "Claude: do this next": next, Claude among who, importance 1
 POST  /api/cards/{id}/notes        {note}
 POST  /api/goals/{id}/stage        {stage, note}: the goal moved to that stage (a history entry)

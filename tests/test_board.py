@@ -485,9 +485,13 @@ def test_the_goals_fixture_is_to_the_contract():
         assert all(set(n) == {"date", "text", "by"} and n["by"] in ("player", "claude") for n in g["notes"])
     assert sum(len(g["history"]) > 2 for g in raw["goals"]) >= 4  # several stage changes each, mostly
     for c in raw["cards"]:
-        assert set(c) - {"goals"} == set(next(x for x in plain["cards"] if x["id"] == c["id"]))
+        # the goals' fixture is board.py's JSON of 2026-10-21: the goals, and each card's number and "ready" too
+        assert set(c) - {"goals", "number", "ready"} == set(next(x for x in plain["cards"] if x["id"] == c["id"]))
         assert set(c["goals"]) <= ids and len(set(c["goals"])) == len(c["goals"])
+        assert type(c["number"]) is int and type(c["ready"]) is bool
     assert {len(c["goals"]) for c in raw["cards"]} == {0, 1, 2, 3}
+    assert sorted(c["number"] for c in raw["cards"]) == list(range(1, 47))
+    assert [c["id"] for c in raw["cards"] if c["ready"]] == ["liva-t-tests", "lineup-separate-process"]
 
 
 def test_the_goals_are_on_the_board_with_their_stage(tmp_path):
@@ -625,3 +629,74 @@ def test_a_goal_s_color_and_the_stages_labels_from_the_base(tmp_path):
     base["stages"] = STAGE_LABELS[:9]  # not all ten: the board's own
     assert merge(base, [])["stages"] is None
     assert counts([], [], merge(base, [])["goals"])["goals"][0]["stage_name"] == "Decent"
+
+
+# --- each card's number and the player's mark "ready to go" (2026-10-21)
+
+def test_numbers_and_who_claude_can_take_up(tmp_path):
+    c, d = with_goals(tmp_path)
+    with c:
+        cards = {x["id"]: x for x in c.get("/api/board").json()["cards"]}
+        assert cards["guitalele-key"]["number"] == 1 and cards["first-dobro-keys"]["number"] == 46
+        assert cards["liva-t-tests"]["ready"] and cards["lineup-separate-process"]["ready"]
+        assert not cards["loop-section"]["ready"]
+        ready = {i for i, x in cards.items() if x["claude_ready"]}
+        # Claude among who, in Backlog or Next, nothing open blocking it
+        assert ready == {"liva-t-tests", "retro-record", "loop-section", "ab-takes", "lineup-separate-process",
+                         "backing-out-desktop", "piano-pedal-key", "band-swing", "dropbox-copy", "alphatab-voice-issue"}
+        # not: doing, waiting, done, the player's alone, or blocked by a card not done
+        for cid in ("melodic-line-deploy", "mandolin-soundfont", "exercise-board", "record-pi-bass-takes",
+                    "generic-transcriber-deploy", "dobro-slides-study"):
+            assert not cards[cid]["claude_ready"], cid
+    # pushed by a board.py from before the numbers and "ready": none, and "Ready" offered on no card
+    (tmp_path / "plain").mkdir()
+    c, d = make(tmp_path / "plain")
+    with c:
+        b = c.get("/api/board").json()
+        assert all(x["number"] is None and x["ready"] is False and x["claude_ready"] is False for x in b["cards"])
+        r = c.patch("/api/cards/retro-record", json={"ready": True})
+        assert r.status_code == 422 and "push them again" in r.json()["detail"]
+    assert lines(d) == []
+
+
+def test_ready_marked_and_cleared(tmp_path):
+    c, d = with_goals(tmp_path)
+    with c:
+        r = c.patch("/api/cards/loop-section", json={"ready": True}).json()
+        assert r["change"]["set"] == {"ready": True} and r["card"]["ready"] and r["card"]["pending"] == 1
+        assert c.patch("/api/cards/loop-section", json={"ready": True}).json()["change"] is None
+        assert c.patch("/api/cards/lineup-separate-process", json={"ready": False}).json()["card"]["ready"] is False
+        # a marked card moved to Doing (Claude takes it up) loses the mark, as board.py does
+        moved = c.patch("/api/cards/liva-t-tests", json={"status": "doing"}).json()
+        assert moved["change"]["set"] == {"status": "doing"} and moved["card"]["ready"] is False
+        assert not moved["card"]["claude_ready"]
+        # and Claude out of who
+        c.patch("/api/cards/loop-section", json={"who": ["player"]})
+        assert card(c, "loop-section")["ready"] is False
+        # a card Claude cannot take up now is not marked
+        for cid in ("generic-transcriber-deploy", "melodic-line-deploy", "guitalele-key", "mandolin-soundfont",
+                    "liva-t-tests"):
+            r = c.patch(f"/api/cards/{cid}", json={"ready": True})
+            assert r.status_code == 422 and "Claude can take up now" in r.json()["detail"], cid
+        assert c.patch("/api/cards/ab-takes", json={"ready": "yes"}).status_code == 422
+        # its blocker done (in the app too): the blocked card can be marked
+        c.patch("/api/cards/melodic-line-deploy", json={"status": "done"})
+        assert card(c, "generic-transcriber-deploy")["claude_ready"]
+        assert c.patch("/api/cards/generic-transcriber-deploy", json={"ready": True}).status_code == 200
+    log = lines(d)
+    assert [x["set"] for x in log if "ready" in x["set"]] == [{"ready": True}, {"ready": False}, {"ready": True}]
+    assert len(log) == 6
+
+
+def test_a_ready_mark_logged_for_a_card_taken_up_since_is_shown_off(tmp_path):
+    c, d = with_goals(tmp_path)
+    at = "2026-10-21T09:0{}:00-07:00".format
+    log = [{"id": "r1", "at": at(1), "by": "player", "card": "melodic-line-deploy", "set": {"ready": True}},  # doing
+           {"id": "r2", "at": at(2), "by": "player", "card": "ab-takes", "set": {"ready": True}},
+           {"id": "r3", "at": at(3), "by": "player", "card": "ab-takes", "set": {"status": "waiting"}},
+           {"id": "r4", "at": at(4), "by": "player", "card": "retro-record", "set": {"ready": True}}]
+    (d / "changes.jsonl").write_text("".join(json.dumps(x) + "\n" for x in log))
+    with c:
+        assert card(c, "melodic-line-deploy")["ready"] is False
+        assert card(c, "ab-takes")["ready"] is False and card(c, "ab-takes")["status"] == "waiting"
+        assert card(c, "retro-record")["ready"] is True and card(c, "retro-record")["pending"] == 1
