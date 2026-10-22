@@ -1165,9 +1165,10 @@ with the hardware".
   - **Accessibility:** text at 5.7:1 or more (white on the purple fill; ink3 #A79FB4 6.0:1 on cards, 7.4:1 on the
     background, 5.9:1 on a disabled button), targets 44 px, a label for every control, and nothing told by colour alone (importance,
     work and who in words, a pressed choice with a check).
-- **The home tile:** what is in Next or Doing for each kind of work, the first three that have any ("4 to listen · 3
-  to play · 14 for the agent"; `by_work` has all five), else "Nothing in Next or Doing"; "No cards yet" before the
-  first push.
+- **The home tile:** "Ready", or "No cards yet" before the first push. Until 2026-10-22 it named what was in Next or
+  Doing for each kind of work ("4 to listen · 3 to play · 14 for the agent"); the player: "just get rid of the index
+  stats i think. too hard to intrepret which of the 193 cards are meant in the index stats". `/api/status` keeps the
+  counts (`by_work` and the rest) for whoever asks.
 - **The goals** (2026-10-20, the player: "our board needs something to represent the large-scale goals and our
   progress towards them, and which cards are related to each. like, maybe a chart for each goal showing progress over
   time ... and the color for each chart matches the color of cards that are part of that goal. (a card could have

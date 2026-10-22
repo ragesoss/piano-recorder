@@ -442,7 +442,7 @@ def test_the_status_never_waits_on_the_other_apps(tmp_path):
             t = time.monotonic()
             s = c.get("/api/status").json()
             assert time.monotonic() - t < 0.5  # the home page asks with a 1.5 s timeout
-            assert s["state"] == "5 to listen · 2 to play · 2 for the agent"
+            assert s["state"] == "Ready" and s["by_work"]["listen"] == 5
     finally:
         srv.shutdown()
 
@@ -456,8 +456,8 @@ def test_status_counts_by_kind_of_work(tmp_path):
         assert s["for_player"] == 10 and s["for_claude"] == 4
         c.post("/api/cards/retro-record/claude-next")
         s = c.get("/api/status").json()
-        assert s["by_work"]["agent"] == 3 and s["pending"] == 1 and s["state"] == "5 to listen · 2 to play · 3 for the agent"
-    assert counts([], [])["state"] == "Nothing in Next or Doing"
+        assert s["by_work"]["agent"] == 3 and s["pending"] == 1 and s["state"] == "Ready"  # the tile names no counts
+    assert counts([], [])["state"] == "Ready"
     (d / "cards.json").unlink()
     c2 = TestClient(create_app({"data_dir": d, "live": {}}))
     with c2:
@@ -557,7 +557,7 @@ def test_the_goals_are_on_the_board_with_their_stage(tmp_path):
         assert s["goals"][0] == {"id": "band-in-a-box", "name": "UD as a high-quality band-in-a-box", "stage": 6,
                                  "stage_name": "Decent"}
         assert [g["stage"] for g in s["goals"]] == [6, 5, 4, 2, 7, 1]
-        assert s["state"] == "5 to listen · 2 to play · 2 for the agent"  # the tile's words as before
+        assert s["state"] == "Ready" and s["by_work"] == {"listen": 5, "play": 2, "agent": 2, "people": 1, "hardware": 2}
 
 
 def test_a_board_pushed_before_the_goals_is_as_before(tmp_path):

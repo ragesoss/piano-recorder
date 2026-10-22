@@ -11,7 +11,7 @@ and the exercise app. The board holds no audio device, takes no turns with the r
 peers list.
 
 GET   /api/board                   the cards and the goals (the base with the pending edits), the live cards
-GET   /api/status                  for the home page: "3 to listen · 2 to play", counts, each goal's stage
+GET   /api/status                  for the home page: "Ready" (its tile names no counts), the counts, each goal's stage
 POST  /api/cards                   {title, area, who, work}: a new card (into Backlog)
 PATCH /api/cards/{id}              {status, importance, who, work, effort_player, effort_claude,
                                     waiting_on, area, goals, ready}: any of them (ready true only on a card
@@ -40,15 +40,13 @@ from .store import STAGE_NAMES, WORK, Invalid, NotFound, Store, load_config
 STATIC = Path(__file__).parent / "static"
 FONTS = Path(__file__).parent.parent / "exercises" / "static" / "fonts"  # the exercise app's (SIL OFL 1.1)
 OPEN = ("next", "doing")
-# the home tile's words for each kind of work: "3 to listen · 2 to play · 4 for the agent"
-WORK_WORDS = {"listen": "to listen", "play": "to play", "agent": "for the agent", "people": "with people",
-              "hardware": "hardware"}
-TILE_TERMS = 3  # at most this many kinds named on the tile (the rest are in by_work)
 
 
 def counts(cards: list[dict], live: list[dict], goals: list[dict] = (), stages: list[str] | None = None) -> dict:
-    """What the home tile says: the cards in Next or Doing for each kind of work (the live ones too), in the
-    contract's order; the player's, Claude's, and the columns' counts; and each goal's stage."""
+    """The board's state for the home page, "Ready" (2026-10-22, the player: "just get rid of the index stats i
+    think. too hard to intrepret which of the 193 cards are meant in the index stats"), and its counts for whoever
+    asks: the cards in Next or Doing for each kind of work (the live ones too), in the contract's order; the
+    player's, Claude's, and the columns' counts; and each goal's stage."""
     now = [c for c in cards if c["status"] in OPEN] + live
     by_work = {w: sum(c["work"] == w for c in now) for w in WORK}
     claude = [c for c in cards if "claude" in c["who"] and c["status"] in OPEN]
@@ -61,8 +59,7 @@ def counts(cards: list[dict], live: list[dict], goals: list[dict] = (), stages: 
            "pending": sum(c["pending"] for c in cards) + sum(g["pending"] for g in goals),
            "goals": [{"id": g["id"], "name": g["name"], "stage": g["stage"],
                       "stage_name": stages[g["stage"] - 1] if stages else STAGE_NAMES[g["stage"]]} for g in goals]}
-    words = [f"{n} {WORK_WORDS[w]}" for w, n in by_work.items() if n][:TILE_TERMS]
-    out["state"] = " · ".join(words) if words else "Nothing in Next or Doing"
+    out["state"] = "Ready"
     return out
 
 
