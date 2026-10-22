@@ -14,7 +14,9 @@
    lanes, filters, and a sheet per card with its actions; and the project's large-scale goals (when the cards come
    with them): a view of each one's progress over time, a page for each with its board under it, a colour for each
    worn by its cards, a filter. Each card's number (#42: what the player says), a card opened by it ("Card #", or a
-   link to #42), and the player's mark "Ready" (to go, for Claude) on a card Claude can take up, with a filter. The room's
+   link to #42), and the player's mark "Ready" (to go, for Claude) on a card Claude can take up, with a filter. A
+   card's links to the apps on the unit (where the player does it) big at the top of its sheet, its own questions'
+   "Answer" (the review app, one question at a time) first, each review's count by its link. The room's
    look (exercises/static/index.html): dark, purple for what to tap. --faint is for lines only (3.5:1 on cards). */
 @font-face { font-family: "Bricolage Grotesque"; src: url(/fonts/bricolage-grotesque.woff2) format("woff2");
   font-weight: 200 800; font-display: swap; }
@@ -362,6 +364,18 @@ details.more > div { display: flex; flex-direction: column; gap: 14px; padding-t
 .links a small, .links .path small { font-size: 13px; font-weight: 400; color: var(--ink3); }
 .links .path { color: var(--ink); font-weight: 600; }
 .links .path code { font-size: 13px; color: var(--ink2); }
+/* where the player does it: the card's links to the apps on the unit, at the top of its sheet; its own questions'
+   "Answer" filled, first */
+.do { display: flex; flex-wrap: wrap; gap: 8px; }
+.dobtn { flex: 0 1 auto; min-width: 120px; min-height: 56px; display: inline-flex; flex-direction: column; justify-content: center; gap: 1px;
+  padding: 6px 20px; border-radius: 28px; border: 1.5px solid var(--purple-line); background: var(--surf); color: var(--ink);
+  text-decoration: none; font-size: 17px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.dobtn small { font-size: 13px; font-weight: 500; color: var(--ink3); }
+.dobtn.own { background: var(--purple-fill); border-color: var(--purple-fill); color: #fff; font-size: 19px; min-width: 150px; }
+.dobtn.own small { color: #FFFFFF; }
+.dobtn:active { background: var(--purple-tint); }
+.dobtn.own:active { background: var(--purple); }
+@media (max-width: 640px) { .dobtn { flex: 1 1 140px; } }
 .links a.big { background: var(--purple-fill); border-color: var(--purple-fill); color: #fff; font-size: 18px; min-height: 56px; }
 .links a.big small { color: #FFFFFF; }
 .notes li { padding: 8px 12px; border-radius: 12px; background: var(--surf); font-size: 15px; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -675,7 +689,7 @@ function cardHtml(c, lanes) {
     ${stripe}<span class="title">${esc(c.title)}</span>
     <span class="meta">${meta}</span>${chips}
     ${c.summary ? `<span class="summary">${esc(c.summary)}</span>` : ""}
-    ${c.live_summary ? `<span class="summary">${liveLine(c)}</span>` : ""}
+    ${c.live_summary && !c.live_done ? `<span class="summary">${liveLine(c)}</span>` : ""}
     ${c.live && !eff ? "" : `<span class="people">${c.live ? "" : whoHtml(c.who)}${eff ? `<span class="effort">${esc(eff)}</span>` : ""}</span>`}
     ${flags.length ? `<span class="flags">${flags.join("")}</span>` : ""}</button>`;
 }
@@ -1037,6 +1051,34 @@ function linkHtml(l, big) {
   }
   return `<li><span class="path">${esc(l.label || l.href)}<small>${l.repo ? `On the desktop, in ${esc(l.repo)}: ` : "On the desktop: "}<code>${esc(l.href)}</code></small></span></li>`;
 }
+// Where the player does the thing (2026-10-21: "links to practice.local where i could do the thing, whether review or
+// record or listen or whatever"): a card's links to the apps on the unit, big, at the top of its sheet; its own
+// questions' review ("Answer", the review app's card-<id>) first and filled. A review's count beside its link, live
+// from the review app (the card's live_reviews), else the card's own questions' answers as last synced.
+function onUnit(l) {
+  try { const u = new URL(l.href); return /^https?:$/.test(u.protocol) && (u.hostname === "practice.local" || u.hostname === location.hostname); }
+  catch (e) { return false; }
+}
+function reviewOf(href) { const m = /#\/r\/([A-Za-z0-9._%-]+)$/.exec(href || ""); return m ? decodeURIComponent(m[1]) : null; }
+function doLinks(c) {
+  const ls = (c.links || []).filter(onUnit), own = ls.filter((l) => reviewOf(l.href) === `card-${c.id}`);
+  return own.concat(ls.filter((l) => !own.includes(l)));
+}
+function doCount(c, l) {
+  const rid = reviewOf(l.href), live = rid && c.live_reviews ? c.live_reviews[rid] : null;
+  if (live) return live.archived ? "Archived" : live.done ? "All answered" : `${live.left} to answer`;
+  const qs = rid === `card-${c.id}` ? c.questions || [] : [];
+  if (!qs.length) return "";
+  const left = qs.filter((q) => !q.answer).length;
+  return left ? `${left} to answer` : "All answered";
+}
+function doHtml(c, ls) {
+  if (!ls.length) return "";
+  return `<div class="do">${ls.map((l) => {
+    const n = doCount(c, l), own = reviewOf(l.href) === `card-${c.id}`;
+    return `<a class="dobtn${own ? " own" : ""}" href="${esc(l.href)}" target="_blank" rel="noopener">${esc(l.label || l.href)}${n ? `<small>${esc(n)}</small>` : ""}</a>`;
+  }).join("")}</div>`;
+}
 function workSeg(cur, id) {  // the five kinds of work, each with its glyph and word
   return `<div class="seg wide work-seg" role="group" aria-label="Work"${id ? ` id="${id}"` : ""}>${WORK.map(([w, , word]) =>
     `<button type="button" data-work="${w}" aria-pressed="${w === cur}">${glyph(w, 16)}${esc(word)}</button>`).join("")}</div>`;
@@ -1074,8 +1116,13 @@ function renderSheet(keep) {
   if (c.waiting_on) facts.push(["Waiting on", c.waiting_on]);
   const notes = (c.notes || []).map((n) => `<li><small>${esc(niceTime(n.at))}${n.pending ? " · not synced yet" : ""}</small>${esc(n.text)}</li>`).join("");
   const wait = c.status === "waiting" || c.waiting_on;
+  // the links on the unit at the top (a review's count by its link); the rest under Links. The review app's live
+  // line as before only for a review whose link is not among them
+  const dl = c.status === "done" ? [] : doLinks(c), rest = (c.links || []).filter((l) => !dl.includes(l));
+  const liveShown = c.live_link && dl.some((l) => reviewOf(l.href) === reviewOf(c.live_link.href));
   dlg.innerHTML = head + `<div class="sh-body">
-    ${c.live_summary ? `<div class="live-note">${c.live_archived ? `Archived in the review app (done with, answered or not): <b>${esc(c.live_detail || "")}</b>.` : `Live from the review app: <b>${esc(c.live_summary)}</b>.`}${originHtml(c.live_origin) ? ` ${originHtml(c.live_origin)}` : ""}<ul class="links" style="margin-top:8px">${linkHtml(c.live_link, true)}</ul></div>` : ""}
+    ${doHtml(c, dl)}
+    ${c.live_summary && !liveShown ? `<div class="live-note">${c.live_archived ? `Archived in the review app (done with, answered or not): <b>${esc(c.live_detail || "")}</b>.` : `Live from the review app: <b>${esc(c.live_summary)}</b>.`}${originHtml(c.live_origin) ? ` ${originHtml(c.live_origin)}` : ""}<ul class="links" style="margin-top:8px">${linkHtml(c.live_link, true)}</ul></div>` : ""}
     <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
     <div class="group"><span class="k" id="moveK">Move to</span>${seg("Move to", COLS, c.status, "data-status")}</div>
     ${wait ? `<div class="group"><label class="k" for="waitText">Waiting on</label><div class="field"><input id="waitText" type="text" maxlength="300" value="${esc(waitDraft ?? c.waiting_on)}" placeholder="Who or what"><button type="button" class="btn" data-act="wait">Save</button></div></div>` : ""}
@@ -1096,7 +1143,7 @@ function renderSheet(keep) {
     <div class="group"><span class="k">Details</span><div class="md">${c.details ? markdown(c.details) : '<p class="none">None yet.</p>'}</div></div>
     ${ob.length ? `<div class="group"><span class="k">Blocked by</span><ul class="rel">${ob.map((b) => `<li><button type="button" data-open="${esc(b.id)}" class="${b.status !== "done" ? "open-blocker" : ""}"${b.missing ? " disabled" : ""}>${b.number ? `<span class="cnum">${numText(b)}</span>` : ""}${esc(b.title)}<span class="st">${b.missing ? "not on the board" : b.status === "done" ? "Done" : COL_NAME[b.status]}</span></button></li>`).join("")}</ul></div>` : ""}
     ${bl.length ? `<div class="group"><span class="k">Blocks</span><ul class="rel">${bl.map((b) => `<li><button type="button" data-open="${esc(b.id)}">${b.number ? `<span class="cnum">${numText(b)}</span>` : ""}${esc(b.title)}<span class="st">${COL_NAME[b.status]}</span></button></li>`).join("")}</ul></div>` : ""}
-    ${(c.links || []).length ? `<div class="group"><span class="k">Links</span><ul class="links">${c.links.map((l) => linkHtml(l)).join("")}</ul></div>` : ""}
+    ${rest.length ? `<div class="group"><span class="k">Links</span><ul class="links">${rest.map((l) => linkHtml(l)).join("")}</ul></div>` : ""}
     <div class="group"><span class="k">Notes</span>${notes ? `<ul class="notes">${notes}</ul>` : ""}
       <label class="sr-only" for="noteText">A note</label><textarea id="noteText" maxlength="4000" placeholder="A note for this card"></textarea>
       <div><button type="button" class="btn outline-p" data-act="note">Add the note</button></div></div>

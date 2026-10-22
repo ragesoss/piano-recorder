@@ -295,6 +295,7 @@
      "repo": "dobro-transcription"
     }
    ],
+   "questions": [],
    "details": "The take check asks six questions. Answer them, then say the tune's name.\n\n- the key: **C**, by ear\n- the bars: 16, with a pickup\n\nSee `exercises/generic/` for the layout.",
    "source": "docs/plan.md, 2026-10-19",
    "created": "2026-10-19",
@@ -328,6 +329,7 @@
      "repo": "dobro-transcription"
     }
    ],
+   "questions": [],
    "details": "The role rule kept its three F2s. Listen to bars 9-12 and say if the octave is right.",
    "source": "runs/2026-10-19-bassline",
    "created": "2026-10-19",
@@ -355,6 +357,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "`review/tools/deploy` with every app idle.",
    "source": "PLAN.md",
    "created": "2026-10-19",
@@ -387,6 +390,7 @@
      "repo": "dobro-transcription"
     }
    ],
+   "questions": [],
    "details": "24 of 33 left. Keep or drop each recording.",
    "source": "review 2026-10-19-free-bluegrass",
    "created": "2026-10-19",
@@ -414,6 +418,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "All 11 takes the Pi recorded through the 18i8 have 4-17 gaps each (2026-10-14). They are worth recording again.",
    "source": "piano-recorder PLAN.md step 1",
    "created": "2026-10-19",
@@ -446,6 +451,7 @@
      "repo": "dobro-transcription"
     }
    ],
+   "questions": [],
    "details": "Hear it on Ready plays the chart at the score's tempo. Not yet heard on the unit.",
    "source": "piano-recorder PLAN.md step 6",
    "created": "2026-10-19",
@@ -473,7 +479,56 @@
    "blocked_by": [
     "mandolin-soundfont"
    ],
-   "links": [],
+   "links": [
+    {
+     "label": "Answer",
+     "href": "http://practice.local:8005/#/r/card-choose-mandolin-sound",
+     "repo": "dobro-transcription"
+    },
+    {
+     "label": "The band",
+     "href": "http://practice.local:8004/",
+     "repo": "dobro-transcription"
+    },
+    {
+     "label": "Sound plan",
+     "href": "docs/sound-plan.md",
+     "repo": "ambient-room"
+    }
+   ],
+   "questions": [
+    {
+     "id": "which",
+     "ask": "Which mandolin sound, of the three?",
+     "kind": "choice",
+     "options": [
+      "A",
+      "B",
+      "C"
+     ],
+     "for": "",
+     "answer": null,
+     "answered": null
+    },
+    {
+     "id": "chop",
+     "ask": "Its chop: muted?",
+     "kind": "yesno",
+     "options": [],
+     "for": "",
+     "answer": "Yes",
+     "answered": "2026-10-21T20:10:00-07:00"
+    },
+    {
+     "id": "why",
+     "ask": "What do you hear in it?",
+     "kind": "text",
+     "options": [],
+     "for": "",
+     "answer": null,
+     "answered": null
+    }
+   ],
    "details": "An A/B of two renders of the same notes: say which by ear.",
    "source": "feedback: sound A/B",
    "created": "2026-10-19",
@@ -501,6 +556,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "The player in the room; device tests only when the player says.",
    "source": "piano-recorder PLAN.md step 1",
    "created": "2026-10-19",
@@ -529,6 +585,7 @@
     "melodic-line-deploy"
    ],
    "links": [],
+   "questions": [],
    "details": "The order: review/tools/deploy, then tools/deploy, then `[instruments.strings]` by hand.",
    "source": "piano-recorder PLAN.md step 8",
    "created": "2026-10-19",
@@ -556,6 +613,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "The speakers are across the room with the piano between.",
    "source": "piano-recorder PLAN.md, open questions",
    "created": "2026-10-19",
@@ -588,6 +646,7 @@
      "repo": "dobro-transcription"
     }
    ],
+   "questions": [],
    "details": "",
    "source": "ud-sessions",
    "created": "2026-10-19",
@@ -615,6 +674,7 @@
    "waiting_on": "alsa-scarlett-gui on the unit",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "The backing could come back electrically on a channel of its own.",
    "source": "PLAN.md step 5",
    "created": "2026-10-19",
@@ -641,6 +701,7 @@
    "waiting_on": "a font to try (none found yet under a free licence)",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "2026-10-19",
    "created": "2026-10-19",
@@ -668,6 +729,7 @@
    "waiting_on": "the dulcimer back from the shop",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "2026-10-19",
    "created": "2026-10-19",
@@ -695,6 +757,7 @@
    "waiting_on": "a record at the shared knob setting",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "docs/components.md, Shared mixer",
    "created": "2026-10-19",
@@ -719,6 +782,7 @@
    "waiting_on": "the landlord",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "PLAN.md, open questions",
    "created": "2026-10-19",
@@ -745,6 +809,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "Always capture into a ring buffer, and a keep button.",
    "source": "PLAN.md step 4",
    "created": "2026-10-19",
@@ -769,6 +834,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "`sox tempo` or rubberband; measure on the unit.",
    "source": "PLAN.md step 4",
    "created": "2026-10-19",
@@ -795,6 +861,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "PLAN.md step 4",
    "created": "2026-10-19",
@@ -819,6 +886,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "Never during a recording.",
    "source": "PLAN.md step 5",
    "created": "2026-10-19",
@@ -845,6 +913,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "PLAN.md step 6",
    "created": "2026-10-19",
@@ -878,6 +947,7 @@
      "repo": "dobro-transcription"
     }
    ],
+   "questions": [],
    "details": "",
    "source": "exercises/status.py",
    "created": "2026-10-19",
@@ -904,6 +974,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "exercises/generic",
    "created": "2026-10-19",
@@ -928,6 +999,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "The pipeline writes no pedal or dynamics yet.",
    "source": "PLAN.md step 8",
    "created": "2026-10-19",
@@ -954,6 +1026,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "exercises/status.py",
    "created": "2026-10-19",
@@ -980,6 +1053,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "2026-10-16",
    "created": "2026-10-19",
@@ -1004,6 +1078,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "2026-10-18",
    "created": "2026-10-19",
@@ -1028,6 +1103,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "ud-sessions",
    "created": "2026-10-19",
@@ -1054,6 +1130,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "2026-10-18",
    "created": "2026-10-19",
@@ -1080,6 +1157,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "Requirements: `docs/replacing-the-mixer.md`.\n\nA test of escaping: <script>alert(1)</script> <img src=x onerror=alert(2)> [a link](javascript:alert(3)) and [a real one](https://example.org/scarlett).",
    "source": "PLAN.md step 4",
    "created": "2026-10-19",
@@ -1104,6 +1182,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "PLAN.md step 4",
    "created": "2026-10-19",
@@ -1134,6 +1213,7 @@
      "repo": "dobro-transcription"
     }
    ],
+   "questions": [],
    "details": "",
    "source": "review answers",
    "created": "2026-10-19",
@@ -1162,6 +1242,7 @@
     "dobro-vibrato-key"
    ],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "runs/",
    "created": "2026-10-19",
@@ -1189,6 +1270,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "The receipt is in the drawer with the manual.",
    "source": "2026-10-14",
    "created": "2026-10-19",
@@ -1220,6 +1302,7 @@
      "repo": "dobro-transcription"
     }
    ],
+   "questions": [],
    "details": "alphaTab draws an empty voice 1 as a rest in every bar. Claude drafts it; you send it.",
    "source": "piano-recorder PLAN.md step 8",
    "created": "2026-10-19",
@@ -1247,6 +1330,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "2026-10-18",
    "created": "2026-10-19",
@@ -1274,6 +1358,7 @@
    "waiting_on": "a reply",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "2026-10-17",
    "created": "2026-10-19",
@@ -1300,6 +1385,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "PLAN.md step 6",
    "created": "2026-10-18",
@@ -1326,6 +1412,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "PLAN.md step 8",
    "created": "2026-10-17",
@@ -1354,6 +1441,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "review 2026-10-19-coyote-trail",
    "created": "2026-10-19",
@@ -1381,6 +1469,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "PLAN.md step 1",
    "created": "2026-10-14",
@@ -1407,6 +1496,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "PLAN.md step 7",
    "created": "2026-10-16",
@@ -1433,6 +1523,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "PLAN.md step 6",
    "created": "2026-10-12",
@@ -1460,6 +1551,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "PLAN.md step 1",
    "created": "2026-09-28",
@@ -1486,6 +1578,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "dobro-soundfont",
    "created": "2026-09-18",
@@ -1512,6 +1605,7 @@
    "waiting_on": "",
    "blocked_by": [],
    "links": [],
+   "questions": [],
    "details": "",
    "source": "docs/",
    "created": "2026-09-10",

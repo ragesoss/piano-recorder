@@ -1263,6 +1263,33 @@ with the hardware".
     Waiting, blocked), marked, in the log, the focus kept, the chip, "3 ready" alone and over a reload, cleared, a move
     to Doing, a blocker done; on the cards from before them, nothing of them. With the branch's board.py, the round
     trip marks one card, clears another, adds a card, pulls: the marks as made and the new card the next number.
+- **Where to do it, and a card's own questions** (2026-10-21, the player: "for most or all the cards that are for me,
+  it needs to be as easy as possible for me to either input answers directly in the card, and get links to all the
+  relevant places (especially, links to practice.local where i could do the thing, whether review or record or
+  listen or whatever) ... (or have a link to a form on practice.local where i can input the answers, one question at
+  a time, that's better than cramming the inputs into the cards themselves)"):
+  - **The links on the unit, big, at the top of a card's sheet**: every link of the card to an app here (its host
+    `practice.local`, or the one the page was reached by): the review app's review, the exercise app's list for an
+    instrument (`#dobro`), the transcribe app, the recorder, the band and so on; the rest (paths on the desktop, the
+    web) under Links as before. A card's own questions' review (dobro-transcription's `card` review, `card-<id>`,
+    linked as "Answer") first and filled. A review's count by its link: live from the review app ("3 to answer",
+    "All answered", "Archived"), else, for "Answer", the card's questions' answers as last pushed (`questions`, from
+    board.py). The review app's separate live line goes when its review's link is among them. The questions are
+    answered in the review app, one at a time, not on the board.
+  - **Live reviews** (`board/live.py`): a review with every question answered now folds onto a card that links to it
+    too ("All answered", `live_done`; not on the card's tile), still never a card of its own; each review a card links
+    to is in its `live_reviews` (its count by its link); the card's line the most pressing (one with questions left,
+    the card's own first, then all answered, then archived).
+  - **Tests**: the folding (`test_a_cards_own_questions_and_its_reviews_each_by_its_link`); the goals fixture with
+    board.py's `questions` on every card and three on card 7, its Answer link in both fixtures; headless Chrome
+    (muted) at the three sizes: card 7's sheet opens with Answer (filled, "2 to answer") and the band first, the
+    sound plan under Links, no second live line, 44 px targets, no sideways scroll; its tile with the review's live
+    line. Before dobro-transcription's board.py with `questions`, the counts come from the live reviews alone.
+  - **To deploy** (no new config, service or dependency; only with the player's go-ahead, the unit idle):
+    dobro-transcription first (`board.py asks board/asks.json` on main, its review app deployed, the card reviews
+    installed), then `tools/deploy` here, then `python3 board/board.py json | ~/play/piano-recorder/tools/push-board`.
+    The app now on the unit shows the new links under Links and a card's review count as its live line, so the order
+    of the app and the push is safe either way.
 - **To deploy** (everything idle; the board takes nothing from the others): add the tile to `/etc/room-home.toml`
   by hand (`config/home.toml`'s `[[apps]] id = "board"`, a `.pre-board.bak` copy first), then `tools/deploy` (it
   installs `/etc/room-board.toml`, makes `~/board-data`, installs and starts `room-board`, and restarts every app

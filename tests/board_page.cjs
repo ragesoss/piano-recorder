@@ -45,7 +45,7 @@ const LANE = W <= 640 ? ".cell h3" : ".lane";  // lanes across the columns; on a
   const targets = async (where) => {
     const small = await page.evaluate(() => {
       const root = document.querySelector("dialog[open]") || document;
-      const els = [...root.querySelectorAll("button, select, input, textarea, .links a, a.home, summary")];
+      const els = [...root.querySelectorAll("button, select, input, textarea, .links a, .do a, a.home, summary")];
       return els.filter((e) => e.offsetParent !== null || e.closest("dialog[open]")).map((e) => {
         const r = e.getBoundingClientRect();
         return { t: (e.textContent || e.getAttribute("aria-label") || e.id || e.tagName).trim().slice(0, 30), h: r.height, w: r.width };
@@ -543,7 +543,35 @@ const LANE = W <= 640 ? ".cell h3" : ".lane";  // lanes across the columns; on a
     });
     check(JSON.stringify(labels) === '["6 · Fine","6 · Decent","10 · Released"]', `the stages' labels: ${labels}`);
     await readyFlow();
+    await asksFlow();
     await finish();
+  }
+
+  // where the player does the thing, and a card's own questions (2026-10-21: "links to practice.local where i could
+  // do the thing", "a link to a form on practice.local where i can input the answers, one question at a time"): the
+  // card's links to the apps on the unit at the top of its sheet, its own questions' "Answer" first, filled, with how
+  // many are left (live from the review app); the rest under Links; the review's live line on the card's tile
+  async function asksFlow() {
+    await page.goto(url);
+    await page.waitForSelector(".card.live");
+    await jumpTo("next");
+    const line = await page.$eval('.card[data-id="choose-mandolin-sound"] .summary', (e) => e.textContent).catch(() => "");
+    check(line.includes("Live") && line.includes("2 questions to answer") && line.includes("Agent-written"), `a card's questions on its tile: ${line}`);
+    await openCard("choose-mandolin-sound");
+    const first = await page.$eval("#sheet .sh-body > *:first-child", (e) => e.className);
+    check(first === "do", `the links on the unit first in the sheet: ${first}`);
+    const btns = await page.$$eval("#sheet .do .dobtn", (as) => as.map((a) => [a.className, a.firstChild.textContent,
+      (a.querySelector("small") || {}).textContent || "", a.getAttribute("href")]));
+    check(JSON.stringify(btns) === JSON.stringify([["dobtn own", "Answer", "2 to answer", "http://practice.local:8005/#/r/card-choose-mandolin-sound"],
+      ["dobtn", "The band", "", "http://practice.local:8004/"]]), `the Answer, then the band: ${JSON.stringify(btns)}`);
+    const rest = await page.$$eval("#sheet .group .links li", (ls) => ls.map((l) => l.textContent));
+    check(rest.length === 1 && rest[0].includes("Sound plan"), `the rest under Links: ${rest}`);
+    check(!(await page.$("#sheet .live-note")), "no second live line in the sheet");
+    const big = await page.$eval("#sheet .do .dobtn.own", (a) => { const r = a.getBoundingClientRect(); return [r.width, r.height]; });
+    check(big[1] >= 52, `the Answer big enough: ${big}`);
+    await shot("asks");
+    await sideways("a card's Answer"); await targets("a card's Answer");
+    await closeSheet();
   }
 
   // the cards' numbers (what the player says: "card 42") and the player's mark "ready to go" (2026-10-21)

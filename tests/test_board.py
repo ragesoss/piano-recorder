@@ -369,6 +369,51 @@ def test_who_made_a_review_and_an_archived_one(tmp_path, apps):
     assert live_mod.review_cards(old, 8005, "dobro")[0]["origin"] == "" and not live_mod.review_cards(old, 8005, "dobro")[0]["archived"]
 
 
+def test_a_cards_own_questions_and_its_reviews_each_by_its_link(tmp_path, apps):
+    """A card's questions (dobro-transcription's `card` review, card-<id>, linked by "Answer") fold onto it as any
+    review a card links to; a review all answered too ("All answered", live_done), never a card of its own; each
+    review the card links to in its live_reviews; the card's line the most pressing, its own questions first. The
+    base's questions (board.py's) pass through to the page as they are."""
+    apps.reviews += [
+        {"id": "card-retro-record", "title": "A retroactive record", "kind": "card", "subtitle": "Card #12",
+         "created": "2026-10-21", "demo": False, "questions": 3, "answered": 1, "origin": "agent", "archived": False},
+        {"id": "card-done-all", "title": "All answered, linked by none", "kind": "card", "demo": False, "questions": 2,
+         "answered": 2, "origin": "agent", "archived": False}]
+    c, d = make(tmp_path, review=apps.url, exercises=DOWN)
+    base = json.loads(FIXTURE.read_text())
+    by = {x["id"]: x for x in base["cards"]}
+    by["retro-record"]["links"] += [
+        {"label": "Its review", "href": "http://practice.local:8005/#/r/take-check-1", "repo": "dobro-transcription"},
+        {"label": "Answer", "href": "http://practice.local:8005/#/r/card-retro-record", "repo": "dobro-transcription"},
+        {"label": "Answered", "href": "http://practice.local:8005/#/r/done-1", "repo": "dobro-transcription"}]
+    by["retro-record"]["questions"] = [
+        {"id": "first", "ask": "Which first?", "kind": "choice", "options": ["A", "B"], "for": "", "answer": None,
+         "answered": None}]
+    by["exercise-board"]["links"].append({"label": "Answered", "href": "http://practice.local:8005/#/r/done-1",
+                                           "repo": "dobro-transcription"})
+    (d / "cards.json").write_text(json.dumps(base))
+    with c:
+        b = c.get("/api/board").json()
+        assert {x["id"] for x in b["live"]} == {"live:review:free-1"}  # neither all-answered one, nor the folded
+        r = card(c, "retro-record")
+        assert r["live_summary"] == "2 questions to answer (1 of 3 answered)" and r["live_link"]["href"].endswith("#/r/card-retro-record")
+        assert not r["live_done"] and r["questions"][0]["options"] == ["A", "B"]
+        assert r["live_reviews"] == {
+            "take-check-1": {"summary": "8 questions to answer", "archived": False, "done": False, "origin": "pipeline", "left": 8},
+            "card-retro-record": {"summary": "2 questions to answer (1 of 3 answered)", "archived": False, "done": False,
+                                  "origin": "agent", "left": 2},
+            "done-1": {"summary": "All answered", "archived": False, "done": True, "origin": "", "left": 0}}
+        e = card(c, "exercise-board")  # done: carries none
+        assert "live_reviews" not in e
+    cards = live_mod.review_cards(apps.reviews, 8005, "dobro")
+    done = [x for x in cards if x["all_answered"]]
+    assert {x["review_id"] for x in done} == {"done-1", "card-done-all"} and all(x["status"] == "done" for x in done)
+    # an open card that links only to one all answered: "All answered", its line not on the board's tile
+    one = [{"id": "x", "status": "next", "links": [{"href": "http://practice.local:8005/#/r/done-1"}]}]
+    live_mod.fold_reviews(one, cards)
+    assert (one[0]["live_summary"], one[0]["live_done"]) == ("All answered", True)
+
+
 def test_the_other_apps_down_leave_their_cards_out(tmp_path, apps):
     c, d = make(tmp_path, review=apps.url, exercises=DOWN)
     with c:
@@ -485,10 +530,13 @@ def test_the_goals_fixture_is_to_the_contract():
         assert all(set(n) == {"date", "text", "by"} and n["by"] in ("player", "claude") for n in g["notes"])
     assert sum(len(g["history"]) > 2 for g in raw["goals"]) >= 4  # several stage changes each, mostly
     for c in raw["cards"]:
-        # the goals' fixture is board.py's JSON of 2026-10-21: the goals, and each card's number and "ready" too
-        assert set(c) - {"goals", "number", "ready"} == set(next(x for x in plain["cards"] if x["id"] == c["id"]))
+        # the goals' fixture is board.py's JSON of 2026-10-21: the goals, and each card's number and "ready" too; and
+        # of 2026-10-22, its questions for the player ([] for none: one card has three)
+        assert set(c) - {"goals", "number", "ready", "questions"} == set(next(x for x in plain["cards"] if x["id"] == c["id"]))
         assert set(c["goals"]) <= ids and len(set(c["goals"])) == len(c["goals"])
         assert type(c["number"]) is int and type(c["ready"]) is bool
+        assert all(set(q) == {"id", "ask", "kind", "options", "for", "answer", "answered"} for q in c["questions"])
+    assert [(c["id"], len(c["questions"])) for c in raw["cards"] if c["questions"]] == [("choose-mandolin-sound", 3)]
     assert {len(c["goals"]) for c in raw["cards"]} == {0, 1, 2, 3}
     assert sorted(c["number"] for c in raw["cards"]) == list(range(1, 47))
     assert [c["id"] for c in raw["cards"] if c["ready"]] == ["liva-t-tests", "lineup-separate-process"]

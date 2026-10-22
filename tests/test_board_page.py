@@ -53,8 +53,12 @@ REVIEWS = [
     {"id": "2026-10-19-coyote-trail", "title": "Coyote Trail", "demo": False, "questions": 2, "answered": 2},
     {"id": "2026-10-20-arco", "title": "The arco challenge", "kind": "free", "demo": False, "questions": 4,
      "answered": 1, "origin": "agent", "archived": True},
+    {"id": "card-choose-mandolin-sound", "title": "Choose the mandolin's sound by ear", "kind": "card",
+     "subtitle": "Card #7", "created": "2026-10-22", "demo": False, "questions": 3, "answered": 1,
+     "origin": "agent", "archived": False},
 ]  # the first two have cards linking to them (guitalele-key, free-bluegrass-review): shown on those cards, the second
-#   archived ("Archived"); the arco one archived and linked by none: no card
+#   archived ("Archived"); the arco one archived and linked by none: no card; the last a card's own questions
+#   (choose-mandolin-sound's "Answer"), on that card
 EXERCISES = ([{"id": f"dobro-{i}", "instrument": "dobro", "status": "needed", "to_review": 0} for i in range(3)]
              + [{"id": f"banjo-{i}", "instrument": "banjo", "status": "needed", "to_review": 0} for i in range(8)]
              + [{"id": f"generic-{i}", "instrument": "generic", "status": "needed", "to_review": 0} for i in range(21)])

@@ -211,7 +211,13 @@
    "blocked_by": [
     "mandolin-soundfont"
    ],
-   "links": [],
+   "links": [
+    {
+     "label": "Answer",
+     "href": "http://practice.local:8005/#/r/card-choose-mandolin-sound",
+     "repo": "dobro-transcription"
+    }
+   ],
    "details": "An A/B of two renders of the same notes: say which by ear.",
    "source": "feedback: sound A/B",
    "created": "2026-10-19",
