@@ -347,7 +347,7 @@ def test_the_transcribe_apps_instruments_by_name_and_by_number_before(tmp_path):
     from transcriber.settings import load_settings
     s = load_settings(load_config(REPO / "config" / "transcribe.toml"))
     assert {i.kind: (i.input, i.input_number) for i in s.instruments} == {
-        "dobro": ("MXL 990", None), "bass": ("Nadine", None), "piano": ("MXL 990", None),
+        "dobro": ("Bluebird SL", None), "bass": ("Nadine", None), "piano": ("MXL 990", None),
         "strings": ("MXL 990", None)}
     old = tmp_path / "old.toml"  # /etc/take-transcriber.toml as installed before 2026-10-20
     old.write_text('capture = "fake"\nplayback = "fake"\nkeep_channels = [2, 3, 0]\ntakes_dir = "t"\n'

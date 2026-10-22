@@ -17,8 +17,8 @@ peers = ["http://127.0.0.1:8000", "http://127.0.0.1:8001", "http://127.0.0.1:800
 
 # What this app records, as the pipeline names it (`transcribe --instrument`), and the input that carries it
 # unless the page says another, by its mic's name in the room's list (wherever it is plugged in): the dobro on the
-# MXL 990, the room mic it has been recorded on since 2026-10-17 (whether the Bluebird SL takes its place is the
-# player's ear's, dobro-transcription's compare-the-new-bluebird-sl-with-the); the bass on the Nadine, as the
+# Bluebird SL, the player's choice by ear over the MXL 990 (2026-10-21, dobro-transcription's review
+# 2026-10-20-mics-by-ear: "the Bluebird sounds a touch clearer even aside from the click"); the bass on the Nadine, as the
 # corpus's bass takes (dobro-transcription tunes/bass/*: "the Nadine's channel alone"); the piano on the room mic,
 # as the exercise app records it. The piano is written as a grand staff, no tab. Any stringed instrument (the
 # pipeline's generic path: a mandolin, a banjo, a guitar...; its kind chosen on the page, or not) on the room mic,
@@ -27,7 +27,7 @@ peers = ["http://127.0.0.1:8000", "http://127.0.0.1:8001", "http://127.0.0.1:800
 # `Inputs.pick`).
 [instruments.dobro]
 name = "Dobro"
-input = "MXL 990"
+input = "Bluebird SL"
 
 [instruments.bass]
 name = "Bass"

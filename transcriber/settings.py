@@ -1,7 +1,7 @@
 """The transcribe app's own settings, from the same file as the recorder's (recorder/config.py reads the
 devices, the kept inputs, takes_dir, peers, web and loudness there):
 
-    [instruments.dobro]   name = "Dobro", input = "MXL 990"
+    [instruments.dobro]   name = "Dobro", input = "Bluebird SL"
                                                        the pipeline's instrument, and the input that carries it,
                                                        by its mic's name in the room's inputs (recorder/inputs.py;
                                                        or a name it went by, "Room mic"; the page can choose
