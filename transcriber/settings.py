@@ -12,7 +12,7 @@ devices, the kept inputs, takes_dir, peers, web and loudness there):
     [instruments.bass]    name = "Bass", input = "Nadine"
     [instruments.piano]   name = "Piano", input = "MXL 990"
                                                        (the piano: a grand staff, no tab)
-    [instruments.strings] name = "Any stringed instrument", input = "MXL 990"
+    [instruments.strings] name = "Any stringed instrument", input = "Bluebird SL"
                                                        (the generic path: one staff, no tab; its kind chosen on
                                                        the page, `KINDS`, or "not sure")
     [pipeline]            python, src, threads, nice    the transcription project's package, and how to run it (its
