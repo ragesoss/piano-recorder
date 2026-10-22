@@ -748,3 +748,16 @@ def test_a_ready_mark_logged_for_a_card_taken_up_since_is_shown_off(tmp_path):
         assert card(c, "melodic-line-deploy")["ready"] is False
         assert card(c, "ab-takes")["ready"] is False and card(c, "ab-takes")["status"] == "waiting"
         assert card(c, "retro-record")["ready"] is True and card(c, "retro-record")["pending"] == 1
+
+
+def test_a_device_script_error_is_written_to_the_log(tmp_path, capsys):
+    """POST /api/client-error (the page's reporter, for a device's Safari): written to the service's output, cut to
+    size; the page sends it as a beacon."""
+    c, _ = make(tmp_path)
+    r = c.post("/api/client-error", json={"msg": "TypeError: x is undefined", "line": 1100, "col": 7, "ua": "iPad",
+                                          "stack": "s" * 5000})
+    assert r.status_code == 204
+    out = capsys.readouterr().out
+    assert "client error:" in out and "TypeError: x is undefined" in out and "iPad" in out and "s" * 2001 not in out
+    page = (REPO / "board" / "static" / "index.html").read_text()
+    assert "/api/client-error" in page and ".sh-body { flex: 1 1 auto;" in page

@@ -310,7 +310,9 @@ dialog::backdrop { background: rgba(0, 0, 0, .62); }
 .sh-head h2 { font-family: var(--display); font-size: 26px; font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
 .sh-head .meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .sh-head .acts { flex: none; display: flex; align-items: flex-start; gap: 8px; }
-.sh-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px 18px 22px; display: flex; flex-direction: column; gap: 18px; }
+/* the body's basis its content (flex: 1 1 auto, not flex: 1's 0%): an older Safari sized the sheet, which has only a
+   max-height, from the bases alone, so a 0% body collapsed under the title (the player's iPad, 2026-10-22) */
+.sh-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px 18px 22px; display: flex; flex-direction: column; gap: 18px; }
 .sh-foot { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .sh-foot.said-only:has(.said:empty) { display: none; }
 .sh-foot .grow { flex: 1; min-width: 160px; font-size: 15px; color: var(--ink2); }
@@ -450,6 +452,22 @@ details.more > div { display: flex; flex-direction: column; gap: 14px; padding-t
 <div class="sr-only" id="say" aria-live="polite"></div>
 
 <script>
+// A script error on a device (an iPad's Safari) is sent to the board's log (POST /api/client-error), once each
+window.addEventListener("error", (e) => reportError(e.message, e.filename, e.lineno, e.colno, e.error && e.error.stack));
+window.addEventListener("unhandledrejection", (e) => reportError(String(e.reason && (e.reason.message || e.reason)), "", 0, 0, e.reason && e.reason.stack));
+const REPORTED = new Set();
+function reportError(msg, src, line, col, stack) {
+  const key = `${msg}|${line}|${col}`;
+  if (REPORTED.has(key) || REPORTED.size > 20) return;
+  REPORTED.add(key);
+  try {
+    const body = JSON.stringify({ msg: String(msg).slice(0, 500), src: String(src || "").slice(0, 200), line, col,
+      stack: String(stack || "").slice(0, 2000), ua: navigator.userAgent, w: innerWidth, h: innerHeight });
+    if (!(navigator.sendBeacon && navigator.sendBeacon("/api/client-error", new Blob([body], { type: "application/json" })))) {
+      fetch("/api/client-error", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
+    }
+  } catch (err) { /* nothing more to do */ }
+}
 "use strict";
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

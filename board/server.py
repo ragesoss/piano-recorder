@@ -21,6 +21,8 @@ POST  /api/cards/{id}/notes        {note}
 POST  /api/goals/{id}/stage        {stage, note}: the goal moved to that stage (a history entry)
 POST  /api/goals/{id}/notes        {note}
 GET   /api/changes                 the edits not yet in the cards (the log, less the base's "applied")
+POST  /api/client-error            {msg, src, line, col, stack, ua, w, h}: a script error on a device's page, written to
+                                   the service's log (journalctl -u room-board), so one met on the iPad can be read
 """
 
 from __future__ import annotations
@@ -137,6 +139,11 @@ def create_app(cfg: dict) -> FastAPI:
     @app.get("/api/changes")
     def changes():
         return {"changes": store.pending()}
+
+    @app.post("/api/client-error", status_code=204)
+    def client_error(body: dict = Body(...)):
+        keep = {k: str(body.get(k, ""))[:2000] for k in ("msg", "src", "line", "col", "stack", "ua", "w", "h")}
+        print(f"client error: {keep}", flush=True)
 
     @app.post("/api/cards", status_code=201)
     def new_card(body: dict = Body(...)):
