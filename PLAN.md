@@ -120,6 +120,44 @@ Home network only, no login, for the first version.
   - The BMG-04F's note ("the mixer's channel 3/4 button must be on MP3/USB"
     to hear takes) is gone from both pages (2026-10-16, the player): takes
     play through the 18i8 since 2026-10-14.
+- **The home page links an app over HTTPS** (2026-10-22; dobro-transcription's
+  card `home-https-apps`; the player: "do both quick wins, and deploy them").
+  The contribution app (dobro-transcription's `website/contribute.py`, port
+  8008) serves HTTPS, since a browser lets a page use the microphone only on
+  a secure page. An app's entry in `/etc/room-home.toml` may say
+  `scheme = "https"` (else `http`; anything else is refused at start): its
+  tile links `https://<host>:<port>/`, and the home server asks its status
+  and its stop paths over HTTPS on 127.0.0.1, the certificate not checked
+  (`home/server.py`'s docstring says why). `config/home.toml` has the ninth
+  tile, Contribute ("Record or upload, with an invite code", no stop paths);
+  the page's look and words are as they were (on an iPad on its side the
+  nine tiles fill three rows of three; upright, five rows).
+  - Nothing else here needs it: the contribution app holds no audio device,
+    so it is in no peers list; the board's links take `https://` already
+    (its live links are the review app's and the exercise app's, plain
+    HTTP); no tool reads the home config's apps.
+  - Tests: `tests/test_home.py` 2 -> 6: an HTTPS stand-in with a
+    self-signed certificate for practice.local alone, its status read and
+    its stop path called over HTTPS, the same entry as `http` not answering;
+    a scheme other than the two refused; the room's config; the page
+    (`tests/home_page.cjs`, headless Chromium, muted, the room's nine tiles
+    at 390x844, 820x1180 and 1180x820): Contribute links with `https` and
+    reads Ready, the rest with `http`, every tile on one screen on an iPad
+    (the lowest tile ends at 944 of 1180 px upright, 520 of 820 on its
+    side), no sideways scroll, and its tile opens the HTTPS page. On the
+    page as it was, two of them fail (the tile linked `http://`). The suite
+    298 passed (294 before).
+  - The phone reaches the home page by the unit's reserved address, which
+    the certificate does not name (practice.local and practice only): there
+    the tile leads to a certificate warning until the certificate names the
+    address too (dobro-transcription's `website/setup/local-https`, its
+    `LOCAL_HTTPS_NAMES`) and the phone trusts the room's authority.
+  - **To deploy** (the player's go-ahead, every app here idle): add the
+    tile to `/etc/room-home.toml` by hand (`config/home.toml`'s
+    `[[apps]] id = "contribute"`, a `.pre-contribute.bak` copy first), then
+    `tools/deploy` (it restarts every app here). Then the home page's
+    Contribute tile reads Ready and opens `https://practice.local:8008/`.
+    Not deployed.
 
 ## Steps
 

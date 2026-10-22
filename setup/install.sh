@@ -103,6 +103,7 @@ done
 grep -q 'port = 8006' /etc/room-home.toml || echo "note: /etc/room-home.toml does not list the transcribe app (port 8006)"
 grep -q '^\[instruments.piano\]' /etc/take-transcriber.toml || echo "note: /etc/take-transcriber.toml has no [instruments.piano] (config/transcribe.toml: the piano on input 4)"
 grep -q 'port = 8007' /etc/room-home.toml || echo "note: /etc/room-home.toml does not list the board (port 8007): config/home.toml's [[apps]] id = \"board\""
+grep -q 'port = 8008' /etc/room-home.toml || echo "note: /etc/room-home.toml does not list the contribution app (port 8008, over HTTPS): config/home.toml's [[apps]] id = \"contribute\""
 grep -q '^\[instruments.strings\]' /etc/take-transcriber.toml || echo "note: /etc/take-transcriber.toml has no [instruments.strings] (config/transcribe.toml: any stringed instrument on input 4)"
 for f in /etc/exercise-recorder.toml /etc/take-transcriber.toml /etc/chord-listener.toml; do
     grep -q '^keep_channels\|^\[inputs\.' "$f" && echo "note: $f's keep_channels and [inputs.N] are not read while $inputs exists: the inputs are named on the apps' pages now"
