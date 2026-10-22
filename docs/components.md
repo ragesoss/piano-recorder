@@ -746,7 +746,8 @@ either part is swapped.
   - **The home page** (`home/server.py`, port 80): http://practice.local/
     (the phone uses the reserved address) shows what each program is
     doing and links to each. "Stop everything" stops a recording, a take
-    and the synth.
+    and the synth. An app over HTTPS (the ninth, below) is linked and
+    asked over HTTPS (2026-10-22).
   - **A third program** (2026-10-13): the exercise app (`exercises/`,
     port 8002; PLAN.md step 6). It records like the practice recorder and
     takes turns the same way: it asks 8000 and 8001 to let go, and they
@@ -784,6 +785,12 @@ either part is swapped.
   - **An eighth program** (2026-10-19): the board (`board/`, service `room-board`, port 8007; PLAN.md step 9), the
     project's cards as a kanban. It holds no audio device, takes no turns (in no peers list, no `/api/yield`), and
     reads the review app's and the exercise app's APIs for its live cards.
+  - **A ninth program** (2026-10-22): the contribution app (dobro-transcription's `website/contribute.py`, service
+    `contribute`, port 8008), where invited people record or upload. The only one over HTTPS (its page records from
+    the microphone, which a browser allows only on a secure page), with a certificate for practice.local and
+    practice from the room's own certificate authority (`~/.config/room-tls/` on the unit). It holds no audio device
+    (the page records in the browser) and takes no turns. Its home page tile says `scheme = "https"` (PLAN.md,
+    "Phone page").
 
 ## Tests
 

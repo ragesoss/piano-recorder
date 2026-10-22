@@ -61,7 +61,7 @@ a.app.down .dot { background: transparent; border: 2px solid var(--faint); }
 .note { color: var(--ink3); font-size: 15px; line-height: 1.4; padding: 0 2px; }
 .note b { color: var(--ink2); }
 
-/* an iPad: every tile on one screen. Upright, two to a row (eight apps: four rows); on its side, three (three rows) */
+/* an iPad: every tile on one screen. Upright, two to a row (nine apps: five rows); on its side, three (three rows) */
 @media (min-width: 700px) {
   main { max-width: 1000px; padding-left: max(28px, env(safe-area-inset-left)); padding-right: max(28px, env(safe-area-inset-right)); padding-top: max(20px, env(safe-area-inset-top)); }
   h1 { font-size: 38px; margin-bottom: 16px; }
@@ -163,7 +163,7 @@ function render(data) {
       el.innerHTML = `<span class="head"><span class="name"></span><span class="go">${GO}</span></span><span class="about"></span><span class="state"><span class="dot"></span><span class="text"></span></span>`;
       box.append(el);
     }
-    el.href = `http://${host}:${a.port}/`;
+    el.href = `${a.scheme || "http"}://${host}:${a.port}/`;  // the contribution app over HTTPS (home/server.py)
     el.querySelector(".name").textContent = a.name;
     el.querySelector(".about").textContent = a.about || "";
     const [text, on, down, rec] = describe(a);

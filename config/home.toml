@@ -60,3 +60,14 @@ about = "What to do next: listen, play, the agent, people, hardware"
 port = 8007
 # it plays nothing
 stop = []
+
+[[apps]]
+id = "contribute"
+name = "Contribute"
+about = "Record or upload, with an invite code"
+port = 8008
+# dobro-transcription's website/contribute.py, over HTTPS (a page may use the microphone only on a
+# secure page): linked as https://, and its status asked over HTTPS (home/server.py)
+scheme = "https"
+# it plays nothing: the page records in the browser
+stop = []
