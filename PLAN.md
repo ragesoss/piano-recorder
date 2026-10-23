@@ -1492,3 +1492,18 @@ of details and "the room or one instrument"; input 4's name, "Room mic", was a r
 - What are the speakers, and how are they connected?
 - Is there a spare USB DAC or USB sound card anywhere (for option B under
   "Speakers while recording")?
+
+## Licence
+
+The code is free software under the GNU General Public License, version 3
+or (at your option) any later version (`LICENSE`). Copyright 2026 the
+project's authors, as the git history shows. The player, 2026-10-23, in
+dobro-transcription: "let's proceed with the GPL as the plan. (same with
+ambient-room and piano-recorder.)" `chords/livechords.py` is a copy of
+dobro-transcription's, which is under the same licence.
+
+Not under it: the third-party files, which keep their own licences, each
+with its text beside it. alphaTab (Mozilla Public License 2.0) and its
+Sonivox soundfont (Apache 2.0) are in `transcriber/static/alphatab/`; the
+fonts (SIL Open Font License 1.1) are there and in
+`exercises/static/fonts/`.
